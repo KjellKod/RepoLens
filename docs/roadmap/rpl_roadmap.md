@@ -44,8 +44,24 @@ foundation — not a later phase — and **gate every milestone**.
 
 ## Milestones
 
+> **Delivery tracking lives here, in the docs — not in code.** Each component's Quest
+> ticks its **Delivery** box when its PR merges; the **Acceptance** boxes are ticked
+> when their checks are green. A milestone is done when every Delivery box and every
+> Acceptance box is checked. `P3`/`P6` deliver across two rounds, so each split is its
+> own box. No separate status file or code is needed to know what's shipped.
+
 ### M0 — Foundation & rails
 Deliver F1–F5 and the X1/X2/X3 skeletons.
+**Delivery** (each Quest ticks its ID on merge)
+- [ ] F1 — CLI skeleton + config + exit codes
+- [ ] F2 — Security primitives
+- [ ] F3 — Data model + on-disk schemas (the unlock)
+- [ ] F4 — Tool bootstrap (pin + checksum/signature verify)
+- [ ] F5 — Policy engine (SPDX normalize, compound, tiers)
+- [ ] X1 — test harness + fixtures + watermark (skeleton)
+- [ ] X2 — security canary suite (skeleton)
+- [ ] X3 — CI offline PR pipeline (skeleton)
+
 **Acceptance**
 - [ ] `repolens --help` runs; config loads from untracked local files.
 - [ ] F2 primitives implemented; their **security canaries pass offline**.
@@ -55,6 +71,15 @@ Deliver F1–F5 and the X1/X2/X3 skeletons.
 
 ### M1 — Thin end-to-end inventory
 Deliver P1 + P2 + P3(API layer only) + P6(main view, md/csv) against any `<OWNER>`.
+**Delivery** (each Quest ticks its ID on merge)
+- [ ] P1 — discover (gh → categorize → approval file)
+- [ ] P2 — scan (hardened clone + Syft)
+- [ ] P3·api — resolve, API layer only
+- [ ] P6·main — report, main view (md/csv)
+- [ ] X1 — fixtures grown to cover R1 components
+- [ ] X2 — canaries grown for R1 (clone canaries)
+- [ ] X3 — CI grown for R1
+
 **Acceptance**
 - [ ] End-to-end run on a fixture owner **and** dogfood on RepoLens itself.
 - [ ] Multi-language deduped inventory with provenance, versions, source URLs.
@@ -63,6 +88,13 @@ Deliver P1 + P2 + P3(API layer only) + P6(main view, md/csv) against any `<OWNER
 
 ### M2 — Resolution depth + flagging
 Deliver P3(full: sandboxed mobile native + ScanCode on unknowns) + P4.
+**Delivery** (each Quest ticks its ID on merge)
+- [ ] P3·full — resolve full (mobile sandbox + ScanCode-on-unknowns)
+- [ ] P4 — flag (tag `origin`/`scope`/`distribution` + policy + dedup)
+- [ ] X1 — fixtures grown for R2
+- [ ] X2 — canaries grown for R2 (mobile sandbox canaries)
+- [ ] X3 — CI grown for R2
+
 **Acceptance**
 - [ ] Planted AGPL dep → BLOCK queue; planted no-license dep → UNKNOWN queue, with reasons.
 - [ ] ScanCode invoked **only** on items unresolved by APIs.
@@ -72,6 +104,13 @@ Deliver P3(full: sandboxed mobile native + ScanCode on unknowns) + P4.
 
 ### M3 — Human-in-loop + gated full report
 Deliver P5 + P6(full: categories → main + appendices + docx, gate).
+**Delivery** (each Quest ticks its ID on merge)
+- [ ] P5 — shortlist (capability-minimized agent + human approval)
+- [ ] P6·full — report full (categories → main + appendices + docx, gate)
+- [ ] X1 — fixtures grown for R3
+- [ ] X2 — canaries grown for R3 (injection canaries)
+- [ ] X3 — CI grown for R3 (+ dogfood on self)
+
 **Acceptance**
 - [ ] **Injection canaries green**: suspicious content routed to human, never auto-resolved;
       every cited evidence URL re-fetched and verified.
