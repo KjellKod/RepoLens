@@ -1,0 +1,42 @@
+version: 2
+
+# Update surface:
+# - github-actions: every action used in .github/workflows/*.yml. SHA-pinned actions
+#   that carry a `# vX.Y.Z` comment (e.g. openai/codex-action) get both the SHA and the
+#   comment advanced when a new release ships — keeping the supply-chain pins current.
+# - pip: Python dependencies; active once requirements*.txt / pyproject.toml exist.
+# Grouped so each ecosystem opens one rollup PR per run instead of a flood.
+#
+# Note: Dependabot PRs are authored by dependabot[bot], so the agentic Codex review
+# (gated on author_association OWNER/MEMBER/COLLABORATOR) does NOT run on them and never
+# receives the OPENAI_API_KEY. Once branch protection is on (roadmap X3b), these PRs must
+# still pass the required deterministic checks and be up to date before merge.
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  - package-ecosystem: "pip"
+    directory: "/"
+    target-branch: "main"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      python-production:
+        dependency-type: "production"
+        patterns:
+          - "*"
+      python-development:
+        dependency-type: "development"
+        patterns:
+          - "*"
