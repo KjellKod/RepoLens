@@ -1,0 +1,19 @@
+.github/dependabot.yml
+  s_bb8787cf071d6e::t_0bb6e2e4d89a0e 1-42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ab4090144c62667090af444dbb6c4b4dce6c61c6",
+  "prompts": {},
+  "sessions": {
+    "s_bb8787cf071d6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c1f98f3-95b8-4b2c-84ce-cb4d9a149af9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
