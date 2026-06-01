@@ -1,0 +1,159 @@
+name: Codex CI Code Review
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: codex-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  codex-review:
+    # Auto-run only for the repo owner's / team's own (non-fork) PRs. Name-agnostic
+    # (no hardcoded login), so it stays repo-agnostic and public-safe. Fork / external
+    # PRs are skipped entirely — they never receive the OPENAI_API_KEY secret, so there
+    # is no per-run approval to babysit and no untrusted code runs with credentials.
+    if: >-
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Check API key availability
+        id: check-key
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "OPENAI_API_KEY is not available. Skipping review."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Gather PR context
+        if: steps.check-key.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          gh pr diff ${{ github.event.pull_request.number }} --patch > /tmp/pr.diff
+          gh pr view ${{ github.event.pull_request.number }} \
+            --json title,body --jq '.title + "\n\n" + (.body // "")' > /tmp/pr_description.txt
+          gh pr view ${{ github.event.pull_request.number }} \
+            --json headRefOid --jq '.headRefOid' > /tmp/pr_head_sha.txt
+          gh pr view ${{ github.event.pull_request.number }} \
+            --json files > /tmp/changed_files_payload.json
+          jq -r '.files[].path' /tmp/changed_files_payload.json > /tmp/changed_files.txt
+          jq '.files' /tmp/changed_files_payload.json > /tmp/changed_files.json
+
+          python3 .github/scripts/codex_review.py gather-context
+
+      - name: Fetch existing review comments and replies
+        if: steps.check-key.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -o pipefail
+          # Fetch ALL inline review comments (bot + human) with thread info
+          # Use --paginate with --jq (no --slurp) to stream pages through jq individually.
+          # Wrap output in a JSON array for downstream consumption.
+          if gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments" \
+            --jq '.[] | {id, in_reply_to_id, user: .user.login, path, line, body}' 2>/tmp/fetch_comments_err.log \
+            | awk 'NR>1{print ","} {printf "%s",$0}' > /tmp/existing_comments_body.json; then
+            # Wrap in JSON array
+            printf '[%s]' "$(cat /tmp/existing_comments_body.json)" > /tmp/existing_comments.json
+            # Validate JSON structure
+            if ! python3 -c "import json; json.load(open('/tmp/existing_comments.json'))" 2>/dev/null; then
+              echo "::warning::Fetched comments but JSON is malformed. Dedup will be skipped."
+              echo "[]" > /tmp/existing_comments.json
+            fi
+          else
+            echo "::warning::Failed to fetch existing comments (gh api exit $?). Dedup will be skipped."
+            cat /tmp/fetch_comments_err.log >&2 || true
+            echo "[]" > /tmp/existing_comments.json
+          fi
+
+      - name: Build review prompt
+        if: steps.check-key.outputs.skip != 'true'
+        run: |
+          if python3 .github/scripts/codex_review.py build-prompt 2>/tmp/build_prompt_err.log; then
+            exit 0
+          fi
+          if ! grep -Eq "Unknown subcommand: build-prompt|invalid choice: 'build-prompt'" /tmp/build_prompt_err.log; then
+            cat /tmp/build_prompt_err.log >&2
+            exit 1
+          fi
+
+          echo "::notice::Checked-out base review script does not support build-prompt; using legacy prompt assembly."
+          touch /tmp/deep_ci_files.md
+          sed -e '/{PLACEHOLDER_PR_DESCRIPTION}/r /tmp/pr_description.txt' \
+              -e '/{PLACEHOLDER_PR_DESCRIPTION}/d' \
+              -e '/{PLACEHOLDER_EXISTING_COMMENTS}/r /tmp/existing_comments.json' \
+              -e '/{PLACEHOLDER_EXISTING_COMMENTS}/d' \
+              -e '/{PLACEHOLDER_PR_HEAD_FILES}/r /tmp/pr_head_files.md' \
+              -e '/{PLACEHOLDER_PR_HEAD_FILES}/d' \
+              -e '/{PLACEHOLDER_DEEP_CI_FILES}/r /tmp/deep_ci_files.md' \
+              -e '/{PLACEHOLDER_DEEP_CI_FILES}/d' \
+              -e '/{PLACEHOLDER_DIFF}/r /tmp/pr.diff' \
+              -e '/{PLACEHOLDER_DIFF}/d' \
+              .github/codex-review-prompt.md > /tmp/review-prompt.md
+
+      - name: AI Code Review
+        if: steps.check-key.outputs.skip != 'true'
+        id: review
+        continue-on-error: true
+        uses: openai/codex-action@e0fdf01220eb9a88167c4898839d273e3f2609d1 # v1.8
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          prompt-file: /tmp/review-prompt.md
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          effort: high
+          output-file: /tmp/review-output.json
+
+      - name: Report review completion status
+        # Runs even though AI Code Review uses continue-on-error, so a swallowed
+        # failure (commonly OpenAI quota exhaustion or a bad credential) is
+        # surfaced as an explicit "skipped" instead of an implicit clean pass.
+        if: always() && steps.check-key.outputs.skip != 'true'
+        run: |
+          if [ "${{ steps.review.outcome }}" = "success" ] && [ -s /tmp/review-output.json ]; then
+            echo "✅ Codex review completed." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning title=Codex review skipped::AI review did not complete (likely OpenAI quota exhaustion or a credential issue). This run is NOT a clean pass — the Codex reviewer did not produce findings."
+            {
+              echo "### ⚠️ Codex review skipped"
+              echo
+              echo "The AI reviewer did not complete (likely OpenAI quota exhaustion or a credential issue)."
+              echo "Treat this as **skipped**, not a clean pass — no Codex findings were produced for this run."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Post inline review
+        if: always() && steps.check-key.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMIT_SHA: ${{ github.event.pull_request.head.sha }}
+          REPO: ${{ github.repository }}
+          STRICT_INLINE_POSTING: "false"
+        run: |
+          if [ ! -s /tmp/review-output.json ]; then
+            echo "::warning::No AI review output file produced. Skipping inline review posting."
+            exit 0
+          fi
+
+          python3 .github/scripts/codex_review.py post-review
