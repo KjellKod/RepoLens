@@ -81,9 +81,15 @@ every round** alongside the components they cover.
 Every component Quest is briefed the same way (DRY — point at the docs, don't restate):
 
 ```
-Build <ID> <component> for directory/repo RepoLens.
-- create a worktree based of origin/main, the branch and worktree name shoudl follow the format `<ID>__ <component_first_10_letters_with_underscore_and_no_space>
-- make sure the worktree directory has a symlink from RepoLens/.quest to worktree-branch-location/.quest/ where you will store the quest artifact as they are being worked on and delivered. 
+Build <ID> <component> for the RepoLens repo.
+- Create a git worktree based off origin/main. The branch and worktree name follow the
+  format `<ID>__<slug>`, where <slug> is the first 10 characters of the component name,
+  lowercased, spaces → underscores (no spaces in the ref).
+- Make the worktree's .quest a symlink pointing to RepoLens/.quest (the gitignored,
+  durable artifact store). Many worktrees can symlink to the same store; write this
+  quest's artifacts under its own <ID>__<slug>/ subdir so parallel quests don't collide.
+  Because the store lives in RepoLens/.quest, artifacts survive worktree deletion — so
+  an interrupted quest can be resumed, or handed to a different model.
 - Scope/deliverable: see docs/roadmap/rpl_roadmap.md (this component's row) and
   docs/roadmap/rpl_decisions.md.
 - Acceptance: the rpl_roadmap M<n> criteria for this component, plus every applicable
@@ -92,23 +98,28 @@ Build <ID> <component> for directory/repo RepoLens.
   mandatory; no owner/repo/company names in code, tests, or docs (CI hygiene guard);
   owner is a runtime input only.
 - Output: code + tests + the component's canaries wired into CI.
-- Quest completion: 
-  - A. always celebrate, archive and journal the quest.
-  - B. Mark the ID as completed on the roadmap. Do not mark anything else as completed unless you did it yourself. Be accurate.  
-  - B. always create a PR that is ready to review, use pr-assistant for this. You have permission to create the PR. Don’t ask for permission. Make the PR ‘ready-to-review’. 
-  - C. Once the PR is created, ping the human that it’s ready to review. 
-- 
+- On completion (in order):
+  A. Rebase onto the latest origin/main and resolve conflicts — auto-resolve where it's
+     unambiguous; ask the human only if a conflict genuinely needs judgment. Always do
+     this first so B–E land on the latest.
+  B. Tick THIS component's delivery box in docs/roadmap/rpl_roadmap.md. Mark nothing you
+     did not do yourself — be accurate.
+  C. Create the PR with pr-assistant, then mark it ready-to-review. You have permission;
+     don't ask.
+  D. Ping the human that the PR is ready to review.
+  E. Celebrate, archive, and journal the quest.
 ```
 
-## Quest placement — recommendation: outside-in
+## Quest placement — worktrees off main, shared gitignored `.quest`
 
-Two options; the brief seeds and rounds above work with either.
+Quests run in **git worktrees created off `origin/main`** of the RepoLens repo. Each
+worktree's `.quest` is a **symlink to one gitignored `RepoLens/.quest`** artifact store,
+namespaced per quest (`<ID>__<slug>/`). Consequences:
 
-| Approach | What it means | Trade-off |
-|----------|---------------|-----------|
-| **Outside-in (recommended)** | Quest runs from the surrounding workspace and lands commits/PRs in the RepoLens repo; Quest's own plan/review artifacts stay **outside** the repo | Keeps RepoLens's tree **product-only and public-ready**; no Quest scaffolding committed; plans aren't versioned with the code (fine — they're process, not product) |
-| Install-in | Quest installed inside RepoLens; artifacts in `.quest/` (gitignored) | Native git/PR flow, plans versioned with code; but injects Quest tooling into a repo meant to stay clean / possibly public |
-
-**Recommendation: outside-in**, because keeping RepoLens minimal, repo-agnostic, and
-public-ready has been the governing constraint. Pick install-in only if you later want
-the build plans versioned alongside the code in this repo.
+- **Product-only repo.** `.quest` is gitignored, so no Quest scaffolding ever enters
+  history or a public tree — the committed repo stays clean.
+- **Durable artifacts.** Centralized in `RepoLens/.quest`, they **survive worktree
+  deletion**, so an interrupted quest can be **resumed — or handed to a different model**
+  even if the original agent is unavailable.
+- **Safe parallelism.** Many worktrees symlink to the same store; each writes under its
+  own `<ID>__<slug>/` subdir, so concurrent quests don't collide.
