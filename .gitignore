@@ -216,3 +216,30 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ---- RepoLens ----
+# Scratch / working notes (analysis, plans, intermediate state) — never published.
+.ws/
+
+# macOS / editor cruft
+.DS_Store
+
+# Runtime config that may carry an owner/org name, legal boilerplate, or report
+# header. Keep ALL of these out of git so no company identity enters history.
+*.local.toml
+*.local.yaml
+*.local.yml
+*.local.json
+*.secret.*
+report.config.*
+owner.config.*
+
+# Cloned repos, scan workspaces, engine outputs, and generated reports.
+clones/
+work/
+out/
+reports/
+*.sbom.json
+*.scancode.json
+*.sqlite
+*.sqlite3
