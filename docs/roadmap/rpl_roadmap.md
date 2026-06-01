@@ -79,12 +79,15 @@ Deliver P1 + P2 + P3(API layer only) + P6(main view, md/csv) against any `<OWNER
 - [ ] X1 — fixtures grown to cover R1 components
 - [ ] X2 — canaries grown for R1 (clone canaries)
 - [ ] X3 — CI grown for R1
+- [ ] X3b — branch protection on `main` via `gh` (see [Branch protection](#branch-protection-applied-once-checks-exist-from-m1))
 
 **Acceptance**
 - [ ] End-to-end run on a fixture owner **and** dogfood on RepoLens itself.
 - [ ] Multi-language deduped inventory with provenance, versions, source URLs.
 - [ ] Clone hardening + **clone canaries green**; the watermark canary passes.
 - [ ] Zero owner/repo strings anywhere (hygiene guard green).
+- [ ] `main` is protected: required checks must pass **and** the branch must be
+      up to date before a PR can merge.
 
 ### M2 — Resolution depth + flagging
 Deliver P3(full: sandboxed mobile native + ScanCode on unknowns) + P4.
@@ -124,3 +127,20 @@ Deliver P5 + P6(full: categories → main + appendices + docx, gate).
 - The full **security canary suite** ([security.md](rpl_security.md)) is green — no deviation.
 - The **name-hygiene guard** is green; no owner/repo names in code, tests, or docs.
 - Tool versions pinned + checksum/signature-verified; CI runs offline and deterministic.
+
+## Branch protection (applied once checks exist, from M1)
+
+Once the offline PR checks are real (M1), enable GitHub branch protection on `main`
+via `gh` so merges are safe and current:
+
+- **Required status checks must pass** — lint, unit, integration, security canaries,
+  and the name-hygiene guard. (The Codex review is advisory / `continue-on-error`; do
+  **not** mark it required, or an OpenAI quota hiccup would block every merge.)
+- **Require branches to be up to date before merging** — set `strict: true` on the
+  required checks, so a PR must be rebased on the latest `main` before it can merge
+  (pairs with the quest brief's rebase-before-PR step).
+- Recommended: require a PR (no direct pushes to `main`) and ≥1 approving review.
+
+Applied with `gh api` (branch-protection / rulesets) — a one-time config step, kept in
+a small script and re-run to update the required-check set as tests grow. It's a roadmap
+**step**, not just config drift: ticking `X3b` means protection is live and verified.
