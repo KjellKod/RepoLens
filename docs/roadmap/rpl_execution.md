@@ -82,14 +82,15 @@ Every component Quest is briefed the same way (DRY — point at the docs, don't 
 
 ```
 Build <ID> <component> for the RepoLens repo.
-- Create a git worktree based off origin/main. The branch and worktree name follow the
-  format `<ID>__<slug>`, where <slug> is the first 10 characters of the component name,
-  lowercased, spaces → underscores (no spaces in the ref).
-- Make the worktree's .quest a symlink pointing to RepoLens/.quest (the gitignored,
-  durable artifact store). Many worktrees can symlink to the same store; write this
-  quest's artifacts under its own <ID>__<slug>/ subdir so parallel quests don't collide.
-  Because the store lives in RepoLens/.quest, artifacts survive worktree deletion — so
-  an interrupted quest can be resumed, or handed to a different model.
+- Quest creates the worktree off origin/main (quest_startup.branch_mode: worktree) —
+  you don't create it manually. Preferred branch/worktree name: `<ID>__<slug>`, where
+  <slug> is the first 10 characters of the component name, lowercased, spaces →
+  underscores (no spaces in the ref).
+- Ensure the worktree's .quest is a symlink to the gitignored RepoLens/.quest store
+  (create the symlink if Quest hasn't). Write this quest's artifacts under its own
+  <ID>__<slug>/ subdir so parallel quests don't collide. Because the store lives in
+  RepoLens/.quest, artifacts survive worktree deletion — so an interrupted quest can be
+  resumed, or handed to a different model.
 - Scope/deliverable: see docs/roadmap/rpl_roadmap.md (this component's row) and
   docs/roadmap/rpl_decisions.md.
 - Acceptance: the rpl_roadmap M<n> criteria for this component, plus every applicable
@@ -112,7 +113,8 @@ Build <ID> <component> for the RepoLens repo.
 
 ## Quest placement — worktrees off main, shared gitignored `.quest`
 
-Quests run in **git worktrees created off `origin/main`** of the RepoLens repo. Each
+Quests run in **git worktrees created off `origin/main`** of the RepoLens repo
+(Quest creates them natively — `quest_startup.branch_mode: worktree`). Each
 worktree's `.quest` is a **symlink to one gitignored `RepoLens/.quest`** artifact store,
 namespaced per quest (`<ID>__<slug>/`). Consequences:
 
