@@ -81,7 +81,9 @@ every round** alongside the components they cover.
 Every component Quest is briefed the same way (DRY — point at the docs, don't restate):
 
 ```
-Build <ID> <component> for RepoLens.
+Build <ID> <component> for directory/repo RepoLens.
+- create a worktree based of origin/main, the branch and worktree name shoudl follow the format `<ID>__ <component_first_10_letters_with_underscore_and_no_space>`
+- First action on the git worktree branch is to mark 
 - Scope/deliverable: see docs/roadmap/rpl_roadmap.md (this component's row) and
   docs/roadmap/rpl_decisions.md.
 - Acceptance: the rpl_roadmap M<n> criteria for this component, plus every applicable
