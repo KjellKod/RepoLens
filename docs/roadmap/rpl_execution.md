@@ -67,6 +67,31 @@ every round** alongside the components they cover.
 | X2 | security canary suite | Quest | R0+ |
 | X3 | CI (offline PR + scheduled live-smoke + dogfood) | Quest | R0+ |
 
+## Execution intensity & model lanes
+
+Not every component needs the full pipeline or two models. Tune per ID via the
+allowlist (`~/ws/extra/.ai/allowlist.json`) — no code involved.
+
+**Intensity**
+- **Full workflow** (plan → dual review + arbiter → build → dual review → fix) for
+  anything security-critical or contract-defining: **F2, F3, P3, P4, P5**.
+- **Solo / lighter** (single agent, fewer fix iterations — allowlist `solo`) is fine for
+  mechanical scaffolding and docs-shaped work: **F1, F4, the X* skeletons, P6·main**.
+- `review_mode` (`auto`/`fast`/`full`) + `fast_review_thresholds` already auto-lighten
+  review for tiny diffs.
+
+**Model lanes** (allowlist `models` map, per role)
+- **Mixed (default, best quality):** Claude and Codex on opposite review slots, so each
+  catches what the other misses.
+- **Claude-only / Codex-only:** set every role to one model — you lose cross-model
+  review diversity, which is fine for routine components or when one provider is down.
+
+**Token wall → codex-only.** Quest **already falls back cross-runtime automatically** (a
+failed Claude slot retries on Codex), so hitting Claude limits mid-quest degrades rather
+than dies. To switch deliberately, set the `models` map to the Codex model for all roles
+(one edit) and/or run solo to cut total calls. No redesign, no re-plan — so you don't
+have to improvise it under pressure.
+
 ## Where Workflows plug in (verification only)
 
 - **After F2 + X2:** an adversarial **security review** Workflow — parallel red-team
