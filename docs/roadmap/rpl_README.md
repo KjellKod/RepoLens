@@ -38,3 +38,4 @@ and secure against untrusted repo content by design.
 | [security.md](rpl_security.md) | **Mandatory** guardrails + canary tests — must not deviate |
 | [license-policy.md](rpl_license-policy.md) | The default, config-ready risk policy |
 | [roadmap.md](rpl_roadmap.md) | Parallel workstreams, sequencing, milestones, acceptance |
+| [execution.md](rpl_execution.md) | How we drive the build: Quest vs Workflow vs prompt, parallel rounds, brief seeds, Quest placement |
