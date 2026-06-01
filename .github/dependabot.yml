@@ -1,42 +1,44 @@
 version: 2
 
-# Update surface:
-# - github-actions: every action used in .github/workflows/*.yml. SHA-pinned actions
-#   that carry a `# vX.Y.Z` comment (e.g. openai/codex-action) get both the SHA and the
-#   comment advanced when a new release ships — keeping the supply-chain pins current.
-# - pip: Python dependencies; active once requirements*.txt / pyproject.toml exist.
-# Grouped so each ecosystem opens one rollup PR per run instead of a flood.
+# Philosophy: value, not noise.
 #
-# Note: Dependabot PRs are authored by dependabot[bot], so the agentic Codex review
-# (gated on author_association OWNER/MEMBER/COLLABORATOR) does NOT run on them and never
-# receives the OPENAI_API_KEY. Once branch protection is on (roadmap X3b), these PRs must
-# still pass the required deterministic checks and be up to date before merge.
+# Two separate jobs, tuned differently:
+#
+# 1. SECURITY fixes — handled by Dependabot security updates (alerts-driven, enabled in
+#    repo settings). These are NOT governed by the schedule, grouping, or the majors-only
+#    filter below: a known vulnerability always gets a PR, even as a patch/minor bump.
+#
+# 2. VERSION updates (the blocks below) — deliberately quiet. Monthly, grouped into one
+#    rollup PR per ecosystem, and limited to MAJOR bumps. Patch/minor churn is ignored —
+#    if it is not a security fix and not a major / "this is getting obsolete" move, you
+#    will not see a PR. Bump majors when you choose to; don't get pinged for the rest.
 updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     target-branch: "main"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     open-pull-requests-limit: 5
     groups:
       github-actions:
-        patterns:
-          - "*"
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
 
   - package-ecosystem: "pip"
     directory: "/"
     target-branch: "main"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "monthly"
     open-pull-requests-limit: 5
     groups:
-      python-production:
-        dependency-type: "production"
-        patterns:
-          - "*"
-      python-development:
-        dependency-type: "development"
-        patterns:
-          - "*"
+      python:
+        patterns: ["*"]
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-patch"
+          - "version-update:semver-minor"
