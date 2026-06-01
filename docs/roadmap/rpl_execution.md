@@ -82,8 +82,8 @@ Every component Quest is briefed the same way (DRY — point at the docs, don't 
 
 ```
 Build <ID> <component> for directory/repo RepoLens.
-- create a worktree based of origin/main, the branch and worktree name shoudl follow the format `<ID>__ <component_first_10_letters_with_underscore_and_no_space>`
-- First action on the git worktree branch is to mark 
+- create a worktree based of origin/main, the branch and worktree name shoudl follow the format `<ID>__ <component_first_10_letters_with_underscore_and_no_space>
+- make sure the worktree directory has a symlink from RepoLens/.quest to worktree-branch-location/.quest/ where you will store the quest artifact as they are being worked on and delivered. 
 - Scope/deliverable: see docs/roadmap/rpl_roadmap.md (this component's row) and
   docs/roadmap/rpl_decisions.md.
 - Acceptance: the rpl_roadmap M<n> criteria for this component, plus every applicable
@@ -92,6 +92,12 @@ Build <ID> <component> for directory/repo RepoLens.
   mandatory; no owner/repo/company names in code, tests, or docs (CI hygiene guard);
   owner is a runtime input only.
 - Output: code + tests + the component's canaries wired into CI.
+- Quest completion: 
+  - A. always celebrate, archive and journal the quest.
+  - B. Mark the ID as completed on the roadmap. Do not mark anything else as completed unless you did it yourself. Be accurate.  
+  - B. always create a PR that is ready to review, use pr-assistant for this. You have permission to create the PR. Don’t ask for permission. Make the PR ‘ready-to-review’. 
+  - C. Once the PR is created, ping the human that it’s ready to review. 
+- 
 ```
 
 ## Quest placement — recommendation: outside-in
