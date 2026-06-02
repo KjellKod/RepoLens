@@ -1,0 +1,77 @@
+tests/unit/flag/conftest.py
+  s_c13b18ebb07c51::t_7bc09fb2689574 55-57
+  s_c13b18ebb07c51::t_f13b7ff0fc2d43 1-54,58-63
+src/repolens/flag/render.py
+  s_c13b18ebb07c51::t_2802b37b138550 1-56
+src/repolens/flag/stage.py
+  s_c13b18ebb07c51::t_2bf635ea4e6c5b 18
+  s_c13b18ebb07c51::t_7979ba43b61008 49,57
+  s_c13b18ebb07c51::t_431307c843bd69 1-17,19-48,50-56,58-128
+docs/roadmap/rpl_roadmap.md
+  s_b7d615b4dc461e::t_48319c17718cf7 130
+src/repolens/flag/__init__.py
+  s_c13b18ebb07c51::t_acd31255999167 1-5
+tests/canaries/security/test_output_canaries.py
+  s_c13b18ebb07c51::t_a75ae5fd8a5a7a 101-131,134-138
+  s_c13b18ebb07c51::t_1e9080850a4980 132-133
+tests/unit/flag/test_flag_render.py
+  s_c13b18ebb07c51::t_9d2a4ffdda91d3 88-89
+  s_c13b18ebb07c51::t_2d2201df8ce2bd 28-32
+  s_c13b18ebb07c51::t_82fef6da9611eb 1-27,33-87,90-91
+tests/canaries/security/canary_matrix.json
+  s_c13b18ebb07c51::t_f72959732c6b44 197-207
+  s_c13b18ebb07c51::t_23dab89e7fc262 3
+src/repolens/flag/tagging.py
+  s_c13b18ebb07c51::t_7113250a43f5a5 1-60
+src/repolens/cli.py
+  s_c13b18ebb07c51::t_fe05383852db20 379-392
+  s_c13b18ebb07c51::t_6ae80be6838e88 222-223
+  s_c13b18ebb07c51::t_82e759643c6270 277-287
+  s_c13b18ebb07c51::t_fcb1eee581cb01 151,155-156
+  s_c13b18ebb07c51::t_fd7a2d9df9b9c4 94
+  s_c13b18ebb07c51::t_4dd7c92294c1ce 100,103-106
+tests/unit/flag/test_flag_policy.py
+  s_c13b18ebb07c51::t_154d03025ab9a1 1-49
+tests/unit/flag/test_flag_tagging.py
+  s_c13b18ebb07c51::t_bc3680cf90ddeb 1-26
+tests/canaries/security/test_token_canaries.py
+  s_c13b18ebb07c51::t_6931e7866787b0 77-112
+  s_c13b18ebb07c51::t_3cc8c37168a3c9 5-6
+tests/canaries/test_f1_offline_canaries.py
+  s_c13b18ebb07c51::t_9eb4048f92d512 33-34
+src/repolens/flag/dedup.py
+  s_c13b18ebb07c51::t_f174ccc4e4ba3d 11
+  s_c13b18ebb07c51::t_71cd1dacfe3a5b 83-85
+  s_c13b18ebb07c51::t_d6dae59fb92676 1-10,12-82,86-175
+tests/integration/test_flag_cli.py
+  s_c13b18ebb07c51::t_d11edab31c4909 1-111
+tests/unit/flag/test_flag_dedup.py
+  s_c13b18ebb07c51::t_0e6b8e12b7276f 1-135
+tests/e2e/test_cli.py
+  s_c13b18ebb07c51::t_c12b31400f0aaf 61,64
+  s_c13b18ebb07c51::t_5eee67ab7b3d2e 144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "f8d3f2dd83e2ae740bbc803fe0dfc85441ad7ea6",
+  "prompts": {},
+  "sessions": {
+    "s_b7d615b4dc461e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e89a8-5782-7193-a218-20c91aa49ecc",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_c13b18ebb07c51": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "ee391bb6-a1f3-492f-a898-1b5355f09c1c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    }
+  }
+}
