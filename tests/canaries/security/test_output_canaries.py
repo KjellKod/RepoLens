@@ -126,6 +126,7 @@ def test_p4_flag_markdown_artifact_sanitizes_hrefs_and_names(
     resolved_path.parent.mkdir(parents=True)
     resolved_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(flag_stage.store, "iter_resolved", lambda path: iter([record]))
+    _stub_flag_json_writers(tmp_path, monkeypatch)
 
     markdown = run_flag(tmp_path).shortlist_md_path.read_text(encoding="utf-8")
 
@@ -236,3 +237,22 @@ def _stub_report_records(
     resolved_path.parent.mkdir(parents=True)
     resolved_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(report_main.store, "iter_resolved", lambda path: iter(records))
+
+
+def _stub_flag_json_writers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from repolens.flag import stage as flag_stage
+
+    def write_inventory(work_root: Path, value: dict[str, object]) -> Path:
+        assert work_root == tmp_path
+        path = work_root / "inventory.json"
+        flag_stage.store.atomic_write_json(path, redact_tokens_from_structure(value))
+        return path
+
+    def write_shortlist(work_root: Path, value: dict[str, object]) -> Path:
+        assert work_root == tmp_path
+        path = work_root / "shortlist.json"
+        flag_stage.store.atomic_write_json(path, redact_tokens_from_structure(value))
+        return path
+
+    monkeypatch.setattr(flag_stage.store, "write_inventory", write_inventory)
+    monkeypatch.setattr(flag_stage.store, "write_shortlist", write_shortlist)

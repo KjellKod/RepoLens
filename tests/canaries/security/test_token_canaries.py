@@ -101,6 +101,7 @@ def test_p4_flag_token_redacts_emitted_artifacts(
     resolved_path.parent.mkdir(parents=True)
     resolved_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(flag_stage.store, "iter_resolved", lambda path: iter([record]))
+    _stub_flag_json_writers(tmp_path, monkeypatch)
 
     result = run_flag(tmp_path)
 
@@ -110,3 +111,20 @@ def test_p4_flag_token_redacts_emitted_artifacts(
         assert session.encode("utf-8") not in data
         assert fine_grained.encode("utf-8") not in data
         assert REDACTION.encode("utf-8") in data
+
+
+def _stub_flag_json_writers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def write_inventory(work_root: Path, value: dict[str, object]) -> Path:
+        assert work_root == tmp_path
+        path = work_root / "inventory.json"
+        flag_stage.store.atomic_write_json(path, redact_tokens_from_structure(value))
+        return path
+
+    def write_shortlist(work_root: Path, value: dict[str, object]) -> Path:
+        assert work_root == tmp_path
+        path = work_root / "shortlist.json"
+        flag_stage.store.atomic_write_json(path, redact_tokens_from_structure(value))
+        return path
+
+    monkeypatch.setattr(flag_stage.store, "write_inventory", write_inventory)
+    monkeypatch.setattr(flag_stage.store, "write_shortlist", write_shortlist)
