@@ -102,7 +102,7 @@ def test_file_protocol_submodule_is_blocked(
 ) -> None:
     source = local_repo_factory(
         gitmodules=(
-            '[submodule "acme-lib"]\n' "\tpath = vendor/acme-lib\n" "\turl = file:///etc/passwd\n"
+            '[submodule "acme-lib"]\n\tpath = vendor/acme-lib\n\turl = file:///etc/passwd\n'
         )
     )
 
