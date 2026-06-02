@@ -1,0 +1,19 @@
+.github/workflows/ci.yml
+  s_a45d31dd03ba28::t_f59ca02203fe61 36-64
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "04113c6c8aa2e3de066bd9030033e2ba945f2afc",
+  "prompts": {},
+  "sessions": {
+    "s_a45d31dd03ba28": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a8-999b-7b80-8f6e-275a586ecdda",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
