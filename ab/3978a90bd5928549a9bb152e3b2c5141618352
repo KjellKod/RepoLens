@@ -1,0 +1,24 @@
+src/repolens/data/store.py
+  s_589f074de75320::t_1fa8da5e6bbae8 9
+  s_589f074de75320::t_a7f5eb18d3740a 88
+tests/integration/test_workflow_security.py
+  s_589f074de75320::t_ab001e83e450fa 44
+.github/workflows/ci.yml
+  s_589f074de75320::t_3bacea9a62c7f8 56-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ab3978a90bd5928549a9bb152e3b2c5141618352",
+  "prompts": {},
+  "sessions": {
+    "s_589f074de75320": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a4-1493-77d2-9d0b-74175f188b83",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
