@@ -14,13 +14,14 @@ them**, and adds the workflow, policy, evidence, and reporting on top.
 ## Quickstart
 
 ```bash
-pip install -e .                      # install the `repolens` command (editable)
-repolens --help                       # see the stages and a typical run
-repolens discover --owner <OWNER>     # step 1: find + approve the repos
+pip install -e .                                       # install the `repolens` command (editable)
+repolens --help                                        # the stages, and the typical run
 python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene guard works
 ```
 
-Every stage explains itself with `repolens <stage> --help`.
+RepoLens is in active development: `repolens --help` shows the full pipeline
+(`discover → scan → resolve → flag → shortlist → report`), and each stage's own `--help`
+explains it. Stage flags (e.g. `discover --owner <OWNER>`) arrive as those stages land.
 
 ## What you get
 
