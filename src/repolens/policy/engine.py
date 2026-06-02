@@ -15,7 +15,7 @@ from repolens.policy.tiers import (
 )
 from repolens.policy.types import PolicyDecision, PolicyTier
 
-_COMPOUND_PATTERN = re.compile(r"\b(AND|OR|WITH)\b|[()]")
+_COMPOUND_PATTERN = re.compile(r"\b(AND|OR|WITH)\b|[()]", re.IGNORECASE)
 
 
 def _resolve_leaf(
@@ -46,8 +46,15 @@ def classify_license_input(raw: str, policy: Policy | None = None) -> PolicyDeci
     caveats: list[str] = []
     chosen_branch: str | None = None
     dual_license_detected = False
+    full_text_normalized = normalize_license(stripped, active_policy)
 
-    if stripped and _COMPOUND_PATTERN.search(stripped):
+    if full_text_normalized.tier_override is not None:
+        reasons.append(full_text_normalized.reason)
+        if full_text_normalized.matched_pattern:
+            reasons.append(full_text_normalized.matched_pattern)
+        tier = full_text_normalized.tier_override
+
+    elif stripped and _COMPOUND_PATTERN.search(stripped):
         def mapper(leaf_id: str, exception_id: str | None) -> EvalResult:
             tier, leaf_reasons, normalized_id, leaf_caveats = _resolve_leaf(
                 leaf_id, active_policy, exception_id=exception_id

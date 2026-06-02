@@ -19,6 +19,25 @@ def test_and_uses_higher_risk() -> None:
     assert decision.tier == PolicyTier.BLOCK
 
 
+def test_lowercase_compound_operators_are_parsed() -> None:
+    decision = classify_license_input("mit or gpl-3.0-only", policy=load_default_policy())
+
+    assert decision.tier == PolicyTier.ALLOW
+    assert decision.chosen_branch == "MIT"
+    assert decision.dual_license_detected is True
+
+
+def test_nested_or_choice_survives_and_expression() -> None:
+    decision = classify_license_input(
+        "(MIT OR GPL-3.0-only) AND Apache-2.0",
+        policy=load_default_policy(),
+    )
+
+    assert decision.tier == PolicyTier.ALLOW
+    assert decision.chosen_branch == "MIT"
+    assert decision.dual_license_detected is True
+
+
 def test_or_does_not_leak_caveats_from_unchosen_branch() -> None:
     decision = classify_license_input("MIT OR LGPL-3.0-only", policy=load_default_policy())
 
@@ -66,7 +85,7 @@ def test_unknown_with_restrictive_exception_does_not_allow_base_tier() -> None:
         policy=load_default_policy(),
     )
 
-    assert decision.tier == PolicyTier.UNKNOWN
+    assert decision.tier == PolicyTier.BLOCK
     assert decision.effective_tier == PolicyTier.BLOCK
 
 

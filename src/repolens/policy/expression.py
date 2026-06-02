@@ -149,7 +149,7 @@ class _AndNode(_Node):
         right_result = self.right.evaluate(mapper)
         return EvalResult(
             tier=choose_higher_risk(left_result.tier, right_result.tier),
-            chosen_branch=None,
+            chosen_branch=left_result.chosen_branch or right_result.chosen_branch,
             label=None,
             reasons=left_result.reasons + right_result.reasons,
             caveats=tuple(sorted(set(left_result.caveats + right_result.caveats))),
