@@ -10,6 +10,8 @@ SCHEMA_VERSION = "1.0"
 MAX_ARTIFACT_BYTES = {
     "sbom": 64 * 1024 * 1024,
     "resolved": 16 * 1024 * 1024,
+    "discovered": 4 * 1024 * 1024,
+    "repos_candidate_md": 1 * 1024 * 1024,
     "inventory": 16 * 1024 * 1024,
     "shortlist": 4 * 1024 * 1024,
 }

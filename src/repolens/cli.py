@@ -13,6 +13,9 @@ from pathlib import Path
 from repolens.security.redaction import redact_tokens
 
 from .config import load_config
+from .data.errors import ArtifactError
+from .discovery.gh import DEFAULT_GH_LIMIT, MAX_GH_LIMIT
+from .discovery.pipeline import run_discover
 from .exit_codes import ExitCode, InputError
 
 PATH_PATTERN = re.compile(r"(/[^\s:]+)+")
@@ -90,12 +93,38 @@ def build_parser() -> argparse.ArgumentParser:
             help=_STAGE_HELP[command_name],
             description=_STAGE_HELP[command_name],
         )
-        subparser.add_argument(
-            "--findings-open",
-            action="store_true",
-            help=argparse.SUPPRESS,
-        )
-        subparser.set_defaults(handler=_stage_stub)
+        if command_name == "discover":
+            subparser.add_argument(
+                "--owner",
+                required=True,
+                metavar="OWNER",
+                help="Runtime owner/org to enumerate with gh; never store this in source.",
+            )
+            subparser.add_argument(
+                "--work-root",
+                type=Path,
+                default=Path("work"),
+                metavar="DIR",
+                help="Directory for discovered.json and repos.candidate.md (default: work).",
+            )
+            subparser.add_argument(
+                "--limit",
+                type=int,
+                default=DEFAULT_GH_LIMIT,
+                metavar="N",
+                help=(
+                    f"Maximum repos to ask gh for, 1-{MAX_GH_LIMIT} "
+                    f"(default: {DEFAULT_GH_LIMIT})."
+                ),
+            )
+            subparser.set_defaults(handler=_discover_command)
+        else:
+            subparser.add_argument(
+                "--findings-open",
+                action="store_true",
+                help=argparse.SUPPRESS,
+            )
+            subparser.set_defaults(handler=_stage_stub)
 
     return parser
 
@@ -108,12 +137,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.print_help()
             return int(ExitCode.SUCCESS)
 
-        load_config(Path.cwd(), args.config)
+        args.runtime_config = load_config(Path.cwd(), args.config)
         result = args.handler(args)
         return _exit_code_for_result(result)
     except SystemExit as exc:
         return int(exc.code) if isinstance(exc.code, int) else int(ExitCode.USAGE_OR_INPUT_ERROR)
-    except InputError as exc:
+    except (ArtifactError, InputError) as exc:
         print(_sanitize(str(exc)), file=sys.stderr)
         return int(ExitCode.USAGE_OR_INPUT_ERROR)
     except Exception as exc:
@@ -125,6 +154,23 @@ def _stage_stub(args: argparse.Namespace) -> CommandResult:
     if args.findings_open:
         return CommandResult(CommandStatus.FINDINGS_OPEN, "findings remain open")
     return CommandResult(CommandStatus.SUCCESS, "skeleton command completed")
+
+
+def _discover_command(args: argparse.Namespace) -> CommandResult:
+    result = run_discover(
+        owner=args.owner,
+        work_root=args.work_root,
+        config=args.runtime_config,
+        limit=args.limit,
+    )
+    return CommandResult(
+        CommandStatus.SUCCESS,
+        (
+            f"discovered {result.repository_count} repositories; "
+            f"{result.candidate_count} candidates, "
+            f"{result.hard_exclusion_count} hard exclusions"
+        ),
+    )
 
 
 def _exit_code_for_result(result: CommandResult) -> int:

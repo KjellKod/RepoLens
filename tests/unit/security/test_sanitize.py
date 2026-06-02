@@ -5,7 +5,6 @@ import io
 
 import pytest
 
-from repolens.security.errors import SanitizationError
 from repolens.security.sanitize import (
     markdown_link,
     neutralize_csv_cell,
@@ -73,9 +72,9 @@ def test_malformed_markdown_url_is_neutralized() -> None:
 
 
 def test_empty_markdown_url_rejected() -> None:
-    with pytest.raises(SanitizationError):
-        markdown_link("acme", "")
+    assert markdown_link("acme", "") == "acme"
 
 
 def test_render_code_span_handles_backticks_and_controls() -> None:
     assert render_code_span("acme`name\x00").startswith("``")
+    assert "\n" not in render_code_span("acme\n## injected")

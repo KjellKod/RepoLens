@@ -110,11 +110,11 @@ shared `.git` directory. Prefer placing the file in the main checkout, e.g.
 `~/ws/extra/RepoLens/.name-hygiene.local.json`, so every worktree uses the same private
 denylist.
 
-## F1 CLI Skeleton
+## CLI stages
 
 `repolens --help` is the primary health check for the shipped CLI entry point. The
-pipeline subcommands are registered as skeleton routes while later roadmap components add
-their real orchestration behavior.
+pipeline subcommands are registered as stage routes; shipped stages run real orchestration
+and later roadmap components fill in the remaining stubs.
 
 Exit codes are:
 
@@ -127,7 +127,7 @@ Exit codes are:
 ## The pipeline
 
 ```
-repolens discover  --owner <OWNER>   # enumerate + categorize repos → approval checklist
+repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
 repolens scan                        # hardened clone + Syft → per-repo SBOM (resumable)
 repolens resolve                     # license ladder: APIs → mobile → ScanCode on unknowns
 repolens flag                        # tag + apply policy + dedup → inventory + shortlist
@@ -139,8 +139,56 @@ Discovery (you approve the repo list) and the final report (gated until the shor
 clear) are the two human checkpoints. Everything else is automatic, read-only against
 your code, and resumable after an interruption.
 
+### Discover
+
+`discover` is the first shipped pipeline stage. It invokes `gh repo list` for the
+runtime owner you provide, categorizes the returned repositories from local taxonomy
+config, and writes both the structured stage artifact and the human approval file:
+
+```bash
+repolens discover --owner <OWNER> --work-root work
+```
+
+Useful flags:
+
+| Flag | Meaning |
+|------|---------|
+| `--owner <OWNER>` | Runtime owner/org passed to `gh repo list`; never commit it. |
+| `--work-root <DIR>` | Output directory for `discovered.json` and `repos.candidate.md`; default `work`. |
+| `--limit <N>` | Maximum repositories requested from `gh`; default `1000`, max `5000`. |
+
+Taxonomy is optional and lives only in untracked local config. Unmatched repositories use
+`uncategorized` unless you set `default_category`. Categories classify only; they never
+exclude a repository from later scanning. Only GitHub-archived repositories or entries in
+the local `dead` map are hard-excluded, and the reason is written visibly.
+
+```json
+{
+  "discover": {
+    "taxonomy": {
+      "default_category": "default-bucket",
+      "explicit": {
+        "sentinel-owner/sentinel-alpha": "runtime-bucket"
+      },
+      "patterns": [
+        {"glob": "tool-*", "category": "tooling-bucket"}
+      ],
+      "topics": {
+        "mobile": "mobile-bucket"
+      },
+      "dead": {
+        "sentinel-retired": "retired by local approval"
+      }
+    }
+  }
+}
+```
+
 ## Outputs
 
+- `discovered.json` — the structured repository list for later stages.
+- `repos.candidate.md` — the sanitized human approval checklist with visible hard
+  exclusion reasons.
 - `inventory.json` — the complete, tagged dataset.
 - `report.main.{md,csv,docx}` — the disclosure for the included categories.
 - `report.appendix.<category>.{md,csv}` — one per excluded category + first-party.

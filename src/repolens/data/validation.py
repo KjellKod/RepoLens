@@ -12,7 +12,7 @@ from jsonschema.exceptions import ValidationError
 
 from repolens.data.errors import SchemaValidationError
 
-SCHEMA_NAMES = frozenset({"sbom", "resolved", "inventory", "shortlist"})
+SCHEMA_NAMES = frozenset({"sbom", "resolved", "discovered", "inventory", "shortlist"})
 
 
 @lru_cache
@@ -47,8 +47,32 @@ def validate_artifact(value: Any, artifact_name: str) -> None:
         if path:
             prefix = f"{prefix}.{path}"
         raise SchemaValidationError(f"{prefix}: {exc.message}") from exc
+    if artifact_name == "discovered":
+        _validate_discovered_counts(value)
     if artifact_name == "shortlist":
         _validate_shortlist_open_count(value)
+
+
+def _validate_discovered_counts(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    repositories = value.get("repositories", [])
+    if not isinstance(repositories, list):
+        return
+    candidate_count = sum(
+        1 for item in repositories if isinstance(item, dict) and not item.get("hard_excluded")
+    )
+    hard_exclusion_count = sum(
+        1 for item in repositories if isinstance(item, dict) and item.get("hard_excluded")
+    )
+    if value.get("repository_count") != len(repositories):
+        raise SchemaValidationError("discovered.repository_count: must match repositories length")
+    if value.get("candidate_count") != candidate_count:
+        raise SchemaValidationError("discovered.candidate_count: must match candidate count")
+    if value.get("hard_exclusion_count") != hard_exclusion_count:
+        raise SchemaValidationError(
+            "discovered.hard_exclusion_count: must match hard exclusion count"
+        )
 
 
 def _validate_shortlist_open_count(value: Any) -> None:

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repolens.example/schemas/discovered-1.0.json",
+  "title": "RepoLens discovered repositories",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "generated_at",
+    "owner",
+    "repository_count",
+    "candidate_count",
+    "hard_exclusion_count",
+    "repositories"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "owner": {"type": "string", "minLength": 1},
+    "repository_count": {"type": "integer", "minimum": 0},
+    "candidate_count": {"type": "integer", "minimum": 0},
+    "hard_exclusion_count": {"type": "integer", "minimum": 0},
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "name_with_owner",
+          "url",
+          "description",
+          "topics",
+          "archived",
+          "private",
+          "category",
+          "category_source",
+          "hard_excluded",
+          "exclusion_reason"
+        ],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "name_with_owner": {"type": "string", "minLength": 1},
+          "url": {"type": "string"},
+          "description": {"type": "string"},
+          "topics": {"type": "array", "items": {"type": "string"}},
+          "archived": {"type": "boolean"},
+          "private": {"type": "boolean"},
+          "category": {"type": "string", "minLength": 1},
+          "category_source": {"type": "string", "minLength": 1},
+          "hard_excluded": {"type": "boolean"},
+          "exclusion_reason": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
