@@ -8,3 +8,22 @@ markers = [
   "canary: mandatory security canary coverage",
   "name_hygiene: verifies forbidden-name and token hygiene",
 ]
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repolens"
+version = "0.1.0"
+description = "CLI foundation for a license disclosure orchestrator."
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML==6.0.2",
+]
+
+[project.scripts]
+repolens = "repolens.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

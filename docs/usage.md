@@ -7,7 +7,7 @@
 ## Prerequisites
 
 - `gh` (authenticated), `git`, `python3`.
-- `syft` + `scancode` — installed and version-pinned by `repolens bootstrap`
+- `syft` + `scancode` — installed and version-pinned by a future bootstrap step
   (checksum/signature-verified).
 - For mobile license enrichment (optional, auto-detected): a build toolchain
   (JDK + Gradle for Android, Xcode/SPM or a `GITHUB_TOKEN` for iOS).
@@ -19,6 +19,31 @@
 - **License policy** — the ALLOW / REVIEW / BLOCK / UNKNOWN tiers.
 - **Report selection + header** — which categories land in the main report, and the
   org/legal boilerplate (injected at render time).
+
+F1 local config is loaded only from untracked local files. Precedence is:
+
+1. `--config <path>`
+2. `*.local.toml`
+3. `*.local.yaml`
+4. `*.local.yml`
+5. `*.local.json`
+
+On key collisions, the higher-precedence source replaces the lower-precedence value at
+that key path; non-colliding keys are preserved.
+
+## F1 CLI Skeleton
+
+`repolens --help` is the primary health check for the shipped CLI entry point. The
+pipeline subcommands are registered as skeleton routes while later roadmap components add
+their real orchestration behavior.
+
+Exit codes are:
+
+| Code | Meaning |
+|------|---------|
+| `0` | Success |
+| `1` | Findings remain open, or a sanitized unexpected internal error occurred |
+| `2` | Usage, argument, or config input error |
 
 ## The pipeline
 
