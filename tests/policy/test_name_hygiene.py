@@ -51,7 +51,6 @@ F5_FILES = (
     "tests/policy/test_name_hygiene.py",
     "tests/policy/test_spdx_normalize.py",
     "tests/policy/test_tiers.py",
-    ".github/workflows/f5-policy.yml",
 )
 
 

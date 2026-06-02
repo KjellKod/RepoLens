@@ -12,7 +12,7 @@ from repolens.config import load_config
 from repolens.exit_codes import InputError
 
 ROOT = Path(__file__).resolve().parents[2]
-GUARD = ROOT / ".github" / "scripts" / "name_hygiene_guard.py"
+GUARD_MODULE = "repolens.security.name_hygiene"
 
 
 class F1OfflineCanaries(unittest.TestCase):
@@ -47,30 +47,32 @@ class F1OfflineCanaries(unittest.TestCase):
     def test_name_hygiene_seeded_bad_term_fails(self) -> None:
         term = "acme-" + "blocked-token"
         with tempfile.TemporaryDirectory() as tmp:
-            target = Path(tmp) / "fixture.txt"
-            target.write_text(f"{term}\n", encoding="utf-8")
-            env = {**os.environ, "REPOLENS_NAME_DENYLIST": term}
+            target = Path(tmp)
+            (target / "fixture.txt").write_text(f"{term}\n", encoding="utf-8")
+            env = {**os.environ, "REPOLENS_FORBIDDEN_NAMES": term}
             result = subprocess.run(
-                [sys.executable, str(GUARD), str(target)],
+                [sys.executable, "-m", GUARD_MODULE, "--root", str(target), "--require-denylist"],
                 env=env,
                 capture_output=True,
                 text=True,
             )
         self.assertNotEqual(result.returncode, 0)
+        # The forbidden literal must never be echoed; findings are reported by token id.
+        self.assertNotIn(term, result.stdout)
         self.assertNotIn(term, result.stderr)
-        self.assertIn("denylist-entry", result.stderr)
+        self.assertIn("sha256:", result.stdout)
 
     def test_name_hygiene_clean_tree_passes_with_denylist(self) -> None:
         term = "acme-" + "blocked-token"
-        env = {**os.environ, "REPOLENS_NAME_DENYLIST": term}
+        env = {**os.environ, "REPOLENS_FORBIDDEN_NAMES": term}
         result = subprocess.run(
-            [sys.executable, str(GUARD), "src", "docs", ".github/scripts"],
+            [sys.executable, "-m", GUARD_MODULE, "--root", "src", "--require-denylist"],
             cwd=ROOT,
             env=env,
             capture_output=True,
             text=True,
         )
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
 
 if __name__ == "__main__":
