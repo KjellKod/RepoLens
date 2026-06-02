@@ -1,0 +1,22 @@
+tests/unit/security/test_name_hygiene.py
+  s_bb8787cf071d6e::t_fe7e93d517ce36 42-57
+  s_bb8787cf071d6e::t_667357eed7ba7e 3
+src/repolens/security/name_hygiene.py
+  s_bb8787cf071d6e::t_8c6dfde0faeb3d 534-539
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8aceb53672ac21b28842fa155faf3feaeaabe83b",
+  "prompts": {},
+  "sessions": {
+    "s_bb8787cf071d6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c1f98f3-95b8-4b2c-84ce-cb4d9a149af9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
