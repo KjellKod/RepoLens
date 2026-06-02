@@ -127,7 +127,7 @@ licenses (that's P3). The "planted AGPL → BLOCK" acceptance is **P4's**, not P
       (AboutLibraries / LicensePlist) — auto-detected, **opt-in and off by default**,
       run only inside the sandbox spec of [security.md §2 + §4](rpl_security.md)
       (no secrets mounted, read-only repo mount, egress allowlist, quotas + timeout).
-- [ ] P4 — flag: tag `origin`/`scope`/`distribution`, apply F5 policy tiers, dedup →
+- [x] P4 — flag: tag `origin`/`scope`/`distribution`, apply F5 policy tiers, dedup →
       write `inventory.json` + `shortlist.md`; exit non-zero while any item is open.
 - [ ] X1 — fixtures grown for R2: planted AGPL dep, planted no-license dep, one Android
       and one iOS fixture repo (invented names) — shipped inside the P3b/P4 quests

@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+from repolens.flag import run_flag
+from repolens.flag import stage as flag_stage
 from repolens.report import main as report_main
 from repolens.report import render_main_report
 from repolens.security.redaction import REDACTION, redact_tokens, redact_tokens_from_structure
@@ -67,6 +69,42 @@ def test_p6a_report_token_redacts_emitted_artifacts(
     result = render_main_report(tmp_path, tmp_path / "out")
 
     for path in (result.csv_path, result.markdown_path):
+        data = path.read_bytes()
+        assert classic.encode("utf-8") not in data
+        assert session.encode("utf-8") not in data
+        assert fine_grained.encode("utf-8") not in data
+        assert REDACTION.encode("utf-8") in data
+
+
+def test_p4_flag_token_redacts_emitted_artifacts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    classic = "gh" + "p_" + "A" * 24
+    session = "gh" + "s_" + "B" * 24
+    fine_grained = "github" + "_pat_" + "C" * 24
+    # A flagged tier (BLOCK) so the component appears in all three artifacts, including the .md.
+    record = {
+        "schema_version": "1.0",
+        "name": f"acme-token-{classic}",
+        "version": f"1.2.3-{session}",
+        "repo": "acme-alpha",
+        "spdx_id": "AGPL-3.0-only",
+        "evidence": {
+            "source_layer": "syft",
+            "url": f"https://example.invalid/licenses/{fine_grained}",
+            "anchor": "AGPL-3.0-only",
+        },
+        "tags": {"origin": "third-party-oss", "scope": "runtime", "distribution": "server"},
+        "modified": "unknown",
+    }
+    resolved_path = tmp_path / "work" / "acme-alpha" / "resolved.ndjson"
+    resolved_path.parent.mkdir(parents=True)
+    resolved_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(flag_stage.store, "iter_resolved", lambda path: iter([record]))
+
+    result = run_flag(tmp_path)
+
+    for path in (result.inventory_path, result.shortlist_json_path, result.shortlist_md_path):
         data = path.read_bytes()
         assert classic.encode("utf-8") not in data
         assert session.encode("utf-8") not in data

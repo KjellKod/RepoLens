@@ -44,11 +44,6 @@ class CliTests(unittest.TestCase):
 
         stdout = io.StringIO()
         with redirect_stdout(stdout):
-            cli.main(["flag", "--help"])
-        self.assertIn("(planned — not yet available)", stdout.getvalue())
-
-        stdout = io.StringIO()
-        with redirect_stdout(stdout):
             cli.main(["shortlist", "--help"])
         self.assertIn("(planned — not yet available)", stdout.getvalue())
 
@@ -63,10 +58,10 @@ class CliTests(unittest.TestCase):
         self.assertIn("discover", result.stdout)
 
     def test_stage_command_routes_to_success(self) -> None:
-        self.assertEqual(cli.main(["flag"]), 0)
+        self.assertEqual(cli.main(["shortlist"]), 0)
 
     def test_stage_command_routes_findings_open_to_one(self) -> None:
-        self.assertEqual(cli.main(["flag", "--findings-open"]), 1)
+        self.assertEqual(cli.main(["shortlist", "--findings-open"]), 1)
 
     def test_discover_requires_owner(self) -> None:
         self.assertEqual(cli.main(["discover"]), 2)
@@ -146,7 +141,7 @@ class CliTests(unittest.TestCase):
             ),
             redirect_stderr(stderr),
         ):
-            code = cli.main(["flag"])
+            code = cli.main(["shortlist"])
 
         self.assertEqual(code, 1)
         output = stderr.getvalue()

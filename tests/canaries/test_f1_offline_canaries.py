@@ -30,8 +30,8 @@ class F1OfflineCanaries(unittest.TestCase):
             self.assertEqual(result.returncode, 0, name)
 
     def test_exit_code_contract_canary(self) -> None:
-        self.assertEqual(cli.main(["flag"]), 0)
-        self.assertEqual(cli.main(["flag", "--findings-open"]), 1)
+        self.assertEqual(cli.main(["shortlist"]), 0)
+        self.assertEqual(cli.main(["shortlist", "--findings-open"]), 1)
         self.assertEqual(cli.main(["bad-command"]), 2)
 
     def test_yaml_unsafe_tag_canary(self) -> None:

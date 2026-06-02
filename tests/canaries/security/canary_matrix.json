@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 31,
+    "expected_active_count": 33,
     "markers": [
         "offline",
         "security",
@@ -192,6 +192,18 @@
             "status": "active",
             "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_drops_rejected_credential_evidence_url",
             "guardrail": "resolve_rejected_credential_url_absent"
+        },
+        {
+            "id": "p4_flag_token_redacts",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_token_canaries.py::test_p4_flag_token_redacts_emitted_artifacts",
+            "guardrail": "token_redaction"
+        },
+        {
+            "id": "p4_flag_markdown_sanitizes",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_output_canaries.py::test_p4_flag_markdown_artifact_sanitizes_hrefs_and_names",
+            "guardrail": "markdown_href_sanitization"
         },
         {
             "id": "x2_injection_agent_family",

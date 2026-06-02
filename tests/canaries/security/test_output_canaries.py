@@ -98,6 +98,44 @@ def test_p6a_report_markdown_artifact_sanitizes_hrefs_and_names(
     assert "](javascript" not in markdown
 
 
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_p4_flag_markdown_artifact_sanitizes_hrefs_and_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from repolens.flag import run_flag
+    from repolens.flag import stage as flag_stage
+
+    record = {
+        "schema_version": "1.0",
+        "name": "acme-markdown|name",
+        "version": "1.2.3",
+        "repo": "acme-alpha",
+        # BLOCK tier so the item lands in shortlist.md where the href/name are rendered.
+        "spdx_id": "AGPL-3.0-only",
+        "evidence": {
+            "source_layer": "syft",
+            "url": "javascript:alert(1)",
+            "anchor": "AGPL-3.0-only",
+        },
+        "tags": {"origin": "third-party-oss", "scope": "runtime", "distribution": "server"},
+        "modified": "unknown",
+    }
+    resolved_path = tmp_path / "work" / "acme-alpha" / "resolved.ndjson"
+    resolved_path.parent.mkdir(parents=True)
+    resolved_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(flag_stage.store, "iter_resolved", lambda path: iter([record]))
+
+    markdown = run_flag(tmp_path).shortlist_md_path.read_text(encoding="utf-8")
+
+    # The untrusted name is wrapped in an inert code span; the javascript: href is neutralized.
+    assert "`acme-markdown|name|AGPL-3.0-only`" in markdown
+    assert "javascript:" not in markdown
+    assert "javascript&#58;alert\\(1\\)" in markdown
+    assert "](javascript" not in markdown
+
+
 def test_csv_formula_cells_are_neutralized() -> None:
     for value in ("=1+2", "＝1+2"):
         output = serialize_csv_row([value])
