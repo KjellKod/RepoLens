@@ -1,0 +1,11 @@
+tests/unit/flag/test_flag_render.py
+  ai_agent 51
+src/repolens/flag/dedup.py
+  ai_agent 51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "13a7215be6e793919c1b0192e01dcb914e3df538",
+  "prompts": {}
+}
