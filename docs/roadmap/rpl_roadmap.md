@@ -81,7 +81,7 @@ Deliver F1–F5 and the X1/X2/X3 skeletons.
 Deliver P1 + P2 + P3a (API layer) + P6a (main view, md/csv) against any `<OWNER>`.
 **Delivery** (each Quest ticks its ID on merge)
 - [x] P1 — discover (gh → categorize → approval file)
-- [ ] P2 — scan (hardened clone + Syft)
+- [x] P2 — scan (hardened clone + Syft)
 - [ ] P3a — resolve, API layer only
 - [ ] P6a — report, main view (md/csv)
 - [ ] X1 — fixtures grown to cover R1 components
