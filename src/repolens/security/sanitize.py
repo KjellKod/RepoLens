@@ -9,8 +9,6 @@ import re
 import unicodedata
 from urllib.parse import urlparse
 
-from repolens.security.errors import SanitizationError
-
 _DANGEROUS_CSV_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 _LEADING_WHITESPACE = " \t\r\n\f\v\ufeff"
 _MARKDOWN_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]*)\)")
@@ -92,6 +90,7 @@ def render_code_span(value: object) -> str:
     """Render untrusted text as an inert Markdown code span."""
 
     text = "" if value is None else str(value)
+    text = re.sub(r"[\r\n]+", " ", text)
     text = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
     longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
     fence = "`" * (longest + 1)
@@ -102,6 +101,8 @@ def render_code_span(value: object) -> str:
 
 def _safe_markdown_url(url: str) -> bool:
     stripped = unicodedata.normalize("NFKC", url).strip()
+    if not stripped:
+        return False
     try:
         parsed = urlparse(stripped)
         scheme = parsed.scheme.lower()
@@ -109,11 +110,7 @@ def _safe_markdown_url(url: str) -> bool:
         return False
     if scheme in {"javascript", "data", "vbscript", "file"}:
         return False
-    if scheme and scheme not in {"https", "http", "mailto"}:
-        return False
-    if not stripped:
-        raise SanitizationError("empty Markdown URL")
-    return True
+    return not (scheme and scheme not in {"https", "http", "mailto"})
 
 
 def _unsafe_reference_labels(markdown: str) -> set[str]:

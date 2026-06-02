@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "expected_active_count": 9,
+  "expected_active_count": 14,
   "markers": ["offline", "security", "canary"],
   "canaries": [
     {
@@ -56,6 +56,36 @@
       "status": "active",
       "nodeid": "tests/canaries/security/test_dos_canaries.py::test_x2_dos_time_budget_aborts",
       "guardrail": "deterministic_time_budget"
+    },
+    {
+      "id": "p1_discover_token_absent_from_candidate_markdown",
+      "status": "active",
+      "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_token_absent_from_candidate_markdown",
+      "guardrail": "discover_token_redaction"
+    },
+    {
+      "id": "p1_discover_markdown_hrefs_and_images_neutralized",
+      "status": "active",
+      "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_markdown_hrefs_and_images_neutralized",
+      "guardrail": "discover_markdown_sanitization"
+    },
+    {
+      "id": "p1_discover_malformed_and_multiline_metadata_are_inert",
+      "status": "active",
+      "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_malformed_and_multiline_metadata_are_inert",
+      "guardrail": "discover_markdown_sanitization"
+    },
+    {
+      "id": "p1_discover_gh_timeout_and_stdout_cap_fail_closed",
+      "status": "active",
+      "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_gh_timeout_and_stdout_cap_fail_closed",
+      "guardrail": "discover_dos_cap"
+    },
+    {
+      "id": "p1_discover_dash_prefixed_owner_rejected_before_gh",
+      "status": "active",
+      "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_dash_prefixed_owner_rejected_before_gh",
+      "guardrail": "discover_argument_hardening"
     },
     {
       "id": "x2_injection_agent_family",

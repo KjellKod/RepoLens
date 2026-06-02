@@ -21,7 +21,8 @@ python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene 
 
 RepoLens is in active development: `repolens --help` shows the full pipeline
 (`discover → scan → resolve → flag → shortlist → report`), and each stage's own `--help`
-explains it. Stage flags (e.g. `discover --owner <OWNER>`) arrive as those stages land.
+explains it. `discover --owner <OWNER>` is the first shipped pipeline stage; the remaining
+stage behavior arrives as those stages land.
 
 ## What you get
 

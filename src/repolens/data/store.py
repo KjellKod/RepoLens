@@ -49,6 +49,8 @@ def _artifact_path(work_root: str | Path, artifact_name: str, repo_ref: str | No
         return repo_dir(root, repo_ref) / "resolved.ndjson"
     if artifact_name == "inventory":
         return root / "inventory.json"
+    if artifact_name == "discovered":
+        return root / "discovered.json"
     if artifact_name == "shortlist":
         return root / "shortlist.json"
     raise ValueError(f"unknown artifact type: {artifact_name}")
@@ -130,6 +132,10 @@ def write_inventory(work_root: str | Path, value: dict[str, Any]) -> Path:
     return _write_json_artifact(work_root, "inventory", value)
 
 
+def write_discovered(work_root: str | Path, value: dict[str, Any]) -> Path:
+    return _write_json_artifact(work_root, "discovered", value)
+
+
 def write_shortlist(work_root: str | Path, value: dict[str, Any]) -> Path:
     return _write_json_artifact(work_root, "shortlist", value)
 
@@ -175,6 +181,10 @@ def read_sbom(work_root: str | Path, repo_ref: str) -> dict[str, Any]:
 
 def read_inventory(work_root: str | Path) -> dict[str, Any]:
     return _read_json_artifact(work_root, "inventory")
+
+
+def read_discovered(work_root: str | Path) -> dict[str, Any]:
+    return _read_json_artifact(work_root, "discovered")
 
 
 def read_shortlist(work_root: str | Path) -> dict[str, Any]:
