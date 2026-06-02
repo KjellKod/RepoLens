@@ -34,18 +34,62 @@ CommandHandler = Callable[[argparse.Namespace], CommandResult]
 
 STAGE_COMMANDS = ("discover", "scan", "resolve", "flag", "shortlist", "report")
 
+# One-line help per stage, shown in `repolens --help` and each stage's own --help.
+_STAGE_HELP = {
+    "discover": "Find and categorize the repos under an owner; you approve the list.",
+    "scan": "Inventory each repo's dependencies across all languages (read-only).",
+    "resolve": "Resolve every dependency's license, cheapest trusted source first.",
+    "flag": "Apply the license policy and flag risky or unresolved licenses.",
+    "shortlist": "Resolve the flagged items with anchored evidence and your approval.",
+    "report": "Assemble the deduplicated disclosure: main report plus appendices.",
+}
+
+_DESCRIPTION = (
+    "RepoLens — an open-source license disclosure across every repository under an owner.\n"
+    "It inventories dependencies in any language, flags commercial-use risks, and\n"
+    "assembles an evidence-backed disclosure. Run the stages below in order."
+)
+
+_EPILOG = (
+    "typical run:\n"
+    "  repolens discover --owner <OWNER>   1. find + approve the repos\n"
+    "  repolens scan                       2. inventory dependencies\n"
+    "  repolens resolve                    3. resolve licenses\n"
+    "  repolens flag                       4. flag risk / unknowns\n"
+    "  repolens shortlist                  5. resolve the flags (with you)\n"
+    "  repolens report                     6. build the disclosure\n"
+    "\n"
+    "Discovery and report are the checkpoints where you stay in control; the stages\n"
+    "between run automatically and are resumable. Run `repolens <stage> --help` for a\n"
+    "single stage. Full guide: docs/usage.md."
+)
+
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="repolens")
+    parser = argparse.ArgumentParser(
+        prog="repolens",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=_DESCRIPTION,
+        epilog=_EPILOG,
+    )
     parser.add_argument(
         "--config",
         type=Path,
-        help="Path to an untracked local config file.",
+        metavar="PATH",
+        help="Path to an untracked local config file (owner, categories, policy).",
     )
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(
+        dest="command",
+        metavar="<stage>",
+        title="stages (run in order)",
+    )
 
     for command_name in STAGE_COMMANDS:
-        subparser = subparsers.add_parser(command_name)
+        subparser = subparsers.add_parser(
+            command_name,
+            help=_STAGE_HELP[command_name],
+            description=_STAGE_HELP[command_name],
+        )
         subparser.add_argument(
             "--findings-open",
             action="store_true",
@@ -61,6 +105,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         args = parser.parse_args(argv)
         if args.command is None:
+            parser.print_help()
             return int(ExitCode.SUCCESS)
 
         load_config(Path.cwd(), args.config)
