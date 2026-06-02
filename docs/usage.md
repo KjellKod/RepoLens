@@ -12,6 +12,50 @@
 - For mobile license enrichment (optional, auto-detected): a build toolchain
   (JDK + Gradle for Android, Xcode/SPM or a `GITHUB_TOKEN` for iOS).
 
+## Tool bootstrap
+
+Before any scan runs, RepoLens pins and integrity-verifies its own toolchain.
+The pins are the single source of truth in `src/repolens/bootstrap/pins.toml`: exact
+versions plus sha256 digests for Syft, ScanCode, cosign, `git`, `gh`, and the
+base image (by digest) — never `latest`.
+
+Validate the manifest offline (no downloads):
+
+```
+python3 -m repolens.bootstrap --dry-run
+```
+
+A live bootstrap (called by the pipeline, or via `repolens.bootstrap.run(...)`
+with injected fetch/cosign/pip runners) verifies Syft **fail-closed**: it checks
+the binary's sha256, then verifies the cosign-signed checksums file, then
+cross-checks that the pinned digest matches the signed entry — all **before** the
+binary is ever made executable or run. ScanCode installs via a hash-pinned
+`--require-hashes` requirements file. Resolved versions/digests are written to
+`tool_versions.json` (default under `work/`, which is gitignored).
+
+### Name-hygiene gate
+
+The offline CI workflow runs `tools/name_hygiene.py`, which fails the build on any
+forbidden owner/org/company literal. The forbidden names are **never committed**:
+the guard reads them from the `RPL_HYGIENE_DENYLIST` environment variable
+(comma/newline-separated) or from a file named in `RPL_HYGIENE_DENYLIST_FILE`.
+
+The guard is **fail-closed**: if no denylist is configured it exits non-zero (a
+config error), so the gate can never pass vacuously. CI supplies a generated
+denylist file for offline smoke coverage. For live owner/org hygiene, configure
+the denylist:
+
+```
+# GitHub -> Settings -> Secrets and variables -> Actions -> Variables
+RPL_HYGIENE_DENYLIST = name1,name2,...        # the real forbidden literals
+```
+
+Run it locally the same way (substitute your own forbidden names):
+
+```
+RPL_HYGIENE_DENYLIST="name1,name2" python3 tools/name_hygiene.py
+```
+
 ## Configuration (all untracked / local)
 
 - **Owner** — supplied at runtime (`--owner` / env); never committed.

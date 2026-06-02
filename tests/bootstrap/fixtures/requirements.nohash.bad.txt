@@ -1,0 +1,3 @@
+# INTENTIONALLY INVALID fixture — a requirement with no --hash pin. The
+# validator must reject this before any pip invocation.
+acme-scanner==1.2.3

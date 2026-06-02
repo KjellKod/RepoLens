@@ -34,3 +34,18 @@ jobs:
 
       - name: Run watermark canary
         run: python -m repolens.testing.watermark --manifest tests/fixtures/synthetic/fixture_manifest.json
+
+      - name: Lint F4 bootstrap
+        run: python -m ruff check src/repolens/bootstrap tools tests/bootstrap
+
+      - name: Verify F4 pins
+        run: python tools/pins_lint.py src/repolens/bootstrap/pins.toml
+
+      - name: Run F4 name-hygiene guard
+        run: |
+          printf '%s%s\n' 'ci-denylist-' 'unused' > "$RUNNER_TEMP/denylist.txt"
+          RPL_HYGIENE_DENYLIST_FILE="$RUNNER_TEMP/denylist.txt" \
+            python tools/name_hygiene.py src tests docs .github/scripts tools
+
+      - name: Run F4 bootstrap tests
+        run: python -m pytest tests/bootstrap

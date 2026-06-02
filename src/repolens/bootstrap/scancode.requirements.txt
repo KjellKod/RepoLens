@@ -1,0 +1,19 @@
+# ScanCode toolkit — hash-pinned for `pip install --require-hashes --no-deps`.
+#
+# Every line is exactly version-pinned ('==') and carries a sha256 --hash. Under
+# --require-hashes pip rejects any unhashed or unpinned dist, including
+# transitive ones, so this file must be the COMPLETE transitive set.
+#
+# PLACEHOLDER HASHES: offline, the real wheel digests cannot be fetched. The
+# 64-hex values below are clearly-marked placeholders that a maintainer MUST
+# regenerate (e.g. `pip-compile --generate-hashes` against the locked set)
+# before a real install. The hash-presence + exact-pin VALIDATOR
+# (validate_requirements) is real and enforced regardless of the values.
+#
+# NOTE: this is intentionally a minimal seed; the full transitive closure of
+# ScanCode's wheels is added when the real digests are generated. Listing the
+# top-level dist here keeps the validator meaningful (it would reject this file
+# if the hash or '==' were missing) without claiming a fake transitive set.
+
+scancode-toolkit==32.3.1 \
+    --hash=sha256:0000000000000000000000000000000000000000000000000000000000000050
