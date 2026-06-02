@@ -103,7 +103,7 @@ Deliver P1 + P2 + P3a (API layer) + P6a (main view, md/csv) against any `<OWNER>
 - [x] Docs — flesh out `docs/usage.md` for the shipped commands (grows M1 → M3)
 
 **Acceptance**
-- [ ] End-to-end run on a fixture owner **and** dogfood on RepoLens itself.
+- [x] End-to-end run on a fixture owner **and** dogfood on RepoLens itself.
 - [ ] Multi-language deduped inventory with provenance, versions, source URLs.
 - [x] Clone hardening + **clone canaries green**; the watermark canary passes.
 - [x] Zero owner/repo strings anywhere (hygiene guard green).
