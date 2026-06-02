@@ -238,6 +238,12 @@ To inspect only the hard exclusions and their recorded reasons:
 jq -r '.repositories[] | select(.hard_excluded) | [.name_with_owner, .exclusion_reason] | @tsv' <WORK_ROOT>/discovered.json
 ```
 
+To inspect only the candidate repositories eligible for approval:
+
+```bash
+jq -r '.repositories[] | select(.hard_excluded == false) | [.name_with_owner, .category] | @tsv' <WORK_ROOT>/discovered.json
+```
+
 `repos.candidate.md` is a human-edited checkpoint. A second `discover` run refuses to
 overwrite it unless you pass `--force`, so existing approval checkboxes are not silently
 discarded. Use `--force` only when you intentionally want a fresh approval file.
