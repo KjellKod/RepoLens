@@ -1,0 +1,79 @@
+src/repolens/bootstrap/scancode.requirements.txt
+  ai_agent 1-19
+tools/__init__.py
+  ai_agent 1
+tests/bootstrap/test_syft_bootstrap.py
+  ai_agent 1-154
+src/repolens/bootstrap/syft.py
+  ai_agent 1-165
+src/repolens/bootstrap/orchestrate.py
+  ai_agent 1-134
+src/repolens/bootstrap/pins.toml
+  ai_agent 1-76
+src/repolens/bootstrap/verify.py
+  ai_agent 1-193
+tests/bootstrap/conftest.py
+  ai_agent 1-154
+tests/bootstrap/fixtures/acme_clean_tree/acme_example.py
+  ai_agent 1-4
+tests/bootstrap/fixtures/pins.latest.bad.toml
+  ai_agent 1-43
+tests/bootstrap/fixtures/syft_tampered.txt
+  ai_agent 1
+tests/bootstrap/test_cli.py
+  ai_agent 1-49
+tests/bootstrap/test_orchestrate.py
+  ai_agent 1-165
+tests/bootstrap/test_supply_chain_canary.py
+  ai_agent 1-74
+tests/bootstrap/test_scancode.py
+  ai_agent 1-91
+src/repolens/bootstrap/errors.py
+  ai_agent 1-53
+tools/pins_lint.py
+  ai_agent 1-59
+src/repolens/bootstrap/scancode.py
+  ai_agent 1-118
+docs/usage.md
+  ai_agent 15-58
+tests/bootstrap/test_pins_lint.py
+  ai_agent 1-28
+src/repolens/bootstrap/__init__.py
+  ai_agent 1-62
+src/repolens/bootstrap/record.py
+  ai_agent 1-71
+pyproject.toml
+  ai_agent 26,30,32-33,37-42,45-47
+src/repolens/bootstrap/pins.py
+  ai_agent 1-248
+docs/roadmap/rpl_roadmap.md
+  ai_agent 60
+tests/bootstrap/test_record.py
+  ai_agent 1-56
+tests/bootstrap/fixtures/syft_good.txt
+  ai_agent 1
+tests/bootstrap/test_pins.py
+  ai_agent 1-144
+tests/bootstrap/test_name_hygiene.py
+  ai_agent 1-147
+tests/bootstrap/fixtures/requirements.nohash.bad.txt
+  ai_agent 1-3
+src/repolens/bootstrap/__main__.py
+  ai_agent 1-82
+tests/bootstrap/test_verify.py
+  ai_agent 1-125
+.github/workflows/offline-ci.yml
+  ai_agent 1-5,7-11,13-16,20,22,37,40,43,45-47,49
+tools/name_hygiene.py
+  ai_agent 1-192
+tests/bootstrap/fixtures/seeded_bad_token.txt
+  ai_agent 1-3
+tests/bootstrap/fixtures/cosign_good.txt
+  ai_agent 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "fdea7bcaa2bdce34e89433cd491a617126b07fb7",
+  "prompts": {}
+}
