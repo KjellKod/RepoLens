@@ -13,9 +13,12 @@ import csv
 import json
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from repolens.config import load_config
 from repolens.data import store
@@ -168,7 +171,8 @@ def _approve_candidates(
 ) -> dict[str, list[dict[str, str]]]:
     candidate_path = work_root / "repos.candidate.md"
     candidate_text = candidate_path.read_text(encoding="utf-8")
-    candidate_path.write_text(candidate_text.replace("- [ ]", "- [x]"), encoding="utf-8")
+    if "- [x]" not in candidate_text:
+        raise RuntimeError("fixture approval expected discover candidates to default checked")
 
     approved = {
         "repos": [

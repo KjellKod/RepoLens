@@ -102,7 +102,10 @@ class CliTests(unittest.TestCase):
         self.assertIn("Discovered 1 repositories", output)
         self.assertIn("work/discovered.json", output)
         self.assertIn("work/repos.candidate.md", output)
-        self.assertIn("Manual step: open work/repos.candidate.md", output)
+        self.assertIn(
+            "Manual step: open work/repos.candidate.md, untick any repos you want to exclude",
+            output,
+        )
         self.assertIn(
             "Next CLI stage: repolens scan --work-root work --repos <APPROVED_REPOS_JSON>",
             output,

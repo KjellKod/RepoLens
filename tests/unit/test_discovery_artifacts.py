@@ -62,6 +62,25 @@ def test_discovered_payload_count_mismatch_rejected() -> None:
         validate_artifact(payload, "discovered")
 
 
+def test_candidate_markdown_defaults_candidates_checked_and_keeps_exclusions_plain() -> None:
+    markdown = render_repos_candidate_markdown(
+        "sentinel-owner",
+        [
+            categorized("sentinel-alpha"),
+            categorized("sentinel-archived", reason="archived by GitHub"),
+        ],
+        generated_at="2026-01-01T00:00:00Z",
+    )
+
+    assert "Every checked repo below will be scanned" in markdown
+    assert "UNTICK to exclude" in markdown
+    assert "- [x] `sentinel-owner/sentinel-alpha`" in markdown
+    assert "- [ ] `sentinel-owner/sentinel-alpha`" not in markdown
+    assert "- `sentinel-owner/sentinel-archived`" in markdown
+    assert "- [x] `sentinel-owner/sentinel-archived`" not in markdown
+    assert "reason: `archived by GitHub`" in markdown
+
+
 def test_candidate_markdown_sanitizes_tokens_hrefs_images_and_descriptions() -> None:
     token = "ghp_" + "a" * 20
     markdown = render_repos_candidate_markdown(

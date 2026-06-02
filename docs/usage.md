@@ -246,7 +246,10 @@ jq -r '.repositories[] | select(.hard_excluded == false) | [.name_with_owner, .c
 
 `repos.candidate.md` is a human-edited checkpoint. A second `discover` run refuses to
 overwrite it unless you pass `--force`, so existing approval checkboxes are not silently
-discarded. Use `--force` only when you intentionally want a fresh approval file.
+discarded. Candidate repositories default to checked, so every checked repo will be
+scanned. Untick repos only when you deliberately want to exclude them, and consider
+adding a note such as `— excluded: <reason>`. Use `--force` only when you intentionally
+want a fresh approval file.
 
 ```json
 {

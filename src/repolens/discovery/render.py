@@ -49,6 +49,9 @@ def render_repos_candidate_markdown(
         "",
         "## Candidates",
         "",
+        "Every checked repo below will be scanned — UNTICK to exclude; consider noting why "
+        "(e.g. `— excluded: <reason>`).",
+        "",
     ]
 
     if candidates:
@@ -88,7 +91,7 @@ def _repo_payload(item: CategorizedRepository) -> dict[str, object]:
 
 def _repo_markdown(item: CategorizedRepository, *, checkbox: bool) -> list[str]:
     repo = item.repo
-    prefix = "- [ ]" if checkbox else "-"
+    prefix = "- [x]" if checkbox else "-"
     lines = [
         (
             f"{prefix} {render_code_span(repo.name_with_owner)} "
