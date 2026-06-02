@@ -69,8 +69,10 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install locked dev tools
-        run: python -m pip install --require-hashes -r requirements-dev.txt
+      - name: Install package and locked dev tools
+        run: |
+          python -m pip install -e .
+          python -m pip install --require-hashes -r requirements-dev.txt
 
       - name: Security canaries
         run: python scripts/ci/run_security_canaries.py
