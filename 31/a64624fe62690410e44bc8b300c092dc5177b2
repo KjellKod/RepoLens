@@ -1,0 +1,19 @@
+docs/roadmap/rpl_roadmap.md
+  s_13521cbbb9b763::t_f4009aa43d0c90 124,142-143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "31a64624fe62690410e44bc8b300c092dc5177b2",
+  "prompts": {},
+  "sessions": {
+    "s_13521cbbb9b763": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85dd-a0e3-7030-ab17-0d49fa04e64d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
