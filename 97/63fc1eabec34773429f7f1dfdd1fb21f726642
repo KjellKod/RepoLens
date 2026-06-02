@@ -1,0 +1,29 @@
+tests/policy/test_expression.py
+  s_a45d31dd03ba28::t_57e23eeff4c180 12,54,60-70
+repolens/policy/engine.py
+  s_a45d31dd03ba28::t_57e23eeff4c180 48,67,91
+.github/workflows/f5-policy.yml
+  s_a45d31dd03ba28::t_57e23eeff4c180 43,45,47-52
+repolens/policy/spdx.py
+  s_a45d31dd03ba28::t_57e23eeff4c180 66-75
+repolens/policy/tiers.py
+  s_a45d31dd03ba28::t_57e23eeff4c180 45
+tests/policy/test_engine.py
+  s_a45d31dd03ba28::t_57e23eeff4c180 32-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "9763fc1eabec34773429f7f1dfdd1fb21f726642",
+  "prompts": {},
+  "sessions": {
+    "s_a45d31dd03ba28": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a8-999b-7b80-8f6e-275a586ecdda",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
