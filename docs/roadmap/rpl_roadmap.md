@@ -80,6 +80,7 @@ Deliver P1 + P2 + P3(API layer only) + P6(main view, md/csv) against any `<OWNER
 - [ ] X2 — canaries grown for R1 (clone canaries)
 - [ ] X3 — CI grown for R1
 - [ ] X3b — branch protection on `main` via `gh` (see [Branch protection](#branch-protection-applied-once-checks-exist-from-m1))
+- [ ] Docs — flesh out `docs/usage.md` for the shipped commands (grows M1 → M3)
 
 **Acceptance**
 - [ ] End-to-end run on a fixture owner **and** dogfood on RepoLens itself.
