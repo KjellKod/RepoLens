@@ -1,0 +1,29 @@
+docs/usage.md
+  s_c1de120cdb9b59::t_c7fe6745424d79 38,46-51
+.gitignore
+  s_c1de120cdb9b59::t_3de659ea981d26 13
+scripts/ci/name_hygiene.py
+  s_c1de120cdb9b59::t_db967f384f08ef 33
+README.md
+  s_c1de120cdb9b59::t_6ebdb17bb981be 77-83
+tests/unit/test_name_hygiene.py
+  s_c1de120cdb9b59::t_e8b6317614bcb3 70,118
+docs/roadmap/rpl_execution.md
+  s_c1de120cdb9b59::t_4a9c927eb4fe8e 159-164
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5feebf38ac2588e32b4c751cb9ef84f6fd305b18",
+  "prompts": {},
+  "sessions": {
+    "s_c1de120cdb9b59": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85cd-190c-79e0-b899-b0babe50d69d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
