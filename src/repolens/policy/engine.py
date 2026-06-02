@@ -45,6 +45,7 @@ def classify_license_input(raw: str, policy: Policy | None = None) -> PolicyDeci
     reasons: list[str] = []
     caveats: list[str] = []
     chosen_branch: str | None = None
+    dual_license_detected = False
 
     if stripped and _COMPOUND_PATTERN.search(stripped):
         def mapper(leaf_id: str, exception_id: str | None) -> EvalResult:
@@ -63,6 +64,7 @@ def classify_license_input(raw: str, policy: Policy | None = None) -> PolicyDeci
             eval_result = evaluate_expression(stripped, mapper)
             tier = eval_result.tier
             chosen_branch = eval_result.chosen_branch
+            dual_license_detected = chosen_branch is not None
             reasons.extend(eval_result.reasons)
             reasons.append("compound_expression")
             caveats.extend(eval_result.caveats)
@@ -86,6 +88,6 @@ def classify_license_input(raw: str, policy: Policy | None = None) -> PolicyDeci
         reasons=tuple(reasons),
         caveats=tuple(caveats),
         chosen_branch=chosen_branch,
-        dual_license_detected=False,
+        dual_license_detected=dual_license_detected,
         policy_version=active_policy.policy_version,
     )

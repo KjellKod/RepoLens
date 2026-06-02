@@ -9,6 +9,7 @@ def test_or_uses_lower_risk_and_records_branch() -> None:
 
     assert decision.tier == PolicyTier.ALLOW
     assert decision.chosen_branch == "MIT"
+    assert decision.dual_license_detected is True
     assert decision.caveats == ()
 
 
@@ -50,13 +51,23 @@ def test_with_exception_downgrades_to_explicit_target_tier() -> None:
     assert autoconf.tier == PolicyTier.ALLOW
 
 
-def test_with_without_exception_match_keeps_base_tier() -> None:
+def test_with_without_exception_match_is_unknown() -> None:
     decision = classify_license_input(
         "GPL-3.0-only WITH Unknown-exception",
         policy=load_default_policy(),
     )
 
-    assert decision.tier == PolicyTier.BLOCK
+    assert decision.tier == PolicyTier.UNKNOWN
+
+
+def test_unknown_with_restrictive_exception_does_not_allow_base_tier() -> None:
+    decision = classify_license_input(
+        "MIT WITH Commons-Clause",
+        policy=load_default_policy(),
+    )
+
+    assert decision.tier == PolicyTier.UNKNOWN
+    assert decision.effective_tier == PolicyTier.BLOCK
 
 
 def test_plus_suffix_is_supported_for_compound_paths() -> None:

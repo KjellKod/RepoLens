@@ -42,6 +42,7 @@ def map_license_to_tier(
         fallback_key = (None, exception_id)
         if fallback_key in policy.exception_tiers:
             return policy.exception_tiers[fallback_key]
+        return PolicyTier.UNKNOWN
 
     if license_id in policy.allow_ids:
         return PolicyTier.ALLOW

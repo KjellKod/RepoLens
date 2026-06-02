@@ -29,6 +29,14 @@ def test_lgpl_has_linking_caveat() -> None:
     assert any("static versus dynamic linking" in note for note in decision.caveats)
 
 
+def test_legacy_plus_form_normalizes_before_tier_mapping() -> None:
+    decision = classify_license_input("LGPL-3.0+", policy=load_default_policy())
+
+    assert decision.tier == PolicyTier.REVIEW
+    assert "legacy_plus" in decision.reasons
+    assert any("static versus dynamic linking" in note for note in decision.caveats)
+
+
 def test_policy_version_is_populated() -> None:
     decision = classify_license_input("MIT", policy=load_default_policy())
     assert decision.policy_version

@@ -63,6 +63,17 @@ def normalize_license(raw: str, policy: Policy) -> NormalizationResult:
             reason="alias_hit",
         )
 
+    if text.endswith("+"):
+        maybe_or_later = f"{text[:-1]}-or-later"
+        canonical_or_later = canonical_ids.get(maybe_or_later.lower())
+        if canonical_or_later is not None and canonical_or_later not in policy.deprecated_ids:
+            return NormalizationResult(
+                spdx_id=canonical_or_later,
+                matched_pattern=None,
+                tier_override=None,
+                reason="legacy_plus",
+            )
+
     for entry in policy.non_spdx_patterns:
         if entry.pattern.search(text):
             return NormalizationResult(
