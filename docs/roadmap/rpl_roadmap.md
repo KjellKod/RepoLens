@@ -144,6 +144,12 @@ licenses (that's P3). The "planted AGPL → BLOCK" acceptance is **P4's**, not P
       sandbox canaries green** (token absent, egress blocked); a missing mobile toolchain
       degrades gracefully — it never hard-fails the run.
 - [ ] **P4** — components carry `origin`/`scope`/`distribution`; dedup correct.
+- [ ] **Round** — re-run the M1 dogfood pipeline against this repo (owner at runtime
+      only) and re-measure the coverage gaps tracked in **issue #20**: the SBOM must
+      include the pyproject-declared runtime deps, and license + source-URL coverage
+      must be ~complete now that ScanCode-on-unknowns exists. When met: tick M1's
+      still-open inventory acceptance box and close issue #20. If a gap remains
+      (e.g. workflow-action deps), re-scope the issue to exactly what's left.
 
 ### M3 — Human-in-loop + gated full report
 Deliver P5 + P6b (full: categories → main + appendices + docx, gate).
@@ -176,7 +182,8 @@ resolved shortlist; it never resolves items itself.
 - [ ] **P6b** — excluded categories + first-party appear in appendices (nothing deleted).
 - [ ] **P6b** — docx renders from the generic template; org/legal text injected at runtime.
 - [ ] **Round** — full [definition of done](rpl_requirements.md) met; dogfood disclosure
-      produced for RepoLens itself.
+      produced for RepoLens itself. **Not tickable while issue #20 (dogfood coverage
+      gaps) is open** — M3 is the final backstop if the M2 re-measure left anything.
 
 ## Standing gates (every milestone)
 
