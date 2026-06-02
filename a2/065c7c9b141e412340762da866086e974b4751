@@ -1,0 +1,25 @@
+README.md
+  s_bb8787cf071d6e::t_ea74615ec5111f 5-25,29-35,37,39-44,46-48,50,61-70,79-81
+docs/usage.md
+  s_bb8787cf071d6e::t_54821881237a97 1-49
+docs/roadmap/rpl_roadmap.md
+  s_bb8787cf071d6e::t_9ee778f2a76a5e 83
+CONTRIBUTING.md
+  s_bb8787cf071d6e::t_73d03cf4ebdbdb 1-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a2065c7c9b141e412340762da866086e974b4751",
+  "prompts": {},
+  "sessions": {
+    "s_bb8787cf071d6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c1f98f3-95b8-4b2c-84ce-cb4d9a149af9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
