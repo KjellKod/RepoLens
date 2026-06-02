@@ -1,0 +1,8 @@
+[project]
+name = "acme-python-service"
+version = "0.1.0"
+description = "Synthetic Python fixture for RepoLens tests"
+requires-python = ">=3.12"
+dependencies = [
+    "acme-py-runtime==1.2.3",
+]

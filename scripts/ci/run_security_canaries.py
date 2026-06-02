@@ -11,6 +11,8 @@ import sys
 from pathlib import Path
 
 PASSED_RE = re.compile(r"(?P<count>\d+)\s+passed")
+X2_GATE = Path("scripts/security_canary_gate.py")
+X2_MATRIX = Path("tests/canaries/security/canary_matrix.json")
 
 
 def placeholder_result() -> dict[str, object]:
@@ -66,9 +68,36 @@ def run_delegated_suite(root: Path, suite_path: Path) -> tuple[int, dict[str, ob
     return (1 if errors else 0), result
 
 
+def run_x2_gate(root: Path) -> tuple[int, dict[str, object]]:
+    command = [sys.executable, X2_GATE.as_posix()]
+    proc = subprocess.run(
+        command,
+        cwd=root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    errors: list[str] = []
+    if proc.returncode != 0:
+        errors.append(f"X2 security canary gate failed with exit code {proc.returncode}")
+
+    result = {
+        "canary_suite_status": "delegated_x2" if not errors else "delegated_x2_failed",
+        "delegated": True,
+        "guardrail_canaries_green": not errors,
+        "command": command,
+        "errors": errors,
+    }
+    return (1 if errors else 0), result
+
+
 def run(
     root: Path, suite_path: Path, simulate_broken_placeholder: bool
 ) -> tuple[int, dict[str, object]]:
+    if (root / X2_GATE).exists() and (root / X2_MATRIX).exists():
+        return run_x2_gate(root)
+
     absolute_suite = root / suite_path
     if absolute_suite.exists():
         return run_delegated_suite(root=root, suite_path=suite_path)

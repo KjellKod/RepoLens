@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "synthetic_owner": "acme-synthetic-owner",
+  "watermark_id": "repolens-x1-synthetic-fixtures-v1",
+  "fixtures": [
+    {
+      "id": "acme_python_service",
+      "path": "acme_python_service",
+      "ecosystem": "python",
+      "expected_components": [
+        {
+          "name": "acme-py-runtime",
+          "version": "1.2.3",
+          "declared_license": "MIT",
+          "scope": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "acme_node_widget",
+      "path": "acme_node_widget",
+      "ecosystem": "node",
+      "expected_components": [
+        {
+          "name": "acme-node-ui",
+          "version": "4.5.6",
+          "declared_license": "Apache-2.0",
+          "scope": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "acme_go_worker",
+      "path": "acme_go_worker",
+      "ecosystem": "go",
+      "expected_components": [
+        {
+          "name": "example.invalid/acme-go-lib",
+          "version": "0.1.0",
+          "declared_license": "BSD-3-Clause",
+          "scope": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "acme_rust_tool",
+      "path": "acme_rust_tool",
+      "ecosystem": "rust",
+      "expected_components": [
+        {
+          "name": "acme-rust-core",
+          "version": "0.8.0",
+          "declared_license": "MIT OR Apache-2.0",
+          "scope": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "acme_jvm_adapter",
+      "path": "acme_jvm_adapter",
+      "ecosystem": "jvm",
+      "expected_components": [
+        {
+          "name": "invalid.acme:acme-jvm-helper",
+          "version": "2.0.1",
+          "declared_license": "EPL-2.0",
+          "scope": "runtime"
+        }
+      ]
+    }
+  ]
+}
