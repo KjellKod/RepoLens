@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import io
+import json
 import subprocess
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest import mock
 
 from repolens import cli
+from repolens.data import store
 
 
 class CliTests(unittest.TestCase):
@@ -24,10 +28,10 @@ class CliTests(unittest.TestCase):
         self.assertIn("discover", result.stdout)
 
     def test_stage_command_routes_to_success(self) -> None:
-        self.assertEqual(cli.main(["scan"]), 0)
+        self.assertEqual(cli.main(["resolve"]), 0)
 
     def test_stage_command_routes_findings_open_to_one(self) -> None:
-        self.assertEqual(cli.main(["scan", "--findings-open"]), 1)
+        self.assertEqual(cli.main(["resolve", "--findings-open"]), 1)
 
     def test_discover_requires_owner(self) -> None:
         self.assertEqual(cli.main(["discover"]), 2)
@@ -107,7 +111,7 @@ class CliTests(unittest.TestCase):
             ),
             redirect_stderr(stderr),
         ):
-            code = cli.main(["scan"])
+            code = cli.main(["resolve"])
 
         self.assertEqual(code, 1)
         output = stderr.getvalue()
@@ -115,6 +119,137 @@ class CliTests(unittest.TestCase):
         self.assertIn("[REDACTED_PATH]", output)
         self.assertNotIn("ghp_abc123", output)
         self.assertNotIn("/tmp/acme/private", output)
+
+
+def _fake_clone(options):
+    destination = Path(options.destination)
+    destination.mkdir(parents=True, exist_ok=True)
+    (destination / "README.md").write_text("acme\n", encoding="utf-8")
+    return destination
+
+
+def _syft_document() -> dict:
+    return {
+        "descriptor": {"name": "syft", "version": "1.18.1"},
+        "artifacts": [
+            {
+                "name": "acme-lib",
+                "version": "1.2.3",
+                "type": "python",
+                "purl": "pkg:pypi/acme-lib@1.2.3",
+                "licenses": [{"value": "MIT"}],
+                "locations": [{"path": "requirements.txt"}],
+            }
+        ],
+    }
+
+
+class ScanCliTests(unittest.TestCase):
+    def _scaffold(self, work_root: Path, repos: list[dict]) -> Path:
+        (work_root / "tools").mkdir(parents=True, exist_ok=True)
+        (work_root / "tools" / "syft").write_text("#!/bin/sh\n", encoding="utf-8")
+        repos_path = work_root / "repos.json"
+        repos_path.write_text(json.dumps({"repos": repos}), encoding="utf-8")
+        return repos_path
+
+    def test_scan_arg_parse_and_routing_missing_args(self) -> None:
+        # `scan` now requires --work-root / --repos; argparse errors map to exit 2.
+        self.assertEqual(cli.main(["scan"]), 2)
+
+    def test_scan_happy_path_persists_sbom_and_exits_zero(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            with (
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+
+            self.assertEqual(code, 0)
+            self.assertTrue(store.is_repo_scanned(work_root, "acme-alpha"))
+
+    def test_scan_mixed_run_persists_successes_and_exits_one(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [
+                    {"repo_ref": "acme-ok", "clone_url": "https://example.invalid/acme-ok"},
+                    {"repo_ref": "acme-bad", "clone_url": "https://example.invalid/acme-bad"},
+                ],
+            )
+
+            def fake_runner(argv, *, timeout):
+                if "acme-bad" in argv[2]:
+                    return subprocess.CompletedProcess(list(argv), 1, stdout="", stderr="boom")
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            stderr = io.StringIO()
+            with (
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+
+            self.assertEqual(code, 1)
+            self.assertTrue(store.is_repo_scanned(work_root, "acme-ok"))
+            self.assertFalse(store.is_repo_scanned(work_root, "acme-bad"))
+
+    def test_scan_missing_syft_binary_exits_two(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            work_root.mkdir(parents=True)
+            repos_path = work_root / "repos.json"
+            repos_path.write_text(
+                json.dumps(
+                    {
+                        "repos": [
+                            {"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/x"}
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+            self.assertEqual(code, 2)
+
+    def test_scan_bad_repo_list_exits_two(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            self._scaffold(
+                work_root, [{"repo_ref": "acme-alpha", "clone_url": "ftp://example.invalid/x"}]
+            )
+            repos_path = work_root / "repos.json"
+            code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+            self.assertEqual(code, 2)
+
+    def test_scan_credentialed_clone_url_exits_two(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [
+                    {
+                        "repo_ref": "acme-alpha",
+                        "clone_url": "https://user:secret@example.invalid/acme-alpha",
+                    }
+                ],
+            )
+            code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+            self.assertEqual(code, 2)
 
 
 if __name__ == "__main__":

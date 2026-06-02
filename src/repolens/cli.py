@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from urllib.parse import urlparse
 
 from repolens.security.redaction import redact_tokens
 
@@ -16,7 +18,7 @@ from .config import load_config
 from .data.errors import ArtifactError
 from .discovery.gh import DEFAULT_GH_LIMIT, MAX_GH_LIMIT
 from .discovery.pipeline import run_discover
-from .exit_codes import ExitCode, InputError
+from .exit_codes import ExitCode, InputError, InternalError
 
 PATH_PATTERN = re.compile(r"(/[^\s:]+)+")
 
@@ -122,6 +124,8 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Overwrite an existing repos.candidate.md approval file.",
             )
             subparser.set_defaults(handler=_discover_command)
+        elif command_name == "scan":
+            _configure_scan_parser(subparser)
         else:
             subparser.add_argument(
                 "--findings-open",
@@ -131,6 +135,31 @@ def build_parser() -> argparse.ArgumentParser:
             subparser.set_defaults(handler=_stage_stub)
 
     return parser
+
+
+def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument(
+        "--work-root",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Pipeline work root holding per-repo artifacts and the bootstrapped toolchain.",
+    )
+    subparser.add_argument(
+        "--repos",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help='JSON file of approved repos: {"repos": [{"repo_ref", "clone_url"}, ...]}.',
+    )
+    subparser.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Per-repo wall-clock budget for the Syft scan (default: clone timeout).",
+    )
+    subparser.set_defaults(handler=_handle_scan)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -151,6 +180,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     except (ArtifactError, InputError) as exc:
         print(_sanitize(str(exc)), file=sys.stderr)
         return int(ExitCode.USAGE_OR_INPUT_ERROR)
+    except InternalError as exc:
+        print(_sanitize(f"Internal error: {exc}"), file=sys.stderr)
+        return int(ExitCode.FINDINGS_OPEN)
     except Exception as exc:
         print(_sanitize(f"Internal error: {exc}"), file=sys.stderr)
         return int(ExitCode.FINDINGS_OPEN)
@@ -179,6 +211,53 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
             f"Next: review {result.candidate_path}, tick approved repos, then continue to scan."
         ),
     )
+
+
+def _handle_scan(args: argparse.Namespace) -> CommandResult:
+    # Imported here so the rest of the CLI does not pull the scan/store stack
+    # (and jsonschema) unless `scan` actually runs.
+    from repolens.scan import runner as scan_runner
+
+    repos = _load_repo_specs(args.repos, scan_runner.RepoSpec)
+    syft_path = scan_runner.resolve_syft_path(args.work_root)
+    if args.timeout is not None and args.timeout <= 0:
+        raise InputError("--timeout must be a positive number of seconds")
+    # scan_repos persists every successful SBOM and raises InternalError (exit 1)
+    # if any repository fails; a clean run returns a report (exit 0). A None
+    # timeout lets the runner apply its default per-repo budget.
+    extra = {"timeout_seconds": args.timeout} if args.timeout is not None else {}
+    report = scan_runner.scan_repos(args.work_root, repos, syft_path=syft_path, **extra)
+    summary = f"scanned {len(report.scanned)} repositories ({len(report.skipped)} already complete)"
+    return CommandResult(CommandStatus.SUCCESS, summary)
+
+
+def _load_repo_specs(path: Path, repo_spec_cls: type) -> list:
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise InputError(f"Repo list not found: {path.name}") from exc
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise InputError(f"Repo list is not valid JSON: {path.name}") from exc
+
+    records = raw.get("repos") if isinstance(raw, dict) else raw
+    if not isinstance(records, list) or not records:
+        raise InputError("Repo list must contain a non-empty 'repos' array")
+
+    specs = []
+    for index, record in enumerate(records):
+        if not isinstance(record, dict):
+            raise InputError(f"Repo list entry {index} must be an object")
+        repo_ref = record.get("repo_ref")
+        clone_url = record.get("clone_url")
+        if not isinstance(repo_ref, str) or not repo_ref:
+            raise InputError(f"Repo list entry {index} is missing a 'repo_ref'")
+        if not isinstance(clone_url, str) or not clone_url.startswith("https://"):
+            raise InputError(f"Repo list entry {index} needs an https 'clone_url'")
+        parsed_clone_url = urlparse(clone_url)
+        if parsed_clone_url.username or parsed_clone_url.password:
+            raise InputError(f"Repo list entry {index} 'clone_url' must not embed credentials")
+        specs.append(repo_spec_cls(repo_ref=repo_ref, clone_url=clone_url))
+    return specs
 
 
 def _exit_code_for_result(result: CommandResult) -> int:

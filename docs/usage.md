@@ -124,11 +124,58 @@ Exit codes are:
 | `1` | Findings remain open, or a sanitized unexpected internal error occurred |
 | `2` | Usage, argument, or config input error |
 
+## `scan` — hardened clone + Syft → per-repo SBOM
+
+`repolens scan` consumes an already-approved repo list and produces one SBOM per repo. It
+does **not** re-run discovery and is independently rerunnable.
+
+```
+repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS]
+```
+
+- `--work-root` — the pipeline work root. Per-repo artifacts land under
+  `work/work/<repo_ref>/` (`sbom.syft.json` + `scan.status.json`). The verified Syft binary
+  is read from `<work-root>/tools/syft`.
+- `--repos` — a JSON file of the approved repos. The owner/repo are **runtime inputs**, never
+  committed:
+
+  ```json
+  { "repos": [ { "repo_ref": "<repo>", "clone_url": "https://<host>/<owner>/<repo>.git" } ] }
+  ```
+
+For each repo, `scan` clones through the hardened clone primitive (depth-1, no tags, single
+branch, no recursive submodules, hooks/symlinks/file-protocol disabled, prompts off, system
+git config off), runs the pinned Syft over the cloned path within a per-repo wall-clock
+budget, maps Syft's output onto the frozen `sbom.schema.json`, and persists it through the
+store (token-redacted, schema-validated). A completed SBOM lets a rerun **skip** that repo.
+Every successful SBOM is persisted even within a mixed run; if any repo fails the process
+exits `1` after the rest finish. Token redaction is applied to both the SBOM and
+`scan.status.json` before they are written.
+
+`scan` orchestrates external tools only — it never reimplements SBOM generation or license
+detection. Syft is acquired and integrity-verified by the bootstrap step (checksum →
+signature → provenance, all before the binary is made executable); `scan` consumes that
+already-verified binary and performs no acquisition itself.
+
+### `scan` sandbox — M1 scope and deferred non-goals
+
+M1 runs clone + Syft **in-process** with: the hardened git environment, an ephemeral
+per-repo workdir, a per-repo wall-clock timeout, guaranteed `finally` cleanup of that
+workdir, and no secrets (no GitHub token) in the child environment. No untrusted code from a
+scanned repository is executed (hooks are disabled at clone; Syft is a static inventory).
+
+The full container/VM **runner-layer** isolation controls are an explicit M1 **non-goal**:
+a read-only root filesystem, dropped Linux capabilities, a non-root UID, CPU/memory/disk
+quotas, and a network egress allowlist. Mobile/native license enrichment is also outside P2
+scan scope and remains deferred to P3b/R2. No P2 canary asserts filesystem/capability/egress
+isolation or mobile/native behavior; the roadmap tick for P2 reflects only the in-process
+hardening actually delivered above, not full sandboxing.
+
 ## The pipeline
 
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
-repolens scan                        # hardened clone + Syft → per-repo SBOM (resumable)
+repolens scan      --work-root work --repos approved-repos.json   # hardened clone + Syft → per-repo SBOM (resumable)
 repolens resolve                     # license ladder: APIs → mobile → ScanCode on unknowns
 repolens flag                        # tag + apply policy + dedup → inventory + shortlist
 repolens shortlist                   # evidence-anchored agent + human checkbox approval
