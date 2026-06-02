@@ -83,7 +83,7 @@ Deliver P1 + P2 + P3a (API layer) + P6a (main view, md/csv) against any `<OWNER>
 - [x] P1 — discover (gh → categorize → approval file)
 - [x] P2 — scan (hardened clone + Syft)
 - [x] P3a — resolve, API layer only
-- [ ] P6a — report, main view (md/csv)
+- [x] P6a — report, main view (md/csv)
 - [ ] X1 — fixtures grown to cover R1 components
 - [ ] X2 — canaries grown for R1 (clone canaries)
 - [ ] X3 — CI grown for R1

@@ -3,9 +3,12 @@ from __future__ import annotations
 import csv
 import io
 import socket
+from pathlib import Path
 
 import pytest
 
+from repolens.report import main as report_main
+from repolens.report import render_main_report
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import HttpFetchOptions, validate_url_for_fetch
 from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
@@ -39,6 +42,60 @@ def test_x2_markdown_href_sanitizes() -> None:
     assert "data:text/html" not in sanitized
     assert "tracker.example.invalid" not in sanitized
     assert "![" not in sanitized
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_p6a_report_csv_artifact_neutralizes_formula_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_report_records(
+        tmp_path,
+        monkeypatch,
+        [
+            _resolved_record(name="=acme-one", version="＝acme-two"),
+            _resolved_record(name="\t=acme-three", version="\r=acme-four"),
+        ],
+    )
+
+    csv_path = render_main_report(tmp_path, tmp_path / "out").csv_path
+    data = csv_path.read_bytes()
+    parsed = list(csv.DictReader(io.StringIO(data.decode("utf-8"))))
+
+    assert b'"\t=acme-one"' in data
+    assert b'"\t=acme-two"' in data
+    assert b'"\t\t=acme-three"' in data
+    assert b'"\t\r=acme-four"' in data
+    for row in parsed:
+        assert row["name"].startswith("\t")
+        assert row["version"].startswith("\t")
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_p6a_report_markdown_artifact_sanitizes_hrefs_and_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_report_records(
+        tmp_path,
+        monkeypatch,
+        [
+            _resolved_record(
+                name="acme-markdown|name",
+                evidence_url="javascript:alert(1)",
+            )
+        ],
+    )
+
+    data = render_main_report(tmp_path, tmp_path / "out").markdown_path.read_bytes()
+    markdown = data.decode("utf-8")
+
+    assert "`acme-markdown\\|name`" in markdown
+    assert "javascript:" not in markdown
+    assert "javascript&#58;alert\\(1\\)" in markdown
+    assert "](javascript" not in markdown
 
 
 def test_csv_formula_cells_are_neutralized() -> None:
@@ -103,3 +160,41 @@ def test_ssrf_allowlisted_public_host_passes(monkeypatch: pytest.MonkeyPatch) ->
         )[2]
         == "93.184.216.34"
     )
+
+
+def _resolved_record(
+    *,
+    name: str = "acme-lib",
+    version: str = "1.2.3",
+    evidence_url: str = "https://example.invalid/licenses/mit",
+) -> dict[str, object]:
+    return {
+        "schema_version": "1.0",
+        "name": name,
+        "version": version,
+        "repo": "acme-alpha",
+        "purl": f"pkg:pypi/{name}@{version}",
+        "declared_license_raw": "MIT",
+        "spdx_id": "MIT",
+        "evidence": {
+            "source_layer": "syft",
+            "url": evidence_url,
+        },
+        "tags": {
+            "origin": "third-party-oss",
+            "scope": "runtime",
+            "distribution": "server",
+        },
+        "modified": "unknown",
+    }
+
+
+def _stub_report_records(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    records: list[dict[str, object]],
+) -> None:
+    resolved_path = tmp_path / "work" / "acme-alpha" / "resolved.ndjson"
+    resolved_path.parent.mkdir(parents=True)
+    resolved_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(report_main.store, "iter_resolved", lambda path: iter(records))
