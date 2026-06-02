@@ -1,0 +1,61 @@
+src/repolens/__init__.py
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-5
+src/repolens/testing/fixtures.py
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-26
+pyproject.toml
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-34,36-38
+  s_5ba02ede6afed8::t_bdb7c915c9308d 35
+tests/conftest.py
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-20
+tests/integration/test_fixture_manifest.py
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-43
+src/repolens/testing/__init__.py
+  s_5ba02ede6afed8::t_780c4761d83a2c 1
+tests/security/test_name_hygiene_guard.py
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-12,14-30,32-35
+  s_5ba02ede6afed8::t_51e1269d1ed344 13,31
+tests/security/test_offline_marker_canary.py
+  s_5ba02ede6afed8::t_e49016008a944f 18-28
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-2,6-10,14-15
+  s_5ba02ede6afed8::t_e3a44f376959be 3-5,11-13,16-17,29-55
+.github/workflows/offline-ci.yml
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-36
+src/repolens/testing/watermark.py
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-73,77-130
+  s_5ba02ede6afed8::t_bdb7c915c9308d 74-76
+src/repolens/testing/name_hygiene.py
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-138
+tests/fixtures/synthetic/fixture_manifest.json
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-72
+tests/fixtures/synthetic/acme_node_widget/package.json
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-9
+tests/fixtures/synthetic/acme_python_service/pyproject.toml
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-8
+tests/integration/test_watermark_canary.py
+  s_5ba02ede6afed8::t_51e1269d1ed344 11,53-54,72-73,86-87
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-10,12-52,55-71,74-85,88-91
+tests/fixtures/synthetic/acme_go_worker/go.mod
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-5
+tests/fixtures/synthetic/acme_jvm_adapter/pom.xml
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-13
+docs/roadmap/rpl_roadmap.md
+  s_5ba02ede6afed8::t_0120ccf3c82b95 62
+tests/fixtures/synthetic/acme_rust_tool/Cargo.toml
+  s_5ba02ede6afed8::t_780c4761d83a2c 1-8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "71845411176b74ea878eb8c9e31e6138fd2d3904",
+  "prompts": {},
+  "sessions": {
+    "s_5ba02ede6afed8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85ca-9c9c-74d1-bdab-0cc022d7b95b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
