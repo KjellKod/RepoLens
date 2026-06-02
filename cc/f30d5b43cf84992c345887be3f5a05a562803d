@@ -1,0 +1,33 @@
+src/repolens/resolve/mobile.py
+  s_13521cbbb9b763::t_505baa8bbd185f 120
+tests/unit/test_resolve_scancode.py
+  s_13521cbbb9b763::t_e0d96babc4c3cf 208-239
+tests/unit/test_resolve_mobile.py
+  s_13521cbbb9b763::t_4d81683a5e41c8 80-108
+src/repolens/resolve/scancode.py
+  s_13521cbbb9b763::t_3b2022a4dc2099 57-58,83-84
+tests/bootstrap/test_scancode.py
+  s_13521cbbb9b763::t_fabed802e1af3a 13,37-39
+src/repolens/bootstrap/orchestrate.py
+  s_13521cbbb9b763::t_4a7adc6115721b 110-111
+tests/bootstrap/test_orchestrate.py
+  s_13521cbbb9b763::t_3093fd4dea7d4b 141-161
+src/repolens/bootstrap/scancode.py
+  s_13521cbbb9b763::t_96ae7f791400ac 103-104,106-107,113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ccf30d5b43cf84992c345887be3f5a05a562803d",
+  "prompts": {},
+  "sessions": {
+    "s_13521cbbb9b763": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85dd-a0e3-7030-ab17-0d49fa04e64d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
