@@ -11,7 +11,6 @@ from repolens import cli
 from repolens.config import load_config
 from repolens.exit_codes import InputError
 
-
 ROOT = Path(__file__).resolve().parents[2]
 GUARD = ROOT / ".github" / "scripts" / "name_hygiene_guard.py"
 

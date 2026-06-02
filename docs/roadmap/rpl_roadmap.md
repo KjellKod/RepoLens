@@ -61,13 +61,14 @@ Deliver F1–F5 and the X1/X2/X3 skeletons.
 - [ ] F5 — Policy engine (SPDX normalize, compound, tiers)
 - [ ] X1 — test harness + fixtures + watermark (skeleton)
 - [ ] X2 — security canary suite (skeleton)
-- [ ] X3 — CI offline PR pipeline (skeleton)
+- [x] X3 — CI offline PR pipeline (skeleton)
 
 **Acceptance**
 - [ ] `repolens --help` runs; config loads from untracked local files.
 - [ ] F2 primitives implemented; their **security canaries pass offline**.
 - [ ] Bootstrap installs Syft/ScanCode pinned, **verifying checksum + signature**.
-- [ ] Name-hygiene guard **fails a deliberately seeded bad commit**.
+- [ ] Name-hygiene guard **fails a deliberately seeded bad commit**; public CI uses
+      invented sentinels, while real names are private gitignored local config.
 - [ ] F3 schemas frozen and documented.
 
 ### M1 — Thin end-to-end inventory
@@ -128,6 +129,8 @@ Deliver P5 + P6(full: categories → main + appendices + docx, gate).
 
 - The full **security canary suite** ([security.md](rpl_security.md)) is green — no deviation.
 - The **name-hygiene guard** is green; no owner/repo names in code, tests, or docs.
+  Public CI uses invented sentinel tokens only. Real owner/repo/company names are
+  supplied privately through gitignored local config discovered from the main checkout.
 - Tool versions pinned + checksum/signature-verified; CI runs offline and deterministic.
 
 ## Branch protection (applied once checks exist, from M1)

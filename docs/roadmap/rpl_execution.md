@@ -125,7 +125,8 @@ Build <ID> <component> for the RepoLens repo.
   canary in docs/roadmap/rpl_security.md is green.
 - Hard rules: orchestrate, don't reimplement scanners; security guardrails are
   mandatory; no owner/repo/company names in code, tests, or docs (CI hygiene guard);
-  owner is a runtime input only.
+  owner is a runtime input only. Public CI proves the hygiene guard with invented
+  sentinel names only; real denylist values live in gitignored local config.
 - Output: code + tests + the component's canaries wired into CI.
 - On completion (in order):
   A. Rebase onto the latest origin/main and resolve conflicts — auto-resolve where it's
@@ -153,3 +154,11 @@ namespaced per quest (`<ID>__<slug>/`). Consequences:
   even if the original agent is unavailable.
 - **Safe parallelism.** Many worktrees symlink to the same store; each writes under its
   own `<ID>__<slug>/` subdir, so concurrent quests don't collide.
+
+Runtime-only local config follows the same placement rule. Put private name-hygiene
+values in the main checkout's gitignored `.name-hygiene.local.json`, not in a specific
+worktree. The leading dot is intentional so the private denylist is not visible in a
+normal directory listing. The guard discovers that file from the scan root upward and,
+for linked worktrees, checks the checkout that owns the shared `.git` directory. This
+keeps public CI repo-agnostic while letting local checks enforce real
+owner/repo/company names.

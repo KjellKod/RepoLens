@@ -32,6 +32,8 @@
 - A read-scoped, fine-grained GitHub token (held by the orchestrator only).
 - Config: category taxonomy, license policy, report selection, report header
   (all in untracked local config).
+- Name-hygiene denylist: private names in gitignored local config, never in public CI
+  variables or committed docs.
 
 ## Outputs
 
@@ -44,7 +46,8 @@
 ## Definition of done (global acceptance)
 
 - [ ] Runs end-to-end against any `<OWNER>` supplied at runtime; zero owner/repo
-      strings in the codebase, tests, fixtures, or docs (CI hygiene guard green).
+      strings in the codebase, tests, fixtures, or docs (CI hygiene guard green with
+      public invented sentinels and private local denylist values).
 - [ ] Produces a deduplicated, multi-language disclosure with provenance, versions,
       source URLs, and a `modified?` indicator.
 - [ ] Every disclosed license is either machine-resolved with a recorded source or

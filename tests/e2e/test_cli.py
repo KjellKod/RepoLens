@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import io
 import subprocess
-import sys
 import unittest
 from contextlib import redirect_stderr
 from unittest import mock
 
 from repolens import cli
-from repolens.cli import CommandResult, CommandStatus
 
 
 class CliTests(unittest.TestCase):
@@ -39,12 +37,14 @@ class CliTests(unittest.TestCase):
 
     def test_internal_error_returns_one_and_sanitizes_output(self) -> None:
         stderr = io.StringIO()
-        with mock.patch(
-            "repolens.cli.load_config",
-            side_effect=RuntimeError("token ghp_abc123 path /tmp/acme/private"),
+        with (
+            mock.patch(
+                "repolens.cli.load_config",
+                side_effect=RuntimeError("token ghp_abc123 path /tmp/acme/private"),
+            ),
+            redirect_stderr(stderr),
         ):
-            with redirect_stderr(stderr):
-                code = cli.main(["discover"])
+            code = cli.main(["discover"])
 
         self.assertEqual(code, 1)
         output = stderr.getvalue()

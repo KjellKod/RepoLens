@@ -21,4 +21,3 @@ class InputError(RepoLensError):
 
 class InternalError(RepoLensError):
     """Raised for controlled internal failures that should map to exit 1."""
-
