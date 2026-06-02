@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "ci" / "name_hygiene.py"
+LEGACY_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check_name_hygiene.py"
 
 
 def run_name_hygiene(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
@@ -14,6 +16,24 @@ def run_name_hygiene(root: Path, *args: str) -> subprocess.CompletedProcess[str]
         text=True,
         capture_output=True,
         check=False,
+    )
+
+
+def run_legacy_guard(
+    *paths: Path, forbidden_names: str | None = None
+) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    if forbidden_names is None:
+        env.pop("REPOLENS_FORBIDDEN_NAMES", None)
+    else:
+        env["REPOLENS_FORBIDDEN_NAMES"] = forbidden_names
+
+    return subprocess.run(
+        [sys.executable, LEGACY_SCRIPT.as_posix(), *(path.as_posix() for path in paths)],
+        text=True,
+        capture_output=True,
+        check=False,
+        env=env,
     )
 
 
@@ -64,6 +84,25 @@ def test_name_hygiene_accepts_ignored_local_config_path(tmp_path: Path) -> None:
     assert payload["findings"] == [{"path": "visible.txt", "token_id": "sha256:ee978e4bd10bc74d"}]
     assert "invented-local-token" not in proc.stdout
     assert "invented-local-token" not in proc.stderr
+
+
+def test_name_hygiene_accepts_runtime_forbidden_names_env(tmp_path: Path) -> None:
+    token = "invented-env-token"
+    (tmp_path / "visible.txt").write_text(f"{token}\n", encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, SCRIPT.as_posix(), "--root", tmp_path.as_posix()],
+        text=True,
+        capture_output=True,
+        check=False,
+        env={**os.environ, "REPOLENS_FORBIDDEN_NAMES": token},
+    )
+
+    assert proc.returncode == 1
+    payload = result_payload(proc)
+    assert payload["findings"] == [{"path": "visible.txt", "token_id": "sha256:27f94394dc8f89bb"}]
+    assert token not in proc.stdout
+    assert token not in proc.stderr
 
 
 def test_name_hygiene_discovers_default_local_config_upward(tmp_path: Path) -> None:
@@ -199,3 +238,45 @@ def test_name_hygiene_skips_ignored_artifact_paths(tmp_path: Path) -> None:
     payload = result_payload(proc)
     assert payload["passed"] is True
     assert payload["findings"] == []
+
+
+def test_legacy_name_hygiene_env_denylist_fails_without_echoing_terms(tmp_path: Path) -> None:
+    doc = tmp_path / "notes.md"
+    doc.write_text("This mentions internal-demo-name in prose.\n", encoding="utf-8")
+
+    result = run_legacy_guard(doc, forbidden_names="other-name\ninternal-demo-name")
+
+    assert result.returncode == 1
+    assert "forbidden-literal" in result.stderr
+    assert "denylist-entry" in result.stderr
+    assert "internal-demo-name" not in result.stderr
+    assert "other-name" not in result.stderr
+
+
+def test_legacy_name_hygiene_structural_checks_redact_tokens(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixtures" / "sample.json"
+    fixture.parent.mkdir()
+    token = "ghp_" + "0123456789abcdefghijklmnop"
+    fixture.write_text(
+        f'{{\n  "token": "{token}",\n  "homepage": "https://sample.invalid-name.biz/project"\n}}\n',
+        encoding="utf-8",
+    )
+
+    result = run_legacy_guard(fixture)
+
+    assert result.returncode == 1
+    assert "github-token" in result.stderr
+    assert token[:12] not in result.stderr
+    assert "redacted-token" in result.stderr
+    assert "non-neutral-url" in result.stderr
+
+
+def test_legacy_name_hygiene_quoted_keyed_domain_fails(tmp_path: Path) -> None:
+    fixture = tmp_path / "fixtures" / "sample.json"
+    fixture.parent.mkdir()
+    fixture.write_text('{"homepage": "sample.invalid-name.biz"}\n', encoding="utf-8")
+
+    result = run_legacy_guard(fixture)
+
+    assert result.returncode == 1
+    assert "non-neutral-domain" in result.stderr

@@ -43,7 +43,7 @@ jobs:
         run: python -m pytest tests/unit
 
       - name: Integration tests
-        run: python -m pytest tests/integration tests/e2e tests/canaries
+        run: python -m pytest tests/integration tests/e2e tests/canaries tests/canary
 
       - name: Security canaries
         run: python scripts/ci/run_security_canaries.py
@@ -52,6 +52,9 @@ jobs:
         run: |
           token="$(printf '%s%s%s' invented- forbidden- token)"
           python scripts/ci/name_hygiene.py --forbidden-name "$token" --require-denylist
+
+      - name: Structural name hygiene
+        run: python scripts/check_name_hygiene.py
 
       - name: Tool pins
         run: python scripts/ci/verify_tool_pins.py

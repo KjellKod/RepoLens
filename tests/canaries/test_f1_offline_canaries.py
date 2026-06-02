@@ -57,6 +57,8 @@ class F1OfflineCanaries(unittest.TestCase):
                 text=True,
             )
         self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn(term, result.stderr)
+        self.assertIn("denylist-entry", result.stderr)
 
     def test_name_hygiene_clean_tree_passes_with_denylist(self) -> None:
         term = "acme-" + "blocked-token"

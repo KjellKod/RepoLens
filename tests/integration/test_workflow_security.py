@@ -41,6 +41,7 @@ def test_offline_ci_workflow_contains_required_x3_steps() -> None:
         "python scripts/ci/run_security_canaries.py",
         "printf '%s%s%s' invented- forbidden- token",
         'python scripts/ci/name_hygiene.py --forbidden-name "$token" --require-denylist',
+        "python scripts/check_name_hygiene.py",
         "python scripts/ci/verify_tool_pins.py",
     ]:
         assert expected in workflow

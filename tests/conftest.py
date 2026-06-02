@@ -4,6 +4,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -68,3 +69,102 @@ def local_repo_factory(tmp_path: Path):
         return create_local_repo(tmp_path, gitmodules=gitmodules)
 
     return factory
+
+
+@pytest.fixture
+def repo_ref() -> str:
+    return "acme-alpha"
+
+
+@pytest.fixture
+def sbom(repo_ref: str) -> dict[str, Any]:
+    return {
+        "schema_version": "1.0",
+        "repo": repo_ref,
+        "generated_at": "2026-01-01T00:00:00Z",
+        "tool": {"name": "syft", "version": "1.0.0"},
+        "source": "https://example.invalid/acme-alpha",
+        "artifacts": [
+            {
+                "name": "acme-lib",
+                "version": "1.2.3",
+                "type": "python",
+                "purl": "pkg:pypi/acme-lib@1.2.3",
+                "licenses": ["MIT"],
+                "locations": ["requirements.txt"],
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def resolved_record(repo_ref: str) -> dict[str, Any]:
+    return {
+        "schema_version": "1.0",
+        "name": "acme-lib",
+        "version": "1.2.3",
+        "repo": repo_ref,
+        "purl": "pkg:pypi/acme-lib@1.2.3",
+        "declared_license_raw": "MIT",
+        "spdx_id": "MIT",
+        "evidence": {
+            "source_layer": "syft",
+            "url": "https://example.invalid/licenses/mit",
+            "anchor": "MIT",
+            "fetched_at": "2026-01-01T00:00:00Z",
+        },
+        "tags": {
+            "origin": "third-party-oss",
+            "scope": "runtime",
+            "distribution": "server",
+        },
+        "modified": "unknown",
+    }
+
+
+@pytest.fixture
+def inventory(repo_ref: str) -> dict[str, Any]:
+    return {
+        "schema_version": "1.0",
+        "generated_at": "2026-01-01T00:00:00Z",
+        "components": [
+            {
+                "name": "acme-lib",
+                "license": "MIT",
+                "origin": "third-party-oss",
+                "scope": "runtime",
+                "distribution": "server",
+                "versions": ["1.2.3"],
+                "source_url": "https://example.invalid/acme-lib",
+                "modified": "unknown",
+                "found_in": [repo_ref],
+                "policy_tier": "ALLOW",
+                "evidence_refs": ["acme-alpha/resolved.ndjson:1"],
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def shortlist() -> dict[str, Any]:
+    return {
+        "schema_version": "1.0",
+        "generated_at": "2026-01-01T00:00:00Z",
+        "open_count": 1,
+        "items": [
+            {
+                "component_ref": "acme-lib|MIT",
+                "reason": "REVIEW",
+                "evidence": {
+                    "source_layer": "syft",
+                    "url": "https://example.invalid/licenses/mit",
+                    "anchor": "MIT",
+                },
+                "candidate_spdx": "MIT",
+                "status": "open",
+                "decided_by": None,
+                "decided_at": None,
+                "note": None,
+            }
+        ],
+    }
