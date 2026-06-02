@@ -1,0 +1,39 @@
+src/repolens/bootstrap/verify.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 54
+tests/bootstrap/test_orchestrate.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 54-59
+tests/bootstrap/test_pins_lint.py
+  s_5eb8163e1d2a26::t_fc68e7aa8311fd 8
+tests/bootstrap/test_name_hygiene.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 33-107
+src/repolens/bootstrap/syft.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 48
+src/repolens/bootstrap/pins.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 138
+tests/bootstrap/test_scancode.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 52
+tests/bootstrap/conftest.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 55-101
+src/repolens/bootstrap/scancode.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 64
+src/repolens/bootstrap/record.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 41
+tools/name_hygiene.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 36-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "50b81d683dc950501d7875161a57aac0cd51aec9",
+  "prompts": {},
+  "sessions": {
+    "s_5eb8163e1d2a26": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019e85dc-9f2b-7d40-82f5-f6725ea600ba",
+        "model": "unknown"
+      },
+      "human_author": null
+    }
+  }
+}
