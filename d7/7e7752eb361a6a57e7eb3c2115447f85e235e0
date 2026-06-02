@@ -1,0 +1,26 @@
+tests/integration/test_workflow_security.py
+  s_589f074de75320::t_ab001e83e450fa 44
+src/repolens/data/store.py
+  s_589f074de75320::t_a7f5eb18d3740a 88
+  s_589f074de75320::t_1fa8da5e6bbae8 9
+.github/workflows/ci.yml
+  s_589f074de75320::t_3bacea9a62c7f8 56-58
+requirements-dev.txt
+  s_589f074de75320::t_5167cce284f883 25-26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d77e7752eb361a6a57e7eb3c2115447f85e235e0",
+  "prompts": {},
+  "sessions": {
+    "s_589f074de75320": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a4-1493-77d2-9d0b-74175f188b83",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
