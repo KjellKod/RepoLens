@@ -1,0 +1,45 @@
+name: Offline PR Checks
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, synchronize]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: offline-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  offline-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install package with test dependencies
+        run: python3 -m pip install -e '.[test]'
+
+      - name: Compile Python files
+        run: python3 -m compileall src/repolens tests
+
+      - name: Run unit tests and security canaries
+        run: python3 -m pytest tests -q
+
+      - name: Name hygiene self-test
+        run: python3 -m repolens.security.name_hygiene --self-test
+
+      - name: Runtime-configured tracked-tree name hygiene scan
+        env:
+          NAME_HYGIENE_FORBIDDEN_TERMS: ${{ vars.NAME_HYGIENE_FORBIDDEN_TERMS }}
+        run: |
+          if [ -z "$(printf '%s' "$NAME_HYGIENE_FORBIDDEN_TERMS" | tr -d '[:space:],')" ]; then
+            echo "NAME_HYGIENE_FORBIDDEN_TERMS must be configured for tracked-tree name hygiene" >&2
+            exit 1
+          fi
+          python3 -m repolens.security.name_hygiene
