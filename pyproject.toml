@@ -1,7 +1,21 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "x3-ci-harness"
-version = "0.0.0"
-requires-python = ">=3.13"
+name = "repolens"
+version = "0.1.0"
+description = "CLI foundation for a license disclosure orchestrator."
+requires-python = ">=3.11"
+dependencies = [
+  "PyYAML==6.0.2",
+]
+
+[project.scripts]
+repolens = "repolens.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -9,7 +23,7 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100
-target-version = "py313"
+target-version = "py311"
 extend-exclude = [".github/scripts/codex_review.py"]
 
 [tool.ruff.lint]
