@@ -1,0 +1,35 @@
+name: Offline CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Install pinned package dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+
+      - name: Run unit and end-to-end tests
+        run: python -m unittest discover -s tests -p 'test_*.py'
+
+      - name: Run name-hygiene guard
+        run: |
+          printf '%s\n' 'acme-ci-denylist-unused' > "$RUNNER_TEMP/denylist.txt"
+          REPOLENS_NAME_DENYLIST_FILE="$RUNNER_TEMP/denylist.txt" \
+            python .github/scripts/name_hygiene_guard.py src tests docs .github/scripts
