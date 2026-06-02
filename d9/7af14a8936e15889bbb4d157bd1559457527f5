@@ -1,0 +1,96 @@
+docs/roadmap/rpl_roadmap.md
+  s_589f074de75320::t_4a003b32a7ecff 59
+tests/unit/test_resume.py
+  s_589f074de75320::t_dc56d86bfdf8c9 1-7,11-29
+  s_589f074de75320::t_3a4af203b2bfc0 8-10
+tests/integration/test_pipeline_artifacts.py
+  s_589f074de75320::t_3a4af203b2bfc0 5-12
+  s_589f074de75320::t_dc56d86bfdf8c9 1-4,13-28
+src/repolens/__init__.py
+  s_589f074de75320::t_ec186a735e9d17 1-3
+src/repolens/data/limits.py
+  s_589f074de75320::t_ec186a735e9d17 1-69
+tests/unit/test_offline_validation.py
+  s_589f074de75320::t_93eb57f8c3c8cf 4,11-14
+  s_589f074de75320::t_dc56d86bfdf8c9 1-3,5,8-10,15-19
+  s_589f074de75320::t_02373b7311c14b 6-7
+tests/unit/test_redact.py
+  s_589f074de75320::t_dc56d86bfdf8c9 1-6,9,12-17
+  s_589f074de75320::t_55d3901e32aff9 7-8,10-11
+requirements-ci.txt
+  s_589f074de75320::t_3065ae96b0e5af 1-28
+tests/canary/test_f3_canaries.py
+  s_589f074de75320::t_55d3901e32aff9 43
+  s_589f074de75320::t_dc56d86bfdf8c9 1-39,44-58
+  s_589f074de75320::t_3a4af203b2bfc0 40-42
+src/repolens/data/schemas/sbom.schema.json
+  s_589f074de75320::t_cb5ad627571b55 1-39
+tests/unit/test_store_roundtrip.py
+  s_589f074de75320::t_dc56d86bfdf8c9 1-33
+src/repolens/data/models.py
+  s_589f074de75320::t_ec186a735e9d17 1-54
+src/repolens/data/schemas/resolved.schema.json
+  s_589f074de75320::t_cb5ad627571b55 1-50
+docs/data-model.md
+  s_589f074de75320::t_33c1aba11c82e6 1-75
+tests/unit/test_schema_validation.py
+  s_589f074de75320::t_dc56d86bfdf8c9 1-19,23-49
+  s_589f074de75320::t_3a4af203b2bfc0 20-22
+src/repolens/data/validation.py
+  s_589f074de75320::t_93eb57f8c3c8cf 27-30
+  s_589f074de75320::t_ec186a735e9d17 1-26,31-51
+src/repolens/data/__init__.py
+  s_589f074de75320::t_ec186a735e9d17 1-37
+.github/workflows/ci.yml
+  s_589f074de75320::t_070ae632895252 27,30,37-38
+  s_589f074de75320::t_3065ae96b0e5af 24
+  s_589f074de75320::t_4328b30245083a 1-23,25-26,28-29,31-36
+src/repolens/data/store.py
+  s_589f074de75320::t_3a4af203b2bfc0 57-61,152-154,213-214
+  s_589f074de75320::t_ab27e6d2bfe54c 207,210-211
+  s_589f074de75320::t_ec186a735e9d17 1-56,62-151,155-206,208-209,212,215-231
+src/repolens/data/schemas/inventory.schema.json
+  s_589f074de75320::t_cb5ad627571b55 1-51
+src/repolens/data/schemas/shortlist.schema.json
+  s_589f074de75320::t_cb5ad627571b55 1-44
+src/repolens/data/errors.py
+  s_589f074de75320::t_ec186a735e9d17 1-17
+src/repolens/data/redact.py
+  s_589f074de75320::t_ec186a735e9d17 1-25
+tests/unit/test_resolved_ndjson.py
+  s_589f074de75320::t_cf2f1f8d91c32b 43-45
+  s_589f074de75320::t_3a4af203b2bfc0 22-25,31-33
+  s_589f074de75320::t_dc56d86bfdf8c9 1-7,9-21,26-30,34-39,55
+  s_589f074de75320::t_ab27e6d2bfe54c 8,40-42,46-54
+tests/unit/test_name_hygiene.py
+  s_589f074de75320::t_ff1b4c2cf71b7b 55,58
+  s_589f074de75320::t_4328b30245083a 1-20,22-54,56,59-68
+  s_589f074de75320::t_d7b6cc0f73677c 21
+scripts/check_name_hygiene.py
+  s_589f074de75320::t_55d3901e32aff9 37
+  s_589f074de75320::t_d7b6cc0f73677c 64,115-117,125-127,132-134
+  s_589f074de75320::t_4328b30245083a 1-36,38-63,65-114,118-124,128-131,135-181
+pyproject.toml
+  s_589f074de75320::t_ec186a735e9d17 1-46
+tests/unit/test_limits.py
+  s_589f074de75320::t_93eb57f8c3c8cf 4,12-14,27-29,42
+  s_589f074de75320::t_dc56d86bfdf8c9 1-3,5-11,15-26,30-41,43-46
+tests/conftest.py
+  s_589f074de75320::t_dc56d86bfdf8c9 1-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "d97af14a8936e15889bbb4d157bd1559457527f5",
+  "prompts": {},
+  "sessions": {
+    "s_589f074de75320": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a4-1493-77d2-9d0b-74175f188b83",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
