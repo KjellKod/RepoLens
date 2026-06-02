@@ -51,6 +51,28 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaises(InputError):
                 load_config(root)
 
+    def test_explicit_config_directory_points_to_work_root_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_dir = root / "output"
+            output_dir.mkdir()
+
+            with self.assertRaisesRegex(
+                InputError,
+                "Config path is a directory.*--work-root <DIR>",
+            ):
+                load_config(root, output_dir)
+
+    def test_missing_explicit_config_points_to_work_root_option(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+
+            with self.assertRaisesRegex(
+                InputError,
+                "Config file not found.*--config expects.*--work-root <DIR>",
+            ):
+                load_config(root, root / "missing.local.toml")
+
     def test_source_uses_safe_yaml_loader(self) -> None:
         source = Path("src/repolens/config.py").read_text(encoding="utf-8")
         self.assertIn("safe_load", source)

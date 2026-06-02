@@ -24,6 +24,7 @@ class CliTests(unittest.TestCase):
         help_text = stdout.getvalue()
         self.assertIn("Put global options before the stage name", help_text)
         self.assertIn("repolens --config ./repolens.local.toml discover --owner <OWNER>", help_text)
+        self.assertIn("Config files hold local taxonomy, policy, and report settings", help_text)
         self.assertIn("Use stage options such as --work-root for output directories", help_text)
 
     def test_each_stage_help_is_actionable(self) -> None:

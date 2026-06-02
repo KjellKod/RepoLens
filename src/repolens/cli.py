@@ -145,6 +145,8 @@ _EPILOG = (
     "global options:\n"
     "  Put global options before the stage name, e.g.\n"
     "    repolens --config ./repolens.local.toml discover --owner <OWNER>\n"
+    "  Config files hold local taxonomy, policy, and report settings; owner is\n"
+    "  still supplied at runtime with --owner.\n"
     "  Use stage options such as --work-root for output directories; --config is\n"
     "  only for local config files.\n"
     "\n"
@@ -175,7 +177,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         metavar="PATH",
-        help="Global option before <stage>: path to an untracked local config file.",
+        help=(
+            "Global option before <stage>: path to an untracked local config file "
+            "(taxonomy, policy, report settings)."
+        ),
     )
     subparsers = parser.add_subparsers(
         dest="command",

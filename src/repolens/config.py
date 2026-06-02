@@ -57,8 +57,16 @@ def _discover_local_files(base_dir: Path) -> list[Path]:
 
 
 def _read_config_file(path: Path) -> dict[str, Any]:
+    if path.is_dir():
+        raise InputError(
+            f"Config path is a directory, not a config file: {_display_path(path)}. "
+            "Use --work-root <DIR> for output directories."
+        )
     if not path.is_file():
-        raise InputError(f"Config file not found: {_display_path(path)}")
+        raise InputError(
+            f"Config file not found: {_display_path(path)}. "
+            "--config expects a local config file; use --work-root <DIR> for output directories."
+        )
 
     try:
         suffixes = path.suffixes
