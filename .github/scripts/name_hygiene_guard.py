@@ -6,10 +6,12 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 ENV_DENYLIST = "REPOLENS_NAME_DENYLIST"
 ENV_DENYLIST_FILE = "REPOLENS_NAME_DENYLIST_FILE"
+ENV_FORBIDDEN_NAMES = "REPOLENS_FORBIDDEN_NAMES"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -29,7 +31,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
             for term in terms:
                 if term in text:
-                    violations.append(f"{file_path}:{term}")
+                    violations.append(f"{file_path}:denylist-entry")
 
     if violations:
         for violation in violations:
@@ -39,14 +41,21 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _load_terms() -> list[str]:
-    raw = os.environ.get(ENV_DENYLIST, "")
+    raw = "\n".join(
+        value
+        for value in (
+            os.environ.get(ENV_DENYLIST, ""),
+            os.environ.get(ENV_FORBIDDEN_NAMES, ""),
+        )
+        if value
+    )
     file_path = os.environ.get(ENV_DENYLIST_FILE)
     if file_path:
         raw = f"{raw}\n{Path(file_path).read_text(encoding='utf-8')}"
     return [term.strip() for term in raw.replace(",", "\n").splitlines() if term.strip()]
 
 
-def _iter_files(root: Path):
+def _iter_files(root: Path) -> Iterator[Path]:
     if root.is_file():
         yield root
         return

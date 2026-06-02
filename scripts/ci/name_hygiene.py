@@ -231,7 +231,7 @@ def main(argv: list[str] | None = None) -> int:
         local_config = args.local_config or discover_local_config(root)
         tokens = [
             *args.forbidden_name,
-            *parse_env_tokens(os.environ.get("RPL_FORBIDDEN_NAMES")),
+            *parse_env_tokens(os.environ.get("REPOLENS_FORBIDDEN_NAMES")),
             *load_local_config(local_config),
         ]
     except (OSError, ValueError, json.JSONDecodeError) as exc:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -64,6 +65,25 @@ def test_name_hygiene_accepts_ignored_local_config_path(tmp_path: Path) -> None:
     assert payload["findings"] == [{"path": "visible.txt", "token_id": "sha256:ee978e4bd10bc74d"}]
     assert "invented-local-token" not in proc.stdout
     assert "invented-local-token" not in proc.stderr
+
+
+def test_name_hygiene_accepts_runtime_forbidden_names_env(tmp_path: Path) -> None:
+    token = "invented-env-token"
+    (tmp_path / "visible.txt").write_text(f"{token}\n", encoding="utf-8")
+
+    proc = subprocess.run(
+        [sys.executable, SCRIPT.as_posix(), "--root", tmp_path.as_posix()],
+        text=True,
+        capture_output=True,
+        check=False,
+        env={**os.environ, "REPOLENS_FORBIDDEN_NAMES": token},
+    )
+
+    assert proc.returncode == 1
+    payload = result_payload(proc)
+    assert payload["findings"] == [{"path": "visible.txt", "token_id": "sha256:27f94394dc8f89bb"}]
+    assert token not in proc.stdout
+    assert token not in proc.stderr
 
 
 def test_name_hygiene_discovers_default_local_config_upward(tmp_path: Path) -> None:
