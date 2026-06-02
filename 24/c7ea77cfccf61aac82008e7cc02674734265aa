@@ -1,0 +1,29 @@
+.github/workflows/offline-pr.yml
+  s_08a0235f723ab3::t_e904d1270bfb6b 1-18,20,22-28,30-38
+  s_08a0235f723ab3::t_03d3eaa06d1bf6 39
+  s_13521cbbb9b763::t_b0d1a1ae0f0513 40-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "24c7ea77cfccf61aac82008e7cc02674734265aa",
+  "prompts": {},
+  "sessions": {
+    "s_08a0235f723ab3": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85cb-1afe-7bf1-8372-396bf9fb544e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_13521cbbb9b763": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85dd-a0e3-7030-ab17-0d49fa04e64d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
