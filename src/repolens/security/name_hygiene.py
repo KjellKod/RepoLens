@@ -1,13 +1,18 @@
-"""Offline and protected name-hygiene checks."""
+"""Offline, protected, and runtime-configured name-hygiene checks."""
 
 from __future__ import annotations
 
+import argparse
 import fnmatch
 import os
 import re
+import subprocess
+import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from repolens.security.errors import NameHygieneError
 from repolens.security.secrets import TOKEN_PATTERNS
 
 _SYNTHETIC_SENTINEL_PARTS = ("x2", "synthetic", "forbidden", "name")
@@ -37,6 +42,9 @@ _FORBIDDEN_ALLOWLIST_PREFIXES = (
     "tests/canaries/security/",
 )
 
+ENV_FORBIDDEN_TERMS = "NAME_HYGIENE_FORBIDDEN_TERMS"
+_BINARY_SAMPLE_BYTES = 4096
+
 
 @dataclass(frozen=True)
 class AllowlistEntry:
@@ -49,6 +57,16 @@ class AllowlistEntry:
 class NameHygieneViolation:
     path: str
     pattern: str
+
+
+@dataclass(frozen=True, slots=True)
+class NameHygieneFinding:
+    path: Path
+    line: int
+    term: str
+
+    def render(self) -> str:
+        return f"{self.path}:{self.line}: forbidden runtime term matched"
 
 
 def committed_patterns() -> tuple[re.Pattern[str], ...]:
@@ -111,6 +129,50 @@ def validate_allowlist(entries: tuple[AllowlistEntry, ...]) -> None:
             raise ValueError("allowlist cannot cover protected source or test paths")
 
 
+def scan_tracked_files(
+    root: Path,
+    forbidden_terms: list[str],
+) -> list[NameHygieneFinding]:
+    root = Path(root)
+    terms = _normalize_terms(forbidden_terms)
+    if not terms:
+        return []
+    findings: list[NameHygieneFinding] = []
+    for relative in _tracked_files(root):
+        path = root / relative
+        if _is_binary(path):
+            continue
+        findings.extend(_scan_file(path, relative, terms))
+    return findings
+
+
+def assert_clean(root: Path, forbidden_terms: list[str]) -> None:
+    findings = scan_tracked_files(root, forbidden_terms)
+    if findings:
+        rendered = "\n".join(finding.render() for finding in findings)
+        raise NameHygieneError(rendered)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument("--forbidden", action="append", default=[])
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args(argv)
+
+    if args.self_test:
+        return _self_test()
+
+    terms = _normalize_terms([*args.forbidden, *_terms_from_env()])
+    if not terms:
+        print(f"no forbidden terms supplied; configure {ENV_FORBIDDEN_TERMS}", file=sys.stderr)
+        return 2
+    findings = scan_tracked_files(args.root, terms)
+    for finding in findings:
+        print(finding.render(), file=sys.stderr)
+    return 1 if findings else 0
+
+
 def _load_protected_names() -> list[str]:
     names: list[str] = []
     denylist_path = os.environ.get(_ENV_DENYLIST_FILE)
@@ -159,3 +221,94 @@ def _iter_text_paths(root: Path, scan_roots: tuple[str, ...]) -> list[Path]:
                 continue
             paths.append(path)
     return paths
+
+
+def _self_test() -> int:
+    sentinel = "acme-runtime-forbidden-sentinel"
+    with tempfile.TemporaryDirectory(prefix="name-hygiene-") as raw:
+        root = Path(raw)
+        _git(root, "init")
+        _git(root, "config", "user.email", "acme@example.invalid")
+        _git(root, "config", "user.name", "Acme Tester")
+        target = root / "tracked.txt"
+        target.write_text(f"contains {sentinel}\n", encoding="utf-8")
+        _git(root, "add", "tracked.txt")
+        findings = scan_tracked_files(root, [sentinel])
+        if not findings:
+            print("self-test did not detect seeded tracked violation", file=sys.stderr)
+            return 1
+    return 0
+
+
+def _tracked_files(root: Path) -> list[Path]:
+    completed = subprocess.run(
+        ["git", "ls-files"],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise NameHygieneError("git ls-files failed")
+    return [Path(line) for line in completed.stdout.splitlines() if line.strip()]
+
+
+def _scan_file(path: Path, relative: Path, terms: list[str]) -> list[NameHygieneFinding]:
+    findings: list[NameHygieneFinding] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except UnicodeDecodeError:
+        return findings
+    for line_number, line in enumerate(lines, start=1):
+        lowered = line.lower()
+        for term in terms:
+            if term.lower() in lowered:
+                findings.append(NameHygieneFinding(relative, line_number, term))
+    return findings
+
+
+def _normalize_terms(terms: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for term in terms:
+        stripped = term.strip()
+        if not stripped:
+            continue
+        folded = stripped.lower()
+        if folded not in seen:
+            normalized.append(stripped)
+            seen.add(folded)
+    return normalized
+
+
+def _terms_from_env() -> list[str]:
+    raw = os.environ.get(ENV_FORBIDDEN_TERMS, "")
+    terms: list[str] = []
+    for chunk in raw.replace("\n", ",").split(","):
+        if chunk.strip():
+            terms.append(chunk.strip())
+    return terms
+
+
+def _is_binary(path: Path) -> bool:
+    try:
+        sample = path.read_bytes()[:_BINARY_SAMPLE_BYTES]
+    except OSError:
+        return True
+    return b"\x00" in sample
+
+
+def _git(root: Path, *args: str) -> None:
+    completed = subprocess.run(
+        ["git", *args],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise NameHygieneError(f"git {' '.join(args)} failed")
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

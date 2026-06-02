@@ -1,0 +1,13 @@
+# Quest installer manifest for installed-project validation.
+#
+# RepoLens does not ship the Quest runtime files in this worktree. The manifest
+# is intentionally empty so the shared Quest validator can run in installed mode
+# and confirm there are no stale Quest-managed entries.
+
+[copy-as-is]
+
+[user-customized]
+
+[merge-carefully]
+
+[directories]

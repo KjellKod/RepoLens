@@ -9,6 +9,7 @@ markers = [
   "fixtures: fixture contract tests",
   "name_hygiene: verifies forbidden-name and token hygiene",
 ]
+
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
@@ -19,6 +20,7 @@ version = "0.1.0"
 description = "CLI foundation for a license disclosure orchestrator."
 requires-python = ">=3.11"
 dependencies = [
+  "defusedxml>=0.7.1",
   "PyYAML==6.0.2",
 ]
 
