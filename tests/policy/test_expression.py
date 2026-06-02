@@ -27,6 +27,14 @@ def test_lowercase_compound_operators_are_parsed() -> None:
     assert decision.dual_license_detected is True
 
 
+def test_or_with_restrictive_unknown_branch_chooses_lower_risk_branch() -> None:
+    decision = classify_license_input("MIT OR non-commercial", policy=load_default_policy())
+
+    assert decision.tier == PolicyTier.ALLOW
+    assert decision.chosen_branch == "MIT"
+    assert decision.dual_license_detected is True
+
+
 def test_nested_or_choice_survives_and_expression() -> None:
     decision = classify_license_input(
         "(MIT OR GPL-3.0-only) AND Apache-2.0",

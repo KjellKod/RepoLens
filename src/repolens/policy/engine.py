@@ -29,6 +29,15 @@ def _resolve_leaf(
     if normalized.tier_override is not None:
         return normalized.tier_override, tuple(reasons), None, tuple()
 
+    if exception_id is not None:
+        normalized_exception = normalize_license(exception_id, policy)
+        if normalized_exception.tier_override is not None:
+            exception_reasons = list(reasons)
+            exception_reasons.append(normalized_exception.reason)
+            if normalized_exception.matched_pattern:
+                exception_reasons.append(normalized_exception.matched_pattern)
+            return normalized_exception.tier_override, tuple(exception_reasons), None, tuple()
+
     tier = map_license_to_tier(normalized.spdx_id, policy, exception_id=exception_id)
     return (
         tier,
@@ -47,14 +56,15 @@ def classify_license_input(raw: str, policy: Policy | None = None) -> PolicyDeci
     chosen_branch: str | None = None
     dual_license_detected = False
     full_text_normalized = normalize_license(stripped, active_policy)
+    is_compound_expression = bool(stripped and _COMPOUND_PATTERN.search(stripped))
 
-    if full_text_normalized.tier_override is not None:
+    if full_text_normalized.tier_override is not None and not is_compound_expression:
         reasons.append(full_text_normalized.reason)
         if full_text_normalized.matched_pattern:
             reasons.append(full_text_normalized.matched_pattern)
         tier = full_text_normalized.tier_override
 
-    elif stripped and _COMPOUND_PATTERN.search(stripped):
+    elif is_compound_expression:
         def mapper(leaf_id: str, exception_id: str | None) -> EvalResult:
             tier, leaf_reasons, normalized_id, leaf_caveats = _resolve_leaf(
                 leaf_id, active_policy, exception_id=exception_id
@@ -76,8 +86,15 @@ def classify_license_input(raw: str, policy: Policy | None = None) -> PolicyDeci
             reasons.append("compound_expression")
             caveats.extend(eval_result.caveats)
         except ParseError:
-            tier = PolicyTier.UNKNOWN
-            reasons.extend(("parse_error", "compound_expression"))
+            if full_text_normalized.tier_override is not None:
+                reasons.append(full_text_normalized.reason)
+                if full_text_normalized.matched_pattern:
+                    reasons.append(full_text_normalized.matched_pattern)
+                tier = full_text_normalized.tier_override
+            else:
+                tier = PolicyTier.UNKNOWN
+                reasons.append("parse_error")
+            reasons.append("compound_expression")
     else:
         tier, leaf_reasons, _normalized_id, leaf_caveats = _resolve_leaf(
             stripped, active_policy
