@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 import importlib.resources
 import json
 import re
 from functools import lru_cache
+from types import MappingProxyType
 
 from repolens.policy.types import PolicyTier
 
@@ -24,12 +26,12 @@ class Policy:
     allow_ids: frozenset[str]
     review_ids: frozenset[str]
     block_ids: frozenset[str]
-    alias_map: dict[str, str]
+    alias_map: Mapping[str, str]
     deprecated_ids: frozenset[str]
     unknown_literals: frozenset[str]
     non_spdx_patterns: tuple[NonSpdxPattern, ...]
-    exception_tiers: dict[tuple[str | None, str], PolicyTier]
-    caveats: dict[str, str]
+    exception_tiers: Mapping[tuple[str | None, str], PolicyTier]
+    caveats: Mapping[str, str]
 
 
 def _to_tier(value: str) -> PolicyTier:
@@ -70,10 +72,12 @@ def load_default_policy() -> Policy:
         allow_ids=frozenset(tiers["ALLOW"]),
         review_ids=frozenset(tiers["REVIEW"]),
         block_ids=frozenset(tiers["BLOCK"]),
-        alias_map={key.lower(): value for key, value in raw["aliases"].items()},
+        alias_map=MappingProxyType(
+            {key.lower(): value for key, value in raw["aliases"].items()}
+        ),
         deprecated_ids=frozenset(raw["deprecated_ids"]),
         unknown_literals=frozenset(value.upper() for value in raw["unknown_literals"]),
         non_spdx_patterns=non_spdx_patterns,
-        exception_tiers=exception_tiers,
-        caveats=raw["caveats"],
+        exception_tiers=MappingProxyType(exception_tiers),
+        caveats=MappingProxyType(dict(raw["caveats"])),
     )

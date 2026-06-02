@@ -41,3 +41,19 @@ def test_policy_version_is_populated() -> None:
     decision = classify_license_input("MIT", policy=load_default_policy())
     assert decision.policy_version
     assert decision.dual_license_detected is False
+
+
+def test_default_policy_mappings_are_read_only() -> None:
+    policy = load_default_policy()
+
+    attempts = (
+        (policy.alias_map, "mit", "GPL-3.0-only"),
+        (policy.exception_tiers, (None, "Example-exception"), PolicyTier.ALLOW),
+        (policy.caveats, "LGPL", "changed"),
+    )
+    for mapping, key, value in attempts:
+        try:
+            mapping[key] = value  # type: ignore[index]
+        except TypeError:
+            continue
+        raise AssertionError("default policy mapping should be read-only")
