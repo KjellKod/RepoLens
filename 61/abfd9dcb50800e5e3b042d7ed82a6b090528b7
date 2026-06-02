@@ -1,0 +1,26 @@
+docs/usage.md
+  s_d3b989c01fa687::t_dc76d256f52974 30-38,195-209
+docs/roadmap/rpl_roadmap.md
+  s_d3b989c01fa687::t_206938963a3c46 106
+scripts/m1_fixture_e2e.py
+  s_d3b989c01fa687::t_f0c5d72a5a6c7b 116,122,271-275,277-283,285
+  s_d3b989c01fa687::t_a691480f6bbe41 1-115,117-121,123-270,276,284,286-328
+tests/integration/test_m1_fixture_e2e.py
+  s_d3b989c01fa687::t_a67773d7a8f197 1-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "61abfd9dcb50800e5e3b042d7ed82a6b090528b7",
+  "prompts": {},
+  "sessions": {
+    "s_d3b989c01fa687": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e89c8-66d8-7cf1-920f-3cb890bd8c0b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
