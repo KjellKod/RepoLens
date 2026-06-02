@@ -34,6 +34,9 @@ def test_x2_clone_args_hardened() -> None:
         build_hardened_clone_command("https://token@example.invalid/project.git", Path("dst"))
 
 
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
 def test_post_checkout_hook_does_not_execute(
     monkeypatch: pytest.MonkeyPatch,
     local_repo_factory,
@@ -62,6 +65,9 @@ def test_post_checkout_hook_does_not_execute(
     assert not sentinel.exists()
 
 
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
 def test_submodule_is_not_checked_out_or_contacted(
     monkeypatch: pytest.MonkeyPatch,
     local_repo_factory,
@@ -95,6 +101,9 @@ def test_submodule_is_not_checked_out_or_contacted(
     assert not (destination / "vendor" / "acme-lib").exists()
 
 
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
 def test_file_protocol_submodule_is_blocked(
     monkeypatch: pytest.MonkeyPatch,
     local_repo_factory,
