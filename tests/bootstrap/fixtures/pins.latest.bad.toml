@@ -1,0 +1,43 @@
+# INTENTIONALLY INVALID fixture — used to prove load_pins() / pins-lint reject
+# a floating 'latest' spec. Never ship a manifest shaped like this.
+schema = "repolens.pins/v1"
+
+[base_image]
+ref = "docker.io/library/python:3.13-slim@sha256:0000000000000000000000000000000000000000000000000000000000000001"
+
+[tools.syft]
+version = "latest"   # <-- forbidden floating spec; must be rejected
+
+[tools.syft.platforms."linux/amd64"]
+artifact = "syft_latest_linux_amd64.tar.gz"
+sha256 = "0000000000000000000000000000000000000000000000000000000000000010"
+
+[tools.syft.signature]
+mechanism = "cosign-keyless"
+checksums_file = "syft_checksums.txt"
+checksums_sig = "syft_checksums.txt.sig"
+checksums_cert = "syft_checksums.txt.pem"
+cert_identity_regex = "https://example.com/.*"
+cert_oidc_issuer = "https://issuer.example"
+
+[tools.cosign]
+version = "2.4.1"
+[tools.cosign.platforms."linux/amd64"]
+artifact = "cosign-linux-amd64"
+sha256 = "0000000000000000000000000000000000000000000000000000000000000020"
+
+[tools.scancode]
+version = "32.3.1"
+requirements = "scancode.requirements.txt"
+
+[tools.git]
+version = "2.47.1"
+[tools.git.platforms."linux/amd64"]
+artifact = "git-2.47.1.tar.gz"
+sha256 = "0000000000000000000000000000000000000000000000000000000000000030"
+
+[tools.gh]
+version = "2.63.2"
+[tools.gh.platforms."linux/amd64"]
+artifact = "gh_2.63.2_linux_amd64.tar.gz"
+sha256 = "0000000000000000000000000000000000000000000000000000000000000040"

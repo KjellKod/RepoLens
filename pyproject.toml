@@ -40,6 +40,7 @@ where = ["src"]
 [tool.setuptools.package-data]
 "repolens.data" = ["schemas/*.json"]
 "repolens.policy.data" = ["*.json"]
+"repolens.bootstrap" = ["pins.toml", "scancode.requirements.txt"]
 
 [tool.ruff]
 line-length = 100

@@ -1,0 +1,3 @@
+This file deliberately contains a planted forbidden token: FORBIDDENNAME
+It is used only to prove the name-hygiene matcher fails closed on a bad literal.
+The denylist that flags FORBIDDENNAME is supplied at test time (never committed).
