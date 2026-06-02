@@ -1,0 +1,35 @@
+src/repolens/security/clone.py
+  s_4eedbf12295e64::t_5ff650e5b595b3 7,21-22,24-25,46
+src/repolens/security/network.py
+  s_4eedbf12295e64::t_5ff650e5b595b3 42
+tests/security/test_name_hygiene.py
+  s_4eedbf12295e64::t_5ff650e5b595b3 45-50,55-56
+tests/security/test_security_gate_contract.py
+  s_4eedbf12295e64::t_5ff650e5b595b3 38-59
+src/repolens/security/name_hygiene.py
+  s_4eedbf12295e64::t_5ff650e5b595b3 21-31
+.github/workflows/security-canaries.yml
+  s_4eedbf12295e64::t_5ff650e5b595b3 21-22
+tests/canaries/security/test_clone_canaries.py
+  s_4eedbf12295e64::t_5ff650e5b595b3 21,26-27
+tests/canaries/security/test_network_canaries.py
+  s_4eedbf12295e64::t_5ff650e5b595b3 18-23
+scripts/security_canary_gate.py
+  s_4eedbf12295e64::t_5ff650e5b595b3 32-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "cb296fbfa0bd9594572fda9a9a14b37c933c902e",
+  "prompts": {},
+  "sessions": {
+    "s_4eedbf12295e64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85cc-c4f4-7032-b00d-03d77ce780fc",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
