@@ -232,6 +232,12 @@ Taxonomy is optional and lives only in untracked local config. Unmatched reposit
 exclude a repository from later scanning. Only GitHub-archived repositories or entries in
 the local `dead` map are hard-excluded, and the reason is written visibly.
 
+To inspect only the hard exclusions and their recorded reasons:
+
+```bash
+jq -r '.repositories[] | select(.hard_excluded) | [.name_with_owner, .exclusion_reason] | @tsv' <WORK_ROOT>/discovered.json
+```
+
 `repos.candidate.md` is a human-edited checkpoint. A second `discover` run refuses to
 overwrite it unless you pass `--force`, so existing approval checkboxes are not silently
 discarded. Use `--force` only when you intentionally want a fresh approval file.
