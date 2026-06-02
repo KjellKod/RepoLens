@@ -27,13 +27,15 @@ Validate the manifest offline (no downloads):
 python3 -m repolens.bootstrap --dry-run
 ```
 
-A live bootstrap (called by the pipeline, or via `repolens.bootstrap.run(...)`
-with injected fetch/cosign/pip runners) verifies Syft **fail-closed**: it checks
-the binary's sha256, then verifies the cosign-signed checksums file, then
-cross-checks that the pinned digest matches the signed entry — all **before** the
-binary is ever made executable or run. ScanCode installs via a hash-pinned
-`--require-hashes` requirements file. Resolved versions/digests are written to
-`tool_versions.json` (default under `work/`, which is gitignored).
+Live bootstrap is available as an injected-runner library call:
+`repolens.bootstrap.run(...)`. The `python3 -m repolens.bootstrap` command is currently
+validate-only; without injected fetch/cosign/pip runners it exits with a usage error for
+live acquisition. The library flow verifies Syft **fail-closed**: it checks the binary's
+sha256, then verifies the cosign-signed checksums file, then cross-checks that the pinned
+digest matches the signed entry — all **before** the binary is ever made executable or
+run. ScanCode installs via a hash-pinned `--require-hashes` requirements file. Resolved
+versions/digests are written to `tool_versions.json` (default under `work/`, which is
+gitignored).
 
 ### Name-hygiene gate
 
@@ -189,6 +191,22 @@ Discovery (you approve the repo list) and the final report are the shipped human
 checkpoints. The planned `flag` and `shortlist` stages will add the policy and approval
 gate once they land. The shipped scanner and resolver are read-only against your code and
 resumable after an interruption.
+
+### Offline fixture acceptance harness
+
+The X1 synthetic fixtures can exercise the shipped M1 stage contracts without live
+network or external tools. This harness injects fixture `gh`, clone, Syft, and API
+boundaries, then writes the normal artifacts under the supplied work root:
+
+```bash
+python scripts/m1_fixture_e2e.py --work-root /tmp/repolens-m1-fixture
+```
+
+Expected output is a one-line JSON summary with discovered, SBOM, resolved, and report
+counts. The work root contains `discovered.json`, `repos.candidate.md`,
+`approved-repos.json`, per-fixture `sbom.syft.json` and `resolved.ndjson`, and
+`reports/report.main.{md,csv}`. This is a fixture harness only; live owner dogfood still
+uses the normal `repolens discover -> scan -> resolve -> report` commands above.
 
 ### Discover
 
