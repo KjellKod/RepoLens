@@ -1,0 +1,125 @@
+{
+  "policy_version": "2026.06.01-f5",
+  "default_unknown_action": "BLOCK",
+  "tiers": {
+    "ALLOW": [
+      "MIT",
+      "MIT-0",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "Apache-2.0",
+      "ISC",
+      "0BSD",
+      "Unlicense",
+      "CC0-1.0",
+      "Zlib",
+      "BSL-1.0",
+      "Python-2.0",
+      "PSF-2.0",
+      "BlueOak-1.0.0",
+      "Artistic-2.0",
+      "X11",
+      "Libpng",
+      "curl",
+      "HPND",
+      "W3C"
+    ],
+    "REVIEW": [
+      "LGPL-2.0-only",
+      "LGPL-2.0-or-later",
+      "LGPL-2.1-only",
+      "LGPL-2.1-or-later",
+      "LGPL-3.0-only",
+      "LGPL-3.0-or-later",
+      "MPL-2.0",
+      "MPL-1.1",
+      "EPL-1.0",
+      "EPL-2.0",
+      "CDDL-1.0",
+      "EUPL-1.2",
+      "MS-RL",
+      "MS-PL",
+      "APSL-2.0",
+      "CECILL-2.1",
+      "CC-BY-SA-4.0",
+      "CPL-1.0",
+      "IPL-1.0"
+    ],
+    "BLOCK": [
+      "AGPL-3.0-only",
+      "AGPL-3.0-or-later",
+      "GPL-2.0-only",
+      "GPL-2.0-or-later",
+      "GPL-3.0-only",
+      "GPL-3.0-or-later",
+      "SSPL-1.0",
+      "BUSL-1.1",
+      "Elastic-2.0",
+      "OSL-3.0",
+      "RPL-1.5",
+      "EUPL-1.1",
+      "Prosperity-3.0.0",
+      "PolyForm-Noncommercial-1.0.0",
+      "PolyForm-Small-Business-1.0.0",
+      "CC-BY-NC-4.0",
+      "CC-BY-NC-SA-4.0"
+    ]
+  },
+  "aliases": {
+    "apache 2": "Apache-2.0",
+    "apache 2.0": "Apache-2.0",
+    "apache-2": "Apache-2.0",
+    "bsd3": "BSD-3-Clause",
+    "bsd 3 clause": "BSD-3-Clause",
+    "bsd 2 clause": "BSD-2-Clause",
+    "gplv3": "GPL-3.0-only",
+    "gplv2": "GPL-2.0-only",
+    "lgplv3": "LGPL-3.0-only",
+    "agplv3": "AGPL-3.0-only"
+  },
+  "deprecated_ids": [
+    "GPL-2.0",
+    "GPL-3.0",
+    "LGPL-2.0",
+    "LGPL-2.1",
+    "LGPL-3.0",
+    "AGPL-3.0"
+  ],
+  "unknown_literals": [
+    "NOASSERTION",
+    "NONE",
+    "PROPRIETARY",
+    "COMMERCIAL"
+  ],
+  "non_spdx_patterns": [
+    {
+      "name": "NC",
+      "pattern": "(?i)(?:^|\\W)(?:non[- ]?commercial|nc)(?:\\W|$)"
+    },
+    {
+      "name": "commons-clause",
+      "pattern": "(?i)commons[ -]?clause"
+    }
+  ],
+  "compound_expression_rules": {
+    "OR": "min_risk",
+    "AND": "max_risk",
+    "WITH": "exception_table"
+  },
+  "exception_table": [
+    {
+      "license_id": "GPL-2.0-only",
+      "exception_id": "Classpath-exception-2.0",
+      "target_tier": "REVIEW"
+    },
+    {
+      "license_id": "GPL-3.0-only",
+      "exception_id": "Autoconf-exception-3.0",
+      "target_tier": "ALLOW"
+    }
+  ],
+  "caveats": {
+    "LGPL": "LGPL review depends on static versus dynamic linking.",
+    "BUSL": "BUSL includes a Change Date that must be reviewed."
+  }
+}
