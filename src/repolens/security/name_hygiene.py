@@ -531,13 +531,16 @@ def main(argv: list[str] | None = None) -> int:
             *forbidden_names_from_env(),
             *load_local_config(local_config),
         ]
+        # run() is inside the try so a scan-time error (e.g. a missing --root
+        # raising FileNotFoundError, an OSError subclass) becomes the clean JSON
+        # error path below instead of an uncaught traceback.
+        exit_code, result = run(
+            root=root, tokens=normalize_tokens(tokens), require_denylist=args.require_denylist
+        )
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(json.dumps({"passed": False, "error": str(exc)}, sort_keys=True))
         return 1
 
-    exit_code, result = run(
-        root=root, tokens=normalize_tokens(tokens), require_denylist=args.require_denylist
-    )
     print(json.dumps(result, sort_keys=True))
     return exit_code
 
