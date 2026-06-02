@@ -1,0 +1,25 @@
+tests/canaries/security/test_discover_canaries.py
+  s_9b9ed5f47067c4::t_41045258cc9dfc 107-117
+tests/canaries/security/canary_matrix.json
+  s_9b9ed5f47067c4::t_3188f52f113537 3,84-88
+src/repolens/discovery/gh.py
+  s_9b9ed5f47067c4::t_a33314ffdcc878 6,31,54,99-110
+tests/unit/test_discovery_gh.py
+  s_9b9ed5f47067c4::t_50c3a77e4bbea0 59-78
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4a09ea27a916be0e6dde1d2b2250a3c68b758563",
+  "prompts": {},
+  "sessions": {
+    "s_9b9ed5f47067c4": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e8718-f06e-7c73-be0d-f739e4001aaa",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
