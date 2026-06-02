@@ -1,0 +1,22 @@
+scripts/ci/name_hygiene.py
+  s_c1de120cdb9b59::t_2fbc3ae63d9c06 119,122,133-146,172-178
+tests/unit/test_name_hygiene.py
+  s_c1de120cdb9b59::t_f2aa13b3894c5f 164
+  s_c1de120cdb9b59::t_f5adbdd4760dc2 153-163,165-169
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "52c95065ed64af15cc641b3304a11c4fb69f2866",
+  "prompts": {},
+  "sessions": {
+    "s_c1de120cdb9b59": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85cd-190c-79e0-b899-b0babe50d69d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
