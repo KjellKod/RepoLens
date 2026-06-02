@@ -1,0 +1,32 @@
+.github/workflows/security-canaries.yml
+  s_bb8787cf071d6e::t_6ba06121f1e27e 20,23
+tests/integration/test_workflow_security.py
+  s_bb8787cf071d6e::t_732e05dc1a633e 34-36,42-46,48-50,52-61,63,67-91
+pyproject.toml
+  s_bb8787cf071d6e::t_c1a0c429007218 21,29-30,32-33
+  s_bb8787cf071d6e::t_0cccf760969e81 49-50
+README.md
+  s_bb8787cf071d6e::t_935934476a2d7b 67-73
+.github/workflows/ci.yml
+  s_bb8787cf071d6e::t_4e2b5b8f981c3d 1,3-5,32,36,39-41,52,54-55,57-58,60-61,63-64,66-69,71-79,81-82,84-85
+.gitignore
+  s_bb8787cf071d6e::t_c76c6de6cb609c 235-236
+docs/usage.md
+  s_bb8787cf071d6e::t_7fee4a708b5c38 38-42,44-46,50,56,59-60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3628b9a347a591886270572faf88d5fa736e9602",
+  "prompts": {},
+  "sessions": {
+    "s_bb8787cf071d6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c1f98f3-95b8-4b2c-84ce-cb4d9a149af9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
