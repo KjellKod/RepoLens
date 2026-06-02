@@ -357,7 +357,10 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
             f"Discovered {result.repository_count} repositories: "
             f"{result.candidate_count} candidates, {result.hard_exclusion_count} hard exclusions.\n"
             f"Created {result.discovered_path} and {result.candidate_path}.\n"
-            f"Next: review {result.candidate_path}, tick approved repos, then continue to scan."
+            f"Manual step: open {result.candidate_path}, tick approved repos, and prepare "
+            "an approved repos JSON file.\n"
+            f"Next CLI stage: repolens scan --work-root {args.work_root} "
+            "--repos <APPROVED_REPOS_JSON>"
         ),
     )
 

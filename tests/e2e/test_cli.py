@@ -102,7 +102,11 @@ class CliTests(unittest.TestCase):
         self.assertIn("Discovered 1 repositories", output)
         self.assertIn("work/discovered.json", output)
         self.assertIn("work/repos.candidate.md", output)
-        self.assertIn("Next: review", output)
+        self.assertIn("Manual step: open work/repos.candidate.md", output)
+        self.assertIn(
+            "Next CLI stage: repolens scan --work-root work --repos <APPROVED_REPOS_JSON>",
+            output,
+        )
 
     def test_discover_force_routes_to_real_handler(self) -> None:
         config = cli.load_config(".", None)
