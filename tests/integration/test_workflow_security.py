@@ -30,6 +30,8 @@ def test_live_smoke_workflow_is_not_pr_triggered_and_has_no_dispatch_ref_checkou
 def test_offline_ci_workflow_contains_required_x3_steps() -> None:
     workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
 
+    assert "  offline-ci:\n" in workflow
+    assert "  security-canaries:\n" in workflow
     for expected in [
         "python -m pip install --require-hashes -r requirements-dev.txt",
         "python -m ruff format --check .",
