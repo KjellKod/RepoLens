@@ -20,7 +20,6 @@ from repolens.data.limits import (
     max_bytes_for,
     scan_depth,
 )
-from repolens.data.validation import validate_artifact
 from repolens.security.redaction import redact_tokens_from_structure
 
 
@@ -148,7 +147,7 @@ def _write_json_artifact(
     repo_ref: str | None = None,
 ) -> Path:
     redacted = redact_tokens_from_structure(value)
-    validate_artifact(redacted, artifact_name)
+    _validate_artifact(redacted, artifact_name)
     path = _artifact_path(work_root, artifact_name, repo_ref)
     data = _json_bytes(redacted)
     _check_bytes(data, max_bytes_for(artifact_name), path)
@@ -167,7 +166,7 @@ def write_resolved(
         redacted = redact_tokens_from_structure(
             {**record, "schema_version": record.get("schema_version", SCHEMA_VERSION)}
         )
-        validate_artifact(redacted, "resolved")
+        _validate_artifact(redacted, "resolved")
         stamped.append(redacted)
     path = _artifact_path(work_root, "resolved", repo_ref)
     data = _checked_ndjson_bytes(path, stamped)
@@ -199,7 +198,7 @@ def _read_json_artifact(
 ) -> dict[str, Any]:
     path = _artifact_path(work_root, artifact_name, repo_ref)
     value = load_json_capped(path, max_bytes=max_bytes_for(artifact_name))
-    validate_artifact(value, artifact_name)
+    _validate_artifact(value, artifact_name)
     if not isinstance(value, dict):
         raise SchemaValidationError(f"{artifact_name}: expected object")
     return value
@@ -236,7 +235,7 @@ def iter_resolved(
             except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                 message = f"{artifact}:{index} is not valid JSON: {_parse_error_message(exc)}"
                 raise CorruptArtifactError(message) from exc
-            validate_artifact(record, "resolved")
+            _validate_artifact(record, "resolved")
             if not isinstance(record, dict):
                 raise SchemaValidationError(f"resolved:{index}: expected object")
             yield record
@@ -259,6 +258,12 @@ def _parse_error_message(exc: UnicodeDecodeError | json.JSONDecodeError) -> str:
     if isinstance(exc, json.JSONDecodeError):
         return exc.msg
     return exc.reason
+
+
+def _validate_artifact(value: Any, artifact_name: str) -> None:
+    from repolens.data.validation import validate_artifact
+
+    validate_artifact(value, artifact_name)
 
 
 def _read_capped_bytes(path: Path, max_bytes: int) -> bytes:

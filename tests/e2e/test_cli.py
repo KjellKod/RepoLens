@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest import mock
 
 from repolens import cli
@@ -119,6 +120,52 @@ class CliTests(unittest.TestCase):
         self.assertIn("[REDACTED_PATH]", output)
         self.assertNotIn("ghp_abc123", output)
         self.assertNotIn("/tmp/acme/private", output)
+
+    def test_report_command_writes_main_artifacts(self) -> None:
+        with TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            out_dir = work_root / "out"
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [
+                    {
+                        "schema_version": "1.0",
+                        "name": "acme-lib",
+                        "version": "1.2.3",
+                        "repo": "acme-alpha",
+                        "purl": "pkg:pypi/acme-lib@1.2.3",
+                        "declared_license_raw": "MIT",
+                        "spdx_id": "MIT",
+                        "evidence": {
+                            "source_layer": "syft",
+                            "url": "https://example.invalid/licenses/mit",
+                        },
+                        "tags": {
+                            "origin": "third-party-oss",
+                            "scope": "runtime",
+                            "distribution": "server",
+                        },
+                        "modified": "unknown",
+                    }
+                ],
+            )
+
+            code = cli.main(["report", "--work-root", str(work_root), "--out-dir", str(out_dir)])
+
+            self.assertEqual(code, 0)
+            self.assertTrue((out_dir / "report.main.md").exists())
+            self.assertTrue((out_dir / "report.main.csv").exists())
+
+    def test_report_missing_work_root_returns_two(self) -> None:
+        with TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+
+            code = cli.main(
+                ["report", "--work-root", str(work_root), "--out-dir", str(work_root / "out")]
+            )
+
+            self.assertEqual(code, 2)
 
 
 def _fake_clone(options):

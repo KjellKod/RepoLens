@@ -13,6 +13,7 @@ from enum import Enum
 from pathlib import Path
 from urllib.parse import urlparse
 
+from repolens.report import render_main_report
 from repolens.security.redaction import redact_tokens
 
 from .config import load_config
@@ -129,6 +130,8 @@ def build_parser() -> argparse.ArgumentParser:
             _configure_scan_parser(subparser)
         elif command_name == "resolve":
             _configure_resolve_parser(subparser)
+        elif command_name == "report":
+            _configure_report_parser(subparser)
         else:
             subparser.add_argument(
                 "--findings-open",
@@ -178,6 +181,21 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         help="Runtime repository reference used for the work/<repo-ref>/ artifact dir.",
     )
     subparser.set_defaults(handler=_resolve_stage)
+
+
+def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument(
+        "--work-root",
+        type=Path,
+        default=Path.cwd(),
+        help="Root containing work/<repo>/resolved.ndjson artifacts.",
+    )
+    subparser.add_argument(
+        "--out-dir",
+        type=Path,
+        help="Directory for report.main.md and report.main.csv.",
+    )
+    subparser.set_defaults(handler=_report)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -285,6 +303,14 @@ def _load_repo_specs(path: Path, repo_spec_cls: type) -> list:
             raise InputError(f"Repo list entry {index} 'clone_url' must not embed credentials")
         specs.append(repo_spec_cls(repo_ref=repo_ref, clone_url=clone_url))
     return specs
+
+
+def _report(args: argparse.Namespace) -> CommandResult:
+    result = render_main_report(args.work_root, args.out_dir)
+    return CommandResult(
+        CommandStatus.SUCCESS,
+        f"wrote {result.markdown_path} and {result.csv_path}",
+    )
 
 
 def _exit_code_for_result(result: CommandResult) -> int:
