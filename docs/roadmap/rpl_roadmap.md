@@ -121,7 +121,7 @@ route, same `resolved.ndjson` contract — and stops there. P4 **consumes**
 licenses (that's P3). The "planted AGPL → BLOCK" acceptance is **P4's**, not P3b's.
 
 **Delivery** (each Quest ticks its ID on merge)
-- [ ] P3b — resolve full: (1) ScanCode invoked **only** on items the API ladder left
+- [x] P3b — resolve full: (1) ScanCode invoked **only** on items the API ladder left
       unresolved, scoped to a single package dir / `LICENSE*` files
       ([architecture, ladder step 3](rpl_architecture.md)); (2) mobile native enrichment
       (AboutLibraries / LicensePlist) — auto-detected, **opt-in and off by default**,
@@ -139,8 +139,8 @@ licenses (that's P3). The "planted AGPL → BLOCK" acceptance is **P4's**, not P
 **Acceptance** (owner in bold)
 - [ ] **P4** — planted AGPL dep → BLOCK queue; planted no-license dep → UNKNOWN queue,
       each with a stated reason.
-- [ ] **P3b** — ScanCode invoked **only** on items unresolved by APIs.
-- [ ] **P3b** — mobile auto-detected; native enrichment runs **only sandboxed**; **mobile
+- [x] **P3b** — ScanCode invoked **only** on items unresolved by APIs.
+- [x] **P3b** — mobile auto-detected; native enrichment runs **only sandboxed**; **mobile
       sandbox canaries green** (token absent, egress blocked); a missing mobile toolchain
       degrades gracefully — it never hard-fails the run.
 - [ ] **P4** — components carry `origin`/`scope`/`distribution`; dedup correct.

@@ -85,14 +85,18 @@ _STAGE_HELP = {
         ),
     ),
     "resolve": StageHelp(
-        help="Resolve every dependency's license, cheapest trusted source first.",
+        help="Resolve every dependency's license with APIs, mobile opt-in, and scoped ScanCode.",
         description=(
             "Stage 3/6 — determine each dependency's license, cheapest trusted source first."
         ),
         epilog=_stage_epilog(
-            "a Syft SBOM from scan at <WORK>/work/<REPO_REF>/sbom.syft.json.",
-            "repolens resolve --work-root <WORK> --repo-ref <REPO_REF>",
-            "<WORK>/work/<REPO_REF>/resolved.ndjson (license + evidence + tags per dependency).",
+            "a Syft SBOM from scan at <WORK>/work/<REPO_REF>/sbom.syft.json; "
+            "--source-root may point at a read-only checkout for mobile markers and "
+            "package-local ScanCode fallback.",
+            "repolens resolve --work-root <WORK> --repo-ref <REPO_REF> "
+            "--source-root <CHECKOUT> [--enable-mobile-native]",
+            "<WORK>/work/<REPO_REF>/resolved.ndjson (license + evidence + tags per "
+            "dependency; unresolved records stay schema-valid).",
             "`repolens flag --work-root <WORK>`.",
         ),
     ),
@@ -294,6 +298,20 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         required=True,
         help="Runtime repository reference used for the work/<repo-ref>/ artifact dir.",
     )
+    subparser.add_argument(
+        "--source-root",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "Optional read-only source checkout for mobile marker detection and scoped "
+            "ScanCode fallback."
+        ),
+    )
+    subparser.add_argument(
+        "--enable-mobile-native",
+        action="store_true",
+        help="Opt in to sandboxed native mobile license enrichment when mobile markers exist.",
+    )
     subparser.set_defaults(handler=_resolve_stage)
 
 
@@ -407,7 +425,12 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
 def _resolve_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.resolve import run_resolve
 
-    path = run_resolve(args.work_root, args.repo_ref)
+    path = run_resolve(
+        args.work_root,
+        args.repo_ref,
+        source_root=args.source_root,
+        enable_mobile_native=args.enable_mobile_native,
+    )
     return CommandResult(CommandStatus.SUCCESS, f"wrote {path.name}")
 
 

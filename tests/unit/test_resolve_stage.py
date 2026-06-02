@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from repolens.data.store import iter_resolved, write_sbom
+from repolens.exit_codes import InputError
+from repolens.resolve.mobile import MobileEnrichmentOutcome
 from repolens.resolve.models import ApiCandidate, PackageFact, ResolveAdapter
 from repolens.resolve.stage import run_resolve
 from repolens.security.errors import FetchSecurityError
@@ -45,6 +47,7 @@ def write_test_sbom(
     *,
     licenses: list[str] | None,
     version: str | None = "1.2.3",
+    locations: list[str] | None = None,
 ) -> None:
     artifact: dict[str, object] = {
         "name": "acme-lib",
@@ -52,7 +55,7 @@ def write_test_sbom(
         "type": "python",
         "purl": "pkg:pypi/acme-lib@1.2.3",
         "licenses": licenses or [],
-        "locations": ["requirements.txt"],
+        "locations": locations or ["requirements.txt"],
     }
     if version is None:
         artifact["version"] = None
@@ -278,6 +281,215 @@ def test_fetch_security_failure_lowers_unresolved(tmp_path: Path, repo_ref: str)
     record = read_single_resolved(tmp_path, repo_ref)
     assert record["spdx_id"] is None
     assert record["evidence"]["anchor"] == "unresolved:evidence_mismatch"
+
+
+def test_p3b_default_path_does_not_run_scancode_without_source_root(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+
+    def fail_scancode(*args: object, **kwargs: object) -> object:
+        raise AssertionError("ScanCode should require an explicit source root")
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[],
+        scancode_runner=fail_scancode,  # type: ignore[arg-type]
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] is None
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == "unresolved:no_candidate"
+
+
+def test_p3b_scancode_runs_only_for_unresolved_package_with_locations(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "schema_version": "1.0",
+            "repo": repo_ref,
+            "generated_at": "2026-01-01T00:00:00Z",
+            "tool": {"name": "syft", "version": "1.0.0"},
+            "source": "https://example.invalid/fixture",
+            "artifacts": [
+                {
+                    "name": "declared-lib",
+                    "version": "1.0.0",
+                    "type": "python",
+                    "licenses": ["MIT"],
+                    "locations": ["declared/package.py"],
+                },
+                {
+                    "name": "unknown-lib",
+                    "version": "2.0.0",
+                    "type": "python",
+                    "licenses": [],
+                    "locations": ["unknown/package.py"],
+                },
+            ],
+        },
+    )
+    source_root = tmp_path / "source"
+    (source_root / "unknown").mkdir(parents=True)
+    (source_root / "unknown" / "package.py").write_text("", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def runner(argv: list[str], *, timeout: float):
+        del timeout
+        calls.append(argv)
+        return type(
+            "Completed",
+            (),
+            {
+                "returncode": 0,
+                "stdout": '{"files":[{"license_expression_spdx":"Apache-2.0"}]}',
+                "stderr": "",
+            },
+        )()
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[],
+        source_root=source_root,
+        scancode_runner=runner,
+        scancode_executable_provider=lambda work_root: Path(work_root) / "tools" / "scancode",
+    )
+
+    records = list(iter_resolved(tmp_path / "work" / repo_ref / "resolved.ndjson"))
+    assert records[0]["spdx_id"] == "MIT"
+    assert records[0]["evidence"]["source_layer"] == "syft"
+    assert records[1]["spdx_id"] == "Apache-2.0"
+    assert records[1]["evidence"]["source_layer"] == "scancode"
+    assert len(calls) == 1
+    assert str(source_root / "unknown") in calls[0]
+    assert str(source_root) not in calls[0]
+
+
+def test_p3b_mobile_native_requires_opt_in(tmp_path: Path, repo_ref: str) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[], locations=[])
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "build.gradle").write_text(
+        "plugins { id 'com.android.application' }", encoding="utf-8"
+    )
+
+    def fail_mobile(*args: object) -> MobileEnrichmentOutcome:
+        raise AssertionError("mobile native should be off by default")
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[],
+        source_root=source_root,
+        mobile_enricher=fail_mobile,
+        scancode_executable_provider=lambda work_root: (_ for _ in ()).throw(
+            InputError("no scancode")
+        ),
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["evidence"]["source_layer"] == "scancode"
+    assert record["evidence"]["anchor"] == "unresolved:scancode_tool_unavailable"
+
+
+def test_p3b_missing_mobile_sandbox_lowers_to_mobile_unresolved(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[], locations=[])
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "settings.gradle").write_text(
+        "pluginManagement { repositories { google() } }\n"
+        "plugins { id 'com.android.library' version '1.0.0' }",
+        encoding="utf-8",
+    )
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[],
+        source_root=source_root,
+        enable_mobile_native=True,
+        scancode_executable_provider=lambda work_root: (_ for _ in ()).throw(
+            InputError("no scancode")
+        ),
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] is None
+    assert record["evidence"]["source_layer"] == "mobile"
+    assert record["evidence"]["anchor"] == "unresolved:mobile_sandbox_unavailable"
+
+
+def test_p3b_mobile_conflict_writes_mobile_conflict(tmp_path: Path, repo_ref: str) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[], locations=[])
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "build.gradle").write_text(
+        "plugins { id 'com.android.application' }", encoding="utf-8"
+    )
+
+    def mobile_conflict(
+        package: PackageFact,
+        detection: object,
+        source_root: Path,
+        sandbox_runner: object,
+        limits: object,
+    ) -> MobileEnrichmentOutcome:
+        del package, detection, source_root, sandbox_runner, limits
+        return MobileEnrichmentOutcome(
+            candidate=ApiCandidate(
+                "CONFLICT",
+                "mobile-native://sandbox",
+                "conflict:mobile_disagreement",
+            )
+        )
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[],
+        source_root=source_root,
+        enable_mobile_native=True,
+        mobile_enricher=mobile_conflict,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == "CONFLICT"
+    assert record["evidence"]["source_layer"] == "mobile"
+    assert record["evidence"]["anchor"] == "conflict:mobile_disagreement"
+
+
+def test_p3b_validated_api_disagreement_writes_conflict(tmp_path: Path, repo_ref: str) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    first = CandidateAdapter(ApiCandidate("MIT", "https://api.deps.dev/v3alpha/one", "MIT"))
+    second = CandidateAdapter(
+        ApiCandidate("Apache-2.0", "https://api.deps.dev/v3alpha/two", "Apache-2.0")
+    )
+
+    def fetch(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        body = b'{"license":"MIT"}' if url.endswith("/one") else b'{"license":"Apache-2.0"}'
+        return FetchResult(url=url, status=200, headers=(), body=body)
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[first, second],
+        fetcher=fetch,
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == "CONFLICT"
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == "conflict:api_disagreement"
 
 
 def test_unsupported_package_lowers_unresolved(tmp_path: Path, repo_ref: str) -> None:

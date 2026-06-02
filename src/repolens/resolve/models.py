@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Protocol
 
 from repolens.security.http_client import FetchResult, HttpFetchOptions
@@ -19,6 +20,7 @@ class PackageFact:
     repo: str
     purl: str | None
     declared_license_raw: str | None
+    locations: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,3 +47,10 @@ class AdapterFactory(Protocol):
 
     def __call__(self, fetcher: FetchFunction) -> Iterable[ResolveAdapter]:
         """Build adapters with the supplied fetcher."""
+
+
+class ScancodeExecutableProvider(Protocol):
+    """Return the canonical production ScanCode executable."""
+
+    def __call__(self, work_root: str | Path) -> Path:
+        """Return a verified ScanCode executable path."""

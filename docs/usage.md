@@ -357,12 +357,48 @@ want a fresh approval file. After a successful run, the CLI prints a concrete
 
 ### Resolve
 
-For the API-only resolution stage, `<WORK>/work/<REPO_REF>/sbom.syft.json` must already
-exist:
+For the resolution stage, `<WORK>/work/<REPO_REF>/sbom.syft.json` must already exist:
 
 ```bash
 repolens resolve --work-root <WORK> --repo-ref <REPO_REF>
 ```
+
+That no-flag form preserves the API-layer behavior: Syft-declared licenses and
+verified metadata API evidence are written to `resolved.ndjson`; unresolved records
+remain schema-valid.
+
+P3b adds an optional source checkout boundary for mobile marker detection and scoped
+ScanCode fallback:
+
+```bash
+repolens resolve \
+  --work-root <WORK> \
+  --repo-ref <REPO_REF> \
+  --source-root fixtures/source/sentinel-mobile
+```
+
+`--source-root` is read-only input. It lets `resolve` detect mobile markers and derive
+package-local ScanCode targets from SBOM `locations`. ScanCode is invoked only for
+dependencies still unresolved by earlier layers, and target selection rejects broad
+repository-root scans and paths outside the source root. If the canonical
+hash-pinned/bootstrap-produced ScanCode executable is unavailable, affected packages
+stay unresolved instead of failing the run.
+
+Native mobile enrichment is opt-in and remains off by default even when mobile markers
+are present:
+
+```bash
+repolens resolve \
+  --work-root <WORK> \
+  --repo-ref <REPO_REF> \
+  --source-root fixtures/source/sentinel-mobile \
+  --enable-mobile-native
+```
+
+The native mobile path runs only through the sandbox boundary. Missing mobile
+toolchains or a missing sandbox backend lower affected packages to unresolved mobile
+evidence, such as `unresolved:mobile_sandbox_unavailable`, without hard-failing the
+stage.
 
 The command writes `<WORK>/work/<REPO_REF>/resolved.ndjson` with SPDX-normalized
 license records or schema-valid unresolved records when evidence cannot be verified.
