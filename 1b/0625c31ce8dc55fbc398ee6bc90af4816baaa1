@@ -1,0 +1,91 @@
+src/repolens/bootstrap/scancode.requirements.txt
+  ai_agent 1-19
+src/repolens/bootstrap/errors.py
+  ai_agent 1-53
+src/repolens/bootstrap/record.py
+  ai_agent 1-71
+.github/workflows/offline-ci.yml
+  ai_agent 1-55
+src/repolens/bootstrap/syft.py
+  ai_agent 1-165
+docs/usage.md
+  ai_agent 15-58
+tests/bootstrap/test_cli.py
+  ai_agent 1-49
+tests/bootstrap/test_record.py
+  ai_agent 1-56
+tests/bootstrap/fixtures/cosign_good.txt
+  ai_agent 1
+tests/bootstrap/test_scancode.py
+  ai_agent 1-91
+tools/__init__.py
+  ai_agent 1
+tests/bootstrap/test_name_hygiene.py
+  ai_agent 1-147
+src/repolens/bootstrap/pins.py
+  ai_agent 1-248
+tests/bootstrap/test_supply_chain_canary.py
+  ai_agent 1-74
+tools/pins_lint.py
+  ai_agent 1-59
+tests/bootstrap/fixtures/pins.latest.bad.toml
+  ai_agent 1-43
+tests/bootstrap/conftest.py
+  ai_agent 1-154
+tests/bootstrap/fixtures/seeded_bad_token.txt
+  ai_agent 1-3
+tests/bootstrap/fixtures/syft_tampered.txt
+  ai_agent 1
+docs/roadmap/rpl_roadmap.md
+  ai_agent 60
+.github/workflows/ci.yml
+  s_b56e249965f74f::t_7a388e22271238 26
+pyproject.toml
+  ai_agent 14-18,23-47
+tests/bootstrap/fixtures/syft_good.txt
+  ai_agent 1
+src/repolens/bootstrap/orchestrate.py
+  ai_agent 1-134
+tests/bootstrap/test_orchestrate.py
+  ai_agent 1-165
+tests/bootstrap/test_pins.py
+  ai_agent 1-144
+src/repolens/bootstrap/__init__.py
+  ai_agent 1-62
+tests/bootstrap/test_pins_lint.py
+  ai_agent 1-28
+src/repolens/bootstrap/__main__.py
+  ai_agent 1-82
+tools/name_hygiene.py
+  ai_agent 1-192
+tests/bootstrap/fixtures/requirements.nohash.bad.txt
+  ai_agent 1-3
+tests/bootstrap/test_verify.py
+  ai_agent 1-125
+tests/bootstrap/fixtures/acme_clean_tree/acme_example.py
+  ai_agent 1-4
+tests/bootstrap/test_syft_bootstrap.py
+  ai_agent 1-154
+src/repolens/bootstrap/pins.toml
+  ai_agent 1-76
+src/repolens/bootstrap/scancode.py
+  ai_agent 1-118
+src/repolens/bootstrap/verify.py
+  ai_agent 1-193
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1b0625c31ce8dc55fbc398ee6bc90af4816baaa1",
+  "prompts": {},
+  "sessions": {
+    "s_b56e249965f74f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85dc-9f2b-7d40-82f5-f6725ea600ba",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
