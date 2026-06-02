@@ -107,7 +107,97 @@ class CliTests(unittest.TestCase):
             output,
         )
         self.assertIn(
-            "Next CLI stage: repolens scan --work-root work --repos <APPROVED_REPOS_JSON>",
+            "Next CLI stage: repolens scan --work-root work --repos work/approved-repos.json",
+            output,
+        )
+
+    def test_discover_repos_routes_to_fetch_path(self) -> None:
+        config = cli.load_config(".", None)
+        with (
+            mock.patch("repolens.cli.load_config", return_value=config),
+            mock.patch("repolens.cli.run_discover") as run_discover,
+        ):
+            run_discover.return_value = mock.Mock(
+                repository_count=2,
+                candidate_count=2,
+                hard_exclusion_count=0,
+                discovered_path="work/discovered.json",
+                candidate_path="work/repos.candidate.md",
+            )
+
+            code = cli.main(
+                [
+                    "discover",
+                    "--owner",
+                    "sentinel-owner",
+                    "--work-root",
+                    "work",
+                    "--repos",
+                    "sentinel-alpha, sentinel-beta",
+                ]
+            )
+
+        self.assertEqual(code, 0)
+        # --repos parses to a validated, ordered tuple and reaches the fetch path.
+        self.assertEqual(
+            run_discover.call_args.kwargs["repos"],
+            ("sentinel-alpha", "sentinel-beta"),
+        )
+
+    def test_discover_without_repos_uses_list_path(self) -> None:
+        config = cli.load_config(".", None)
+        with (
+            mock.patch("repolens.cli.load_config", return_value=config),
+            mock.patch("repolens.cli.run_discover") as run_discover,
+        ):
+            run_discover.return_value = mock.Mock(
+                repository_count=1,
+                candidate_count=1,
+                hard_exclusion_count=0,
+                discovered_path="work/discovered.json",
+                candidate_path="work/repos.candidate.md",
+            )
+
+            code = cli.main(["discover", "--owner", "sentinel-owner", "--work-root", "work"])
+
+        self.assertEqual(code, 0)
+        # Omitting --repos yields repos=None (the enumerate path).
+        self.assertIsNone(run_discover.call_args.kwargs["repos"])
+
+    def test_discover_empty_repos_value_is_usage_error(self) -> None:
+        with mock.patch("repolens.cli.run_discover") as run_discover:
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = cli.main(["discover", "--owner", "sentinel-owner", "--repos", ""])
+
+        self.assertEqual(code, 2)
+        run_discover.assert_not_called()
+        self.assertIn("at least one repo name", stderr.getvalue())
+
+    def test_discover_next_step_remembers_work_root(self) -> None:
+        config = cli.load_config(".", None)
+        with (
+            mock.patch("repolens.cli.load_config", return_value=config),
+            mock.patch("repolens.cli.run_discover") as run_discover,
+        ):
+            run_discover.return_value = mock.Mock(
+                repository_count=1,
+                candidate_count=1,
+                hard_exclusion_count=0,
+                discovered_path="work/discovered.json",
+                candidate_path="work/repos.candidate.md",
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main(
+                    ["discover", "--owner", "sentinel-owner", "--work-root", "/tmp/repo1"]
+                )
+
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn(
+            "repolens scan --work-root /tmp/repo1 --repos /tmp/repo1/approved-repos.json",
             output,
         )
 

@@ -6,6 +6,7 @@ import argparse
 import json
 import math
 import re
+import shlex
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -18,7 +19,7 @@ from repolens.security.redaction import redact_tokens
 
 from .config import load_config
 from .data.errors import ArtifactError
-from .discovery.gh import DEFAULT_GH_LIMIT, MAX_GH_LIMIT
+from .discovery.gh import DEFAULT_GH_LIMIT, MAX_GH_LIMIT, parse_repos_option
 from .discovery.pipeline import run_discover
 from .exit_codes import ExitCode, InputError, InternalError
 
@@ -62,7 +63,8 @@ _STAGE_HELP = {
         ),
         epilog=_stage_epilog(
             "nothing else — this is the entry point; local config may add category rules.",
-            "repolens discover --owner <OWNER>",
+            "repolens discover --owner <OWNER>  (or: --owner <OWNER> "
+            '--repos "sentinel-alpha, sentinel-beta")',
             "discovered.json (full tagged list) + repos.candidate.md (checkbox approval file).",
             "review repos.candidate.md, untick any repos you want to exclude, then prepare "
             "approved repo JSON for `repolens scan`.",
@@ -212,12 +214,22 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Directory for discovered.json and repos.candidate.md (default: work).",
             )
             subparser.add_argument(
+                "--repos",
+                metavar="LIST",
+                help=(
+                    "Comma-separated repo names under --owner (spaces around commas "
+                    "are fine). A name list, not a file, unlike scan --repos. When "
+                    "given, only these repos are discovered and --limit is ignored."
+                ),
+            )
+            subparser.add_argument(
                 "--limit",
                 type=int,
                 default=DEFAULT_GH_LIMIT,
                 metavar="N",
                 help=(
-                    f"Maximum repos to ask gh for, 1-{MAX_GH_LIMIT} (default: {DEFAULT_GH_LIMIT})."
+                    f"Maximum repos to ask gh for, 1-{MAX_GH_LIMIT} (default: "
+                    f"{DEFAULT_GH_LIMIT}); applies only to the enumerate path, not --repos."
                 ),
             )
             subparser.add_argument(
@@ -344,12 +356,22 @@ def _stage_stub(args: argparse.Namespace) -> CommandResult:
 
 
 def _discover_command(args: argparse.Namespace) -> CommandResult:
+    repos = parse_repos_option(args.repos) if args.repos is not None else None
     result = run_discover(
         owner=args.owner,
         work_root=args.work_root,
         config=args.runtime_config,
         limit=args.limit,
+        repos=repos,
         force_candidate=args.force,
+    )
+    # Remember the chosen work-root so the next step is copy-pasteable after
+    # the approval JSON has been prepared from the candidate checklist.
+    work_root = Path(args.work_root)
+    scan_command = (
+        "repolens scan "
+        f"--work-root {shlex.quote(str(work_root))} "
+        f"--repos {shlex.quote(str(work_root / 'approved-repos.json'))}"
     )
     return CommandResult(
         CommandStatus.SUCCESS,
@@ -359,8 +381,7 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
             f"Created {result.discovered_path} and {result.candidate_path}.\n"
             f"Manual step: open {result.candidate_path}, untick any repos you want "
             "to exclude, and prepare an approved repos JSON file.\n"
-            f"Next CLI stage: repolens scan --work-root {args.work_root} "
-            "--repos <APPROVED_REPOS_JSON>"
+            f"Next CLI stage: {scan_command}"
         ),
     )
 

@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 33,
+    "expected_active_count": 34,
     "markers": [
         "offline",
         "security",
@@ -107,6 +107,12 @@
             "id": "p1_discover_dash_prefixed_owner_rejected_before_gh",
             "status": "active",
             "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_dash_prefixed_owner_rejected_before_gh",
+            "guardrail": "discover_argument_hardening"
+        },
+        {
+            "id": "p1_discover_repos_flag_injection_rejected_before_gh",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_repos_flag_injection_rejected_before_gh",
             "guardrail": "discover_argument_hardening"
         },
         {

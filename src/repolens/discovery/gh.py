@@ -1,4 +1,4 @@
-"""``gh repo list`` orchestration for discovery."""
+"""``gh repo list`` and ``gh repo view`` orchestration for discovery."""
 
 from __future__ import annotations
 
@@ -29,6 +29,9 @@ DEFAULT_GH_STDOUT_MAX_BYTES = 4 * 1024 * 1024
 DEFAULT_GH_LIMIT = 1000
 MAX_GH_LIMIT = 5000
 OWNER_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
+# GitHub repo names: first char alnum/underscore, remainder alnum plus . _ - .
+REPO_NAME_PATTERN = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9._-]*$")
+MAX_REPO_NAME_LENGTH = 100
 
 
 @dataclass(frozen=True)
@@ -110,6 +113,129 @@ def validate_owner(owner: str) -> str:
     return normalized_owner
 
 
+def validate_repo_name(name: str) -> str:
+    """Return a normalized repo name that cannot be parsed as a ``gh`` flag.
+
+    Mirrors :func:`validate_owner`'s fail-before-``gh`` posture: every rejection
+    raises :class:`InputError` before any subprocess runs.
+    """
+
+    normalized = name.strip()
+    if not normalized:
+        raise InputError("discover --repos entries must be non-empty repo names")
+    if "/" in normalized:
+        raise InputError(
+            "discover --repos takes repo names under a single --owner; cross-owner "
+            "slugs like 'owner/name' are out of scope; pass one owner via --owner"
+        )
+    if normalized in (".", ".."):
+        raise InputError("discover --repos entries must not be '.' or '..'")
+    if normalized[0] in "-.":
+        raise InputError("discover --repos entries must not begin with a dash or dot")
+    if not REPO_NAME_PATTERN.fullmatch(normalized):
+        raise InputError(
+            "discover --repos entries must use letters, numbers, and "
+            "non-leading dots, underscores, or hyphens"
+        )
+    if len(normalized) > MAX_REPO_NAME_LENGTH:
+        raise InputError(
+            f"discover --repos entries must be at most {MAX_REPO_NAME_LENGTH} characters"
+        )
+    return normalized
+
+
+def parse_repos_option(raw: str) -> tuple[str, ...]:
+    """Parse a comma-separated ``--repos`` value into validated repo names.
+
+    Splits on ``,``, strips each token, drops empties, validates each surviving
+    token via :func:`validate_repo_name`, and dedupes preserving first-seen order.
+    An empty result raises :class:`InputError`.
+    """
+
+    seen: list[str] = []
+    for token in raw.split(","):
+        stripped = token.strip()
+        if not stripped:
+            continue
+        name = validate_repo_name(stripped)
+        if name not in seen:
+            seen.append(name)
+    if not seen:
+        raise InputError("discover --repos requires at least one repo name")
+    return tuple(seen)
+
+
+def build_repo_view_command(owner: str, name: str) -> list[str]:
+    """Build the argv list for ``gh repo view`` without shell expansion."""
+
+    return [
+        "gh",
+        "repo",
+        "view",
+        f"{owner}/{name}",
+        "--json",
+        ",".join(GH_REPO_LIST_FIELDS),
+    ]
+
+
+def fetch_repositories(
+    owner: str,
+    names: Sequence[str],
+    *,
+    runner: GhRunner | None = None,
+    timeout_seconds: float = DEFAULT_GH_TIMEOUT_SECONDS,
+    stdout_max_bytes: int = DEFAULT_GH_STDOUT_MAX_BYTES,
+) -> tuple[GhRepository, ...]:
+    """Return the named repositories under ``owner`` via one ``gh repo view`` each.
+
+    Reuses the same guardrails as :func:`list_repositories` (owner validation,
+    timeout, stdout cap, JSON-depth scan, token redaction, and ``_parse_repository``)
+    and preserves input order.
+    """
+
+    normalized_owner = validate_owner(owner)
+    normalized_names = tuple(validate_repo_name(name) for name in names)
+    if not normalized_names:
+        raise InputError("discover --repos requires at least one repo name")
+    if len(normalized_names) > MAX_GH_LIMIT:
+        raise InputError(f"discover --repos accepts at most {MAX_GH_LIMIT} repo names")
+
+    execute = runner or subprocess_gh_runner
+    repositories: list[GhRepository] = []
+    for name in normalized_names:
+        command = build_repo_view_command(normalized_owner, name)
+        try:
+            result = execute(command, timeout_seconds)
+        except subprocess.TimeoutExpired as exc:
+            raise InputError("gh repo view timed out") from exc
+        except OSError as exc:
+            raise InputError("gh repo view could not be started") from exc
+
+        stdout = result.stdout.encode("utf-8", errors="replace")
+        if len(stdout) > stdout_max_bytes:
+            raise LimitExceeded(f"gh repo view output exceeds {stdout_max_bytes} bytes")
+        if result.returncode != 0:
+            # A token-shaped name passes REPO_NAME_PATTERN, so redact the whole
+            # message before it reaches the user. Do not relay gh's raw owner/repo
+            # stderr here; the CLI path redactor intentionally scrubs slash-shaped
+            # text, which makes missing-repo messages harder to read.
+            message = (
+                f"discover --repos could not resolve repo name '{name}' under --owner; "
+                "check the spelling and repository access"
+            )
+            raise InputError(redact_tokens(message))
+
+        scan_depth(stdout, MAX_JSON_DEPTH)
+        try:
+            parsed = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise InputError("gh repo view did not return valid JSON") from exc
+        repositories.append(
+            _parse_repository(parsed, normalized_owner, command_label="gh repo view")
+        )
+    return tuple(repositories)
+
+
 def subprocess_gh_runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
     """Run ``gh`` with captured output and no shell."""
 
@@ -123,11 +249,13 @@ def subprocess_gh_runner(command: Sequence[str], timeout_seconds: float) -> GhRu
     return GhRunResult(completed.returncode, completed.stdout, completed.stderr)
 
 
-def _parse_repository(item: object, owner: str) -> GhRepository:
+def _parse_repository(
+    item: object, owner: str, *, command_label: str = "gh repo list"
+) -> GhRepository:
     if not isinstance(item, dict):
-        raise InputError("gh repo list entries must be objects")
+        raise InputError(f"{command_label} entries must be objects")
 
-    name = _required_text(item, "name")
+    name = _required_text(item, "name", command_label=command_label)
     name_with_owner = _text(item.get("nameWithOwner")) or f"{owner}/{name}"
     return GhRepository(
         name=name,
@@ -140,10 +268,12 @@ def _parse_repository(item: object, owner: str) -> GhRepository:
     )
 
 
-def _required_text(item: dict[object, object], key: str) -> str:
+def _required_text(
+    item: dict[object, object], key: str, *, command_label: str = "gh repo list"
+) -> str:
     value = _text(item.get(key))
     if not value:
-        raise InputError(f"gh repo list entry missing {key}")
+        raise InputError(f"{command_label} entry missing {key}")
     return value
 
 

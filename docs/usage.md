@@ -75,15 +75,27 @@ lands in CI logs.
 
 ## Configuration (all untracked / local)
 
-- **Owner** — supplied at runtime (`--owner` / env); never committed.
-- **Category taxonomy** — how repos are bucketed (e.g. `product`, `internal`).
-- **License policy** — the ALLOW / REVIEW / BLOCK / UNKNOWN tiers.
-- **Report selection + header** — which categories land in the main report, and the
-  org/legal boilerplate (injected at render time).
-- **Name-hygiene denylist** — private owner/repo/company names used only by the
-  local hygiene guard; never committed and never stored as a public GitHub variable.
+Pass a local config file with the global `--config` option before the stage name:
 
-F1 local config is loaded only from untracked local files. Precedence is:
+```bash
+repolens --config ./repolens.local.toml discover --owner <OWNER>
+```
+
+Owner is supplied at runtime (`--owner` / env) and never committed. Discover taxonomy
+config is loaded from untracked local config files. The private name-hygiene denylist is
+also local and untracked, but it uses the dedicated `.name-hygiene.local.json` file shown
+below.
+
+The runtime config loader supports three formats: JSON, TOML, and YAML. YAML has two
+file extensions, so there are four filename patterns, not four different config models:
+
+- `*.local.json`
+- `*.local.toml`
+- `*.local.yaml`
+- `*.local.yml`
+
+Prefer one local config file unless you intentionally need layered overrides. When
+multiple local config files exist, precedence is:
 
 1. `--config <path>`
 2. `*.local.toml`
@@ -93,6 +105,71 @@ F1 local config is loaded only from untracked local files. Precedence is:
 
 On key collisions, the higher-precedence source replaces the lower-precedence value at
 that key path; non-colliding keys are preserved.
+
+`discover.taxonomy` is the optional set of rules that assigns each discovered repository
+to a category. Categories are labels for review/reporting; they do not remove a repo from
+the workflow.
+
+Supported taxonomy keys:
+
+| Key | Meaning |
+|-----|---------|
+| `default_category` | Category used when no other rule matches. If omitted, this is `uncategorized`. |
+| `explicit` | Exact repo-name matches. Keys can be `owner/repo` or just `repo`; values are categories. |
+| `patterns` | Repo-name glob rules, checked after `explicit`. Each rule has `glob` and `category`. |
+| `topics` | GitHub repository topic matches. Topics are the tags shown on a GitHub repo page and returned by `gh repo view --json repositoryTopics`. |
+| `dead` | Exact repo-name matches that should be hard-excluded with the configured reason. Use only for retired/dead repos. |
+
+Matching order for categories is `explicit`, then `patterns`, then `topics`, then
+`default_category`. The authoritative parser is
+[`src/repolens/discovery/taxonomy.py`](../src/repolens/discovery/taxonomy.py).
+
+Example taxonomy in `repolens.local.toml`:
+
+```toml
+[discover.taxonomy]
+default_category = "uncategorized"
+
+[discover.taxonomy.explicit]
+"sentinel-owner/sentinel-alpha" = "runtime-bucket"
+
+[[discover.taxonomy.patterns]]
+glob = "tool-*"
+category = "tooling-bucket"
+
+[discover.taxonomy.topics]
+mobile = "mobile-bucket"
+
+[discover.taxonomy.dead]
+sentinel-retired = "retired by local approval"
+```
+
+The same taxonomy in `repolens.local.json`:
+
+```json
+{
+  "discover": {
+    "taxonomy": {
+      "default_category": "uncategorized",
+      "explicit": {
+        "sentinel-owner/sentinel-alpha": "runtime-bucket"
+      },
+      "patterns": [
+        {
+          "glob": "tool-*",
+          "category": "tooling-bucket"
+        }
+      ],
+      "topics": {
+        "mobile": "mobile-bucket"
+      },
+      "dead": {
+        "sentinel-retired": "retired by local approval"
+      }
+    }
+  }
+}
+```
 
 The CI name-hygiene step uses only an invented sentinel token, proving the guard is
 wired without publishing private names. For local or deployment-specific checks, put
@@ -211,20 +288,23 @@ uses the normal `repolens discover -> scan -> resolve -> report` commands above.
 ### Discover
 
 `discover` is the first shipped pipeline stage. It invokes `gh repo list` for the
-runtime owner you provide, categorizes the returned repositories from local taxonomy
-config, and writes both the structured stage artifact and the human approval file:
+runtime owner you provide, or `gh repo view` for an explicit comma-separated repo-name
+list under that owner. It categorizes the returned repositories from local taxonomy
+config and writes both the structured stage artifact and the human approval file:
 
 ```bash
 repolens discover --owner <OWNER> --work-root work
+repolens discover --owner <OWNER> --repos "sentinel-alpha, sentinel-beta" --work-root work
 ```
 
 Useful flags:
 
 | Flag | Meaning |
 |------|---------|
-| `--owner <OWNER>` | Runtime owner/org passed to `gh repo list`; never commit it. |
+| `--owner <OWNER>` | Runtime owner/org passed to `gh`; never commit it. |
+| `--repos "<NAME>, <NAME>"` | Optional comma-separated repo name list under `--owner`; spaces around commas are fine. This is a name list, not the JSON file used by `scan --repos`. Cross-owner slugs containing `/` are rejected because `discovered.json` records one owner. |
 | `--work-root <DIR>` | Output directory for `discovered.json` and `repos.candidate.md`; default `work`. |
-| `--limit <N>` | Maximum repositories requested from `gh`; default `1000`, max `5000`. |
+| `--limit <N>` | Maximum repositories requested from `gh repo list`; default `1000`, max `5000`. Ignored when `--repos` is supplied. |
 | `--force` | Overwrite an existing `repos.candidate.md` approval file. |
 
 Taxonomy is optional and lives only in untracked local config. Unmatched repositories use
@@ -249,7 +329,9 @@ overwrite it unless you pass `--force`, so existing approval checkboxes are not 
 discarded. Candidate repositories default to checked, so every checked repo will be
 scanned. Untick repos only when you deliberately want to exclude them, and consider
 adding a note such as `— excluded: <reason>`. Use `--force` only when you intentionally
-want a fresh approval file.
+want a fresh approval file. After a successful run, the CLI prints a concrete
+`repolens scan` command using the same `--work-root` and the expected
+`approved-repos.json` path.
 
 ```json
 {
