@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import subprocess
 import unittest
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
 from repolens import cli
@@ -42,15 +42,24 @@ class CliTests(unittest.TestCase):
                 repository_count=1,
                 candidate_count=1,
                 hard_exclusion_count=0,
+                discovered_path="work/discovered.json",
+                candidate_path="work/repos.candidate.md",
             )
 
-            code = cli.main(["discover", "--owner", "sentinel-owner", "--work-root", "work"])
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main(["discover", "--owner", "sentinel-owner", "--work-root", "work"])
 
         self.assertEqual(code, 0)
         run_discover.assert_called_once()
         self.assertEqual(run_discover.call_args.kwargs["owner"], "sentinel-owner")
         self.assertEqual(run_discover.call_args.kwargs["config"], config)
         self.assertFalse(run_discover.call_args.kwargs["force_candidate"])
+        output = stdout.getvalue()
+        self.assertIn("Discovered 1 repositories", output)
+        self.assertIn("work/discovered.json", output)
+        self.assertIn("work/repos.candidate.md", output)
+        self.assertIn("Next: review", output)
 
     def test_discover_force_routes_to_real_handler(self) -> None:
         config = cli.load_config(".", None)
@@ -62,6 +71,8 @@ class CliTests(unittest.TestCase):
                 repository_count=1,
                 candidate_count=1,
                 hard_exclusion_count=0,
+                discovered_path="work/discovered.json",
+                candidate_path="work/repos.candidate.md",
             )
 
             code = cli.main(

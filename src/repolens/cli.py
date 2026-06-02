@@ -143,6 +143,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
         args.runtime_config = load_config(Path.cwd(), args.config)
         result = args.handler(args)
+        if result.message:
+            print(result.message)
         return _exit_code_for_result(result)
     except SystemExit as exc:
         return int(exc.code) if isinstance(exc.code, int) else int(ExitCode.USAGE_OR_INPUT_ERROR)
@@ -171,9 +173,10 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
     return CommandResult(
         CommandStatus.SUCCESS,
         (
-            f"discovered {result.repository_count} repositories; "
-            f"{result.candidate_count} candidates, "
-            f"{result.hard_exclusion_count} hard exclusions"
+            f"Discovered {result.repository_count} repositories: "
+            f"{result.candidate_count} candidates, {result.hard_exclusion_count} hard exclusions.\n"
+            f"Created {result.discovered_path} and {result.candidate_path}.\n"
+            f"Next: review {result.candidate_path}, tick approved repos, then continue to scan."
         ),
     )
 
