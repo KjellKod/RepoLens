@@ -1,0 +1,25 @@
+tests/canaries/security/test_token_canaries.py
+  s_4eedbf12295e64::t_e1fe252a1baa77 11-14,16-31
+tests/canaries/security/test_network_canaries.py
+  s_4eedbf12295e64::t_e1fe252a1baa77 38-43
+src/repolens/security/secrets.py
+  s_4eedbf12295e64::t_e1fe252a1baa77 6,11-13,27-39
+src/repolens/security/network.py
+  s_4eedbf12295e64::t_e1fe252a1baa77 28-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2e1567367c037a5685188bbac5e52c0f10fc9122",
+  "prompts": {},
+  "sessions": {
+    "s_4eedbf12295e64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85cc-c4f4-7032-b00d-03d77ce780fc",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
