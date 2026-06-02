@@ -1,0 +1,26 @@
+docs/roadmap/rpl_roadmap.md
+  s_bb8787cf071d6e::t_b39a7052b3d396 150-178
+  s_bb8787cf071d6e::t_816b577e8d36f5 44-49
+  s_bb8787cf071d6e::t_7f44d48a882bc6 85-88,90
+  s_bb8787cf071d6e::t_b769880e024a9a 191-204
+  s_bb8787cf071d6e::t_3a9ad23561a605 117-145
+  s_bb8787cf071d6e::t_98ec7f6f2713ff 65-70
+  s_bb8787cf071d6e::t_dc714095eda7c0 76
+  s_bb8787cf071d6e::t_dce43c82c9a379 99-103,108-109,111-112
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "11c9cf05695980faeaee18282cda31e65d4dfa12",
+  "prompts": {},
+  "sessions": {
+    "s_bb8787cf071d6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c1f98f3-95b8-4b2c-84ce-cb4d9a149af9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
