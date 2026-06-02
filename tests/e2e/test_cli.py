@@ -16,7 +16,15 @@ from repolens.data import store
 
 class CliTests(unittest.TestCase):
     def test_help_returns_success(self) -> None:
-        self.assertEqual(cli.main(["--help"]), 0)
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = cli.main(["--help"])
+
+        self.assertEqual(code, 0)
+        help_text = stdout.getvalue()
+        self.assertIn("Put global options before the stage name", help_text)
+        self.assertIn("repolens --config ./repolens.local.toml discover --owner <OWNER>", help_text)
+        self.assertIn("Use stage options such as --work-root for output directories", help_text)
 
     def test_each_stage_help_is_actionable(self) -> None:
         expected_stages = {

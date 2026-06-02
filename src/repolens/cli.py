@@ -142,6 +142,12 @@ _DESCRIPTION = (
 )
 
 _EPILOG = (
+    "global options:\n"
+    "  Put global options before the stage name, e.g.\n"
+    "    repolens --config ./repolens.local.toml discover --owner <OWNER>\n"
+    "  Use stage options such as --work-root for output directories; --config is\n"
+    "  only for local config files.\n"
+    "\n"
     "typical run:\n"
     "  1. repolens discover --owner <OWNER>                     find + approve the repos\n"
     "  2. repolens scan --work-root work --repos approved-repos.json\n"
@@ -169,7 +175,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         metavar="PATH",
-        help="Path to an untracked local config file (owner, categories, policy).",
+        help="Global option before <stage>: path to an untracked local config file.",
     )
     subparsers = parser.add_subparsers(
         dest="command",
