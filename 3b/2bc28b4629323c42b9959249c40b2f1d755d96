@@ -1,0 +1,25 @@
+.github/scripts/codex_review.py
+  s_5af9159cccdbdc::t_6ce7e71a7f7d8e 1217-1218,1220
+src/repolens/data/store.py
+  s_5af9159cccdbdc::t_e7cc15e937c358 150,169,201,238,261-266
+tests/canaries/security/test_token_canaries.py
+  s_5af9159cccdbdc::t_d55af2e27f15ec 5,37-39,62-65
+tests/canaries/security/test_output_canaries.py
+  s_5af9159cccdbdc::t_915f27894490a7 10,50-53,55,78-81,83,190-200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "3b2bc28b4629323c42b9959249c40b2f1d755d96",
+  "prompts": {},
+  "sessions": {
+    "s_5af9159cccdbdc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e894e-e84d-7ce2-844c-c22a5e4ae471",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
