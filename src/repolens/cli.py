@@ -56,16 +56,16 @@ def _stage_epilog(before: str, example: str, output: str, next_step: str) -> str
 # Per-stage help, shown in `repolens --help` and each stage's own --help.
 _STAGE_HELP = {
     "discover": StageHelp(
-        help="Find and categorize the repos under an owner; you approve the list.",
+        help="Find and categorize the repos under an owner; you confirm the list.",
         description=(
-            "Stage 1/6 — find every repo under an owner and categorize it; you approve the list."
+            "Stage 1/6 — find every repo under an owner and categorize it; you confirm the list."
         ),
         epilog=_stage_epilog(
             "nothing else — this is the entry point; local config may add category rules.",
             "repolens discover --owner <OWNER>",
             "discovered.json (full tagged list) + repos.candidate.md (checkbox approval file).",
-            "tick the repos to include in repos.candidate.md, then prepare approved "
-            "repo JSON for `repolens scan`.",
+            "review repos.candidate.md, untick any repos you want to exclude, then prepare "
+            "approved repo JSON for `repolens scan`.",
         ),
     ),
     "scan": StageHelp(
@@ -357,8 +357,8 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
             f"Discovered {result.repository_count} repositories: "
             f"{result.candidate_count} candidates, {result.hard_exclusion_count} hard exclusions.\n"
             f"Created {result.discovered_path} and {result.candidate_path}.\n"
-            f"Manual step: open {result.candidate_path}, tick approved repos, and prepare "
-            "an approved repos JSON file.\n"
+            f"Manual step: open {result.candidate_path}, untick any repos you want "
+            "to exclude, and prepare an approved repos JSON file.\n"
             f"Next CLI stage: repolens scan --work-root {args.work_root} "
             "--repos <APPROVED_REPOS_JSON>"
         ),

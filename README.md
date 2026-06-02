@@ -64,7 +64,7 @@ with **anchored evidence under human approval**, never guessed.
 ## Usage
 
 ```
-repolens discover --owner <OWNER>                         # find + categorize repos; you approve the list
+repolens discover --owner <OWNER>                         # find + categorize repos; untick to exclude
 repolens scan --work-root work --repos approved-repos.json # inventory dependencies across all languages
 repolens resolve --work-root work --repo-ref <REPO_REF>    # resolve licenses cheapest-source-first
 repolens flag                                             # planned: policy + shortlist
