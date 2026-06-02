@@ -58,6 +58,14 @@ def test_inventory_rejects_empty_version(inventory: dict[str, object]) -> None:
         validate_artifact(inventory, "inventory")
 
 
+def test_sbom_allows_unversioned_artifact(sbom: dict[str, object]) -> None:
+    artifacts = sbom["artifacts"]
+    assert isinstance(artifacts, list)
+    del artifacts[0]["version"]
+
+    validate_artifact(sbom, "sbom")
+
+
 def test_shortlist_open_count_must_match_open_items(shortlist: dict[str, object]) -> None:
     shortlist["open_count"] = 0
 

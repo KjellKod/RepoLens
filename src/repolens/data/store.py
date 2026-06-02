@@ -30,9 +30,9 @@ def repo_dir(work_root: str | Path, repo_ref: str) -> Path:
 
 
 def _repo_ref_dirname(repo_ref: str) -> str:
+    if repo_ref in {"", ".", ".."}:
+        raise ValueError("repo_ref must not be empty, '.' or '..'")
     encoded = quote(repo_ref, safe="")
-    if not encoded:
-        raise ValueError("repo_ref must not be empty")
     return encoded
 
 
@@ -145,7 +145,10 @@ def _write_json_artifact(
     redacted = redact_tokens(value)
     validate_artifact(redacted, artifact_name)
     path = _artifact_path(work_root, artifact_name, repo_ref)
-    atomic_write_json(path, redacted)
+    data = _json_bytes(redacted)
+    _check_bytes(data, max_bytes_for(artifact_name), path)
+    scan_depth(data, MAX_JSON_DEPTH)
+    atomic_write_bytes(path, data)
     return path
 
 
@@ -162,7 +165,8 @@ def write_resolved(
         validate_artifact(redacted, "resolved")
         stamped.append(redacted)
     path = _artifact_path(work_root, "resolved", repo_ref)
-    atomic_write_ndjson(path, stamped)
+    data = _checked_ndjson_bytes(path, stamped)
+    atomic_write_bytes(path, data)
     return path
 
 
@@ -202,7 +206,7 @@ def iter_resolved(
     """Yield validated resolved records from an NDJSON file."""
 
     artifact = Path(path)
-    byte_cap = max_bytes or max_bytes_for("resolved")
+    byte_cap = max_bytes if max_bytes is not None else max_bytes_for("resolved")
     total_bytes = 0
     with artifact.open("rb") as handle:
         for index, line in enumerate(handle, start=1):
@@ -251,6 +255,25 @@ def _parse_error_message(exc: UnicodeDecodeError | json.JSONDecodeError) -> str:
 def _read_capped_bytes(path: Path, max_bytes: int) -> bytes:
     with path.open("rb") as handle:
         data = handle.read(max_bytes + 1)
+    _check_bytes(data, max_bytes, path)
+    return data
+
+
+def _checked_ndjson_bytes(path: Path, records: list[dict[str, Any]]) -> bytes:
+    if len(records) > MAX_NDJSON_RECORDS:
+        raise LimitExceeded(f"{path} exceeds {MAX_NDJSON_RECORDS} records")
+    lines: list[bytes] = []
+    for index, record in enumerate(records, start=1):
+        line = _json_bytes(record).rstrip(b"\n")
+        if len(line) > MAX_NDJSON_LINE_BYTES:
+            raise LimitExceeded(f"{path}:{index} exceeds {MAX_NDJSON_LINE_BYTES} bytes")
+        scan_depth(line, MAX_JSON_DEPTH)
+        lines.append(line)
+    data = b"\n".join(lines) + (b"\n" if lines else b"")
+    _check_bytes(data, max_bytes_for("resolved"), path)
+    return data
+
+
+def _check_bytes(data: bytes, max_bytes: int, path: Path) -> None:
     if len(data) > max_bytes:
         raise LimitExceeded(f"{path} exceeds {max_bytes} bytes")
-    return data

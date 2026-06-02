@@ -61,3 +61,13 @@ def test_invalid_utf8_resolved_line_raises_corrupt_artifact(tmp_path: Path) -> N
 
     with pytest.raises(CorruptArtifactError):
         list(iter_resolved(path))
+
+
+def test_explicit_zero_byte_cap_rejected(
+    tmp_path: Path, resolved_record: dict[str, object]
+) -> None:
+    path = tmp_path / "resolved.ndjson"
+    path.write_text(json.dumps(resolved_record), encoding="utf-8")
+
+    with pytest.raises(LimitExceeded):
+        list(iter_resolved(path, max_bytes=0))

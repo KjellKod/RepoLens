@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from repolens.data.store import (
     iter_resolved,
     read_inventory,
@@ -40,5 +42,13 @@ def test_repo_ref_is_encoded_as_single_directory(tmp_path: Path, sbom: dict[str,
 
     assert path == tmp_path / "work" / "..%2Fnested%2Fname" / "sbom.syft.json"
     assert path.exists()
-    assert not (tmp_path.parent / "nested").exists()
+    assert not (tmp_path / "nested").exists()
     assert read_sbom(tmp_path, repo_ref)["repo"] == repo_ref
+
+
+@pytest.mark.parametrize("repo_ref", [".", ".."])
+def test_repo_ref_rejects_dot_path_segments(
+    tmp_path: Path, repo_ref: str, sbom: dict[str, object]
+) -> None:
+    with pytest.raises(ValueError):
+        write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})

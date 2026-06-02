@@ -43,7 +43,7 @@ CLASSIC_GITHUB_TOKEN_RE = re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b")
 FINE_GRAINED_GITHUB_TOKEN_RE = re.compile(r"\bgithub_pat_[A-Za-z0-9_]{20,}\b")
 URL_RE = re.compile(r"\bhttps?://[^\s<>)\"']+", re.IGNORECASE)
 KEYED_DOMAIN_RE = re.compile(
-    r"\b(?:domain|host|hostname|homepage|site|url|uri|website)\b"
+    r"['\"]?\b(?:domain|host|hostname|homepage|site|url|uri|website)\b['\"]?"
     r"\s*[:=]\s*['\"]?(?P<value>(?:https?://)?[A-Za-z0-9.-]+\.[A-Za-z]{2,})",
     re.IGNORECASE,
 )
@@ -113,7 +113,7 @@ def structural_findings(path: Path, text: str) -> list[Finding]:
     ):
         for match in regex.finditer(text):
             findings.append(
-                Finding(path, line_number(text, match.start()), check, match.group(0)[:12])
+                Finding(path, line_number(text, match.start()), check, "redacted-token")
             )
 
     if not is_structural_candidate(path):

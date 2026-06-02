@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from repolens.data.errors import CorruptArtifactError, LimitExceeded
-from repolens.data.store import load_json_capped
+from repolens.data.store import load_json_capped, write_inventory, write_resolved
 
 
 def test_oversize_file_rejected_before_parse(
@@ -56,3 +56,24 @@ def test_invalid_utf8_json_raises_corrupt_artifact(tmp_path: Path) -> None:
 
     with pytest.raises(CorruptArtifactError):
         load_json_capped(path, max_bytes=10_000, max_depth=64)
+
+
+def test_write_json_artifact_enforces_caps(
+    tmp_path: Path, inventory: dict[str, object], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("repolens.data.store.max_bytes_for", lambda _: 8)
+
+    with pytest.raises(LimitExceeded):
+        write_inventory(tmp_path, inventory)
+
+
+def test_write_resolved_enforces_caps(
+    tmp_path: Path,
+    repo_ref: str,
+    resolved_record: dict[str, object],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("repolens.data.store.max_bytes_for", lambda _: 8)
+
+    with pytest.raises(LimitExceeded):
+        write_resolved(tmp_path, repo_ref, [resolved_record])

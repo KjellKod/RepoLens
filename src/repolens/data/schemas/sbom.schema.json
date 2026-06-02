@@ -22,10 +22,10 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["name", "version", "type"],
+        "required": ["name", "type"],
         "properties": {
           "name": {"type": "string", "minLength": 1},
-          "version": {"type": "string", "minLength": 1},
+          "version": {"type": ["string", "null"]},
           "type": {"type": "string", "minLength": 1},
           "purl": {"type": "string"},
           "licenses": {"type": "array", "items": {"type": "string"}},
