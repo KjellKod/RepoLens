@@ -8,6 +8,7 @@ import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from repolens.data.errors import CorruptArtifactError, LimitExceeded, SchemaValidationError
 from repolens.data.limits import (
@@ -26,7 +27,14 @@ from repolens.data.validation import validate_artifact
 def repo_dir(work_root: str | Path, repo_ref: str) -> Path:
     """Return the per-repository artifact directory."""
 
-    return Path(work_root) / "work" / repo_ref
+    return Path(work_root) / "work" / _repo_ref_dirname(repo_ref)
+
+
+def _repo_ref_dirname(repo_ref: str) -> str:
+    encoded = quote(repo_ref, safe="")
+    if not encoded:
+        raise ValueError("repo_ref must not be empty")
+    return encoded
 
 
 def _artifact_path(work_root: str | Path, artifact_name: str, repo_ref: str | None = None) -> Path:
@@ -112,8 +120,9 @@ def load_json_capped(
         return json.loads(raw)
     except RecursionError as exc:
         raise LimitExceeded(f"{artifact} exceeds JSON depth limit {max_depth}") from exc
-    except json.JSONDecodeError as exc:
-        raise CorruptArtifactError(f"{artifact} is not valid JSON: {exc.msg}") from exc
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        message = f"{artifact} is not valid JSON: {_parse_error_message(exc)}"
+        raise CorruptArtifactError(message) from exc
 
 
 def write_sbom(work_root: str | Path, repo_ref: str, value: dict[str, Any]) -> Path:
@@ -209,8 +218,8 @@ def iter_resolved(
                 record = json.loads(line)
             except RecursionError as exc:
                 raise LimitExceeded(f"{artifact}:{index} exceeds JSON depth limit") from exc
-            except json.JSONDecodeError as exc:
-                message = f"{artifact}:{index} is not valid JSON: {exc.msg}"
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                message = f"{artifact}:{index} is not valid JSON: {_parse_error_message(exc)}"
                 raise CorruptArtifactError(message) from exc
             validate_artifact(record, "resolved")
             if not isinstance(record, dict):
@@ -229,3 +238,9 @@ def is_repo_scanned(work_root: str | Path, repo_ref: str) -> bool:
     except (CorruptArtifactError, LimitExceeded, SchemaValidationError, OSError):
         return False
     return True
+
+
+def _parse_error_message(exc: UnicodeDecodeError | json.JSONDecodeError) -> str:
+    if isinstance(exc, json.JSONDecodeError):
+        return exc.msg
+    return exc.reason

@@ -9,6 +9,7 @@ from typing import Any
 REDACTION = "***REDACTED***"
 TOKEN_RE = re.compile(
     r"(ghp_[A-Za-z0-9_]{12,}|gho_[A-Za-z0-9_]{12,}|ghs_[A-Za-z0-9_]{12,}|"
+    r"ghu_[A-Za-z0-9_]{12,}|ghr_[A-Za-z0-9_]{12,}|"
     r"github_pat_[A-Za-z0-9_]{20,})"
 )
 

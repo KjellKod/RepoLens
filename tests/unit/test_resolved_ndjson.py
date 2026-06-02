@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from repolens.data.errors import LimitExceeded, SchemaValidationError
+from repolens.data.errors import CorruptArtifactError, LimitExceeded, SchemaValidationError
 from repolens.data.store import iter_resolved, write_resolved
 
 
@@ -52,4 +52,12 @@ def test_overdeep_resolved_line_rejected_before_parse(
     monkeypatch.setattr("repolens.data.store.json.loads", fail_parse)
 
     with pytest.raises(LimitExceeded):
+        list(iter_resolved(path))
+
+
+def test_invalid_utf8_resolved_line_raises_corrupt_artifact(tmp_path: Path) -> None:
+    path = tmp_path / "resolved.ndjson"
+    path.write_bytes(b'{"name":"\xff"}\n')
+
+    with pytest.raises(CorruptArtifactError):
         list(iter_resolved(path))

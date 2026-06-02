@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from repolens.data.errors import LimitExceeded
+from repolens.data.errors import CorruptArtifactError, LimitExceeded
 from repolens.data.store import load_json_capped
 
 
@@ -44,3 +44,11 @@ def test_within_caps_passes(tmp_path: Path) -> None:
     path.write_text(json.dumps({"items": [{"name": "acme-lib"}]}), encoding="utf-8")
 
     assert load_json_capped(path, max_bytes=10_000, max_depth=64)["items"][0]["name"] == "acme-lib"
+
+
+def test_invalid_utf8_json_raises_corrupt_artifact(tmp_path: Path) -> None:
+    path = tmp_path / "artifact.json"
+    path.write_bytes(b'{"name":"\xff"}')
+
+    with pytest.raises(CorruptArtifactError):
+        load_json_capped(path, max_bytes=10_000, max_depth=64)
