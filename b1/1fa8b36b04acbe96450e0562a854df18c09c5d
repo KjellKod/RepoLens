@@ -1,0 +1,29 @@
+src/repolens/security/content.py
+  s_13521cbbb9b763::t_8e55f809616fb3 21-24,26-29,47,87-90
+src/repolens/security/clone.py
+  s_13521cbbb9b763::t_8e55f809616fb3 101,154,203
+src/repolens/security/name_hygiene.py
+  s_13521cbbb9b763::t_8e55f809616fb3 247,305
+src/repolens/security/parsers.py
+  s_13521cbbb9b763::t_8e55f809616fb3 232,234
+tests/conftest.py
+  s_13521cbbb9b763::t_fe20b87f13b5b7 45
+src/repolens/security/redaction.py
+  s_13521cbbb9b763::t_8e55f809616fb3 32
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b11fa8b36b04acbe96450e0562a854df18c09c5d",
+  "prompts": {},
+  "sessions": {
+    "s_13521cbbb9b763": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85dd-a0e3-7030-ab17-0d49fa04e64d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
