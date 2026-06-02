@@ -35,26 +35,29 @@ binary is ever made executable or run. ScanCode installs via a hash-pinned
 
 ### Name-hygiene gate
 
-The offline CI workflow runs `tools/name_hygiene.py`, which fails the build on any
-forbidden owner/org/company literal. The forbidden names are **never committed**:
-the guard reads them from the `RPL_HYGIENE_DENYLIST` environment variable
-(comma/newline-separated) or from a file named in `RPL_HYGIENE_DENYLIST_FILE`.
+The offline CI workflow runs the single canonical guard,
+`python -m repolens.security.name_hygiene`, which fails the build on any forbidden
+owner/org/company literal. The forbidden names are **never committed**: the guard reads
+them from the `REPOLENS_FORBIDDEN_NAMES` environment / GitHub Actions variable
+(comma/newline-separated) or from a discovered `.name-hygiene.local.json` file.
 
-The guard is **fail-closed**: if no denylist is configured it exits non-zero (a
-config error), so the gate can never pass vacuously. CI supplies a generated
-denylist file for offline smoke coverage. For live owner/org hygiene, configure
-the denylist:
+With `--require-denylist` the guard is **fail-closed**: if no denylist is configured it
+exits non-zero, so the gate can never pass vacuously. For live owner/org hygiene,
+configure the one variable:
 
 ```
 # GitHub -> Settings -> Secrets and variables -> Actions -> Variables
-RPL_HYGIENE_DENYLIST = name1,name2,...        # the real forbidden literals
+REPOLENS_FORBIDDEN_NAMES = name1,name2,...     # the real forbidden literals
 ```
 
 Run it locally the same way (substitute your own forbidden names):
 
 ```
-RPL_HYGIENE_DENYLIST="name1,name2" python3 tools/name_hygiene.py
+REPOLENS_FORBIDDEN_NAMES="name1,name2" python3 -m repolens.security.name_hygiene --require-denylist
 ```
+
+Findings are reported only by a non-reversible `sha256:` token id, so a real name never
+lands in CI logs.
 
 ## Configuration (all untracked / local)
 
