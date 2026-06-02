@@ -1,0 +1,95 @@
+tests/bootstrap/test_pins.py
+  s_fbaf21bc812180::t_f2b7921e154812 1-143
+repolens/bootstrap/syft.py
+  s_fbaf21bc812180::t_18c87f98c3a3e3 16,21
+  s_fbaf21bc812180::t_ce11c91cf85f7e 109-111,113-114,124-136,138-144,146-153,155-156
+  s_fbaf21bc812180::t_3b1376394a7bcc 1-15,17-20,23-108,112,115-123,137,145,154,157-165
+tests/bootstrap/fixtures/acme_clean_tree/acme_example.py
+  s_fbaf21bc812180::t_893ca9003f606b 1-4
+tools/__init__.py
+  s_fbaf21bc812180::t_fef79ef99bd868 1
+repolens/bootstrap/verify.py
+  s_fbaf21bc812180::t_c5fb4d9e0bd342 1-193
+tests/bootstrap/conftest.py
+  s_fbaf21bc812180::t_bd3be21486b3b7 1-153
+tests/bootstrap/test_record.py
+  s_fbaf21bc812180::t_83394c801e9039 1-32,34-56
+tests/bootstrap/test_syft_bootstrap.py
+  s_fbaf21bc812180::t_d923a10b45e7a6 1-153
+tests/bootstrap/test_orchestrate.py
+  s_fbaf21bc812180::t_019a57c090b544 1-164
+repolens/bootstrap/orchestrate.py
+  s_fbaf21bc812180::t_472a6b809e4d7a 1-134
+repolens/bootstrap/errors.py
+  s_fbaf21bc812180::t_f1b6b4c31d12eb 1-53
+tests/bootstrap/test_scancode.py
+  s_fbaf21bc812180::t_5d1095f4f13b63 1-90
+tools/name_hygiene.py
+  s_fbaf21bc812180::t_e3f07f31e2794d 179
+  s_fbaf21bc812180::t_2c9eee201b91bd 1-5,8,12-14,17-31,39,43-113,115,129,131-134,140-141,143-166,180-186,188-192
+  s_fbaf21bc812180::t_526a88cabe88c7 32-38,40-42
+  s_fbaf21bc812180::t_4f5735d21fdc1c 114,116-128,130,135-139,142
+  s_fbaf21bc812180::t_4c2a2be02264b8 6-7,9-11,15-16
+  s_fbaf21bc812180::t_f1c43281bed7f4 167-178,187
+pyproject.toml
+  s_fbaf21bc812180::t_4992ea4312cbfa 1-32,36-42
+  s_fbaf21bc812180::t_4c701cab0cee99 33-35
+tests/bootstrap/test_name_hygiene.py
+  s_fbaf21bc812180::t_27c956c873e790 1-38,41-42,103-147
+  s_fbaf21bc812180::t_ff4503eaa972ba 39-40,43-102
+repolens/bootstrap/pins.toml
+  s_fbaf21bc812180::t_c1ad0bbc0c126b 1-76
+tests/bootstrap/fixtures/seeded_bad_token.txt
+  s_fbaf21bc812180::t_5a4082f68595ad 1-3
+repolens/__init__.py
+  s_fbaf21bc812180::t_fd9a760a2d0e99 1-6
+repolens/bootstrap/scancode.requirements.txt
+  s_fbaf21bc812180::t_ba66aee3ae43e5 1-19
+tests/bootstrap/fixtures/pins.latest.bad.toml
+  s_fbaf21bc812180::t_7581cd8ad42178 1-43
+tests/bootstrap/test_verify.py
+  s_fbaf21bc812180::t_d3731820df46cb 1-124
+repolens/bootstrap/__main__.py
+  s_fbaf21bc812180::t_2214b92df23258 1-82
+tests/bootstrap/test_pins_lint.py
+  s_fbaf21bc812180::t_a4cb3b301bc80b 1-27
+tests/bootstrap/test_cli.py
+  s_fbaf21bc812180::t_77ec59979f2a21 1-49
+repolens/bootstrap/pins.py
+  s_fbaf21bc812180::t_17eac96fd73ad8 1-248
+repolens/bootstrap/scancode.py
+  s_fbaf21bc812180::t_35ded554a4b414 1-118
+tools/pins_lint.py
+  s_fbaf21bc812180::t_bb733a1f2543de 1-59
+tests/bootstrap/fixtures/requirements.nohash.bad.txt
+  s_fbaf21bc812180::t_3b1b85f0ea9e26 1-3
+.github/workflows/offline-ci.yml
+  s_fbaf21bc812180::t_7036c00add992d 1-26,33-60
+  s_fbaf21bc812180::t_59ab6be38bdefe 27-32
+tests/bootstrap/test_supply_chain_canary.py
+  s_fbaf21bc812180::t_e60c8deae6f525 1-73
+repolens/bootstrap/record.py
+  s_fbaf21bc812180::t_6160a64487b6e0 1-30,32-71
+repolens/bootstrap/__init__.py
+  s_fbaf21bc812180::t_9ac9e60a51ad77 1-62
+docs/usage.md
+  s_fbaf21bc812180::t_cfb17d82c7c9ac 15-35
+  s_fbaf21bc812180::t_fd290b711d9756 36-51,53-54,56-57
+  s_fbaf21bc812180::t_38101fa685510e 52,55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "34b93cea1c0589ab6c57221eb7d015a684bb5b74",
+  "prompts": {},
+  "sessions": {
+    "s_fbaf21bc812180": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2de6659c-c0cf-4dce-8313-108f9d3133a8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
