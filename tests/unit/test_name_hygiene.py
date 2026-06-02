@@ -67,7 +67,7 @@ def test_name_hygiene_accepts_ignored_local_config_path(tmp_path: Path) -> None:
 
 
 def test_name_hygiene_discovers_default_local_config_upward(tmp_path: Path) -> None:
-    local_config = tmp_path / "name-hygiene.local.json"
+    local_config = tmp_path / ".name-hygiene.local.json"
     local_config.write_text(
         json.dumps({"forbidden_names": ["invented-upward-token"]}),
         encoding="utf-8",
@@ -115,7 +115,7 @@ def test_name_hygiene_discovers_default_local_config_from_mother_repo(
         check=True,
         capture_output=True,
     )
-    (mother / "Name-Hygiene.Local.Json").write_text(
+    (mother / ".Name-Hygiene.Local.Json").write_text(
         json.dumps({"forbidden_names": ["invented-mother-token"]}),
         encoding="utf-8",
     )

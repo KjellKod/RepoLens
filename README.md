@@ -74,11 +74,13 @@ invented runtime sentinel, and real forbidden names stay in a private gitignored
 }
 ```
 
-Save that as `name-hygiene.local.json` in the main checkout. The guard matches
-case-insensitively and discovers the file from the scan root upward; when running inside
-a linked git worktree, it also checks the main checkout that owns the shared `.git`
-directory. See [docs/usage.md](docs/usage.md#configuration-all-untracked--local) for
-details.
+Save that as `.name-hygiene.local.json` in the main checkout. The leading dot is
+intentional: it keeps the private denylist out of normal directory listings, reducing
+the chance that someone notices the file and force-adds it past `.gitignore`. The guard
+matches case-insensitively and discovers the file from the scan root upward; when
+running inside a linked git worktree, it also checks the main checkout that owns the
+shared `.git` directory. See
+[docs/usage.md](docs/usage.md#configuration-all-untracked--local) for details.
 
 ## Contributing
 

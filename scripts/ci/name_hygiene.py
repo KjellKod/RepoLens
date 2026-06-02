@@ -30,7 +30,7 @@ SKIPPED_SEGMENTS = {
     "node_modules",
     "venv",
 }
-DEFAULT_LOCAL_CONFIG = "name-hygiene.local.json"
+DEFAULT_LOCAL_CONFIG = ".name-hygiene.local.json"
 
 
 @dataclass(frozen=True)

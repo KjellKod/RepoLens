@@ -156,7 +156,9 @@ namespaced per quest (`<ID>__<slug>/`). Consequences:
   own `<ID>__<slug>/` subdir, so concurrent quests don't collide.
 
 Runtime-only local config follows the same placement rule. Put private name-hygiene
-values in the main checkout's gitignored `name-hygiene.local.json`, not in a specific
-worktree. The guard discovers that file from the scan root upward and, for linked
-worktrees, checks the checkout that owns the shared `.git` directory. This keeps public
-CI repo-agnostic while letting local checks enforce real owner/repo/company names.
+values in the main checkout's gitignored `.name-hygiene.local.json`, not in a specific
+worktree. The leading dot is intentional so the private denylist is not visible in a
+normal directory listing. The guard discovers that file from the scan root upward and,
+for linked worktrees, checks the checkout that owns the shared `.git` directory. This
+keeps public CI repo-agnostic while letting local checks enforce real
+owner/repo/company names.
