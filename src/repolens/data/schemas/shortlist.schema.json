@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repolens.example/schemas/shortlist-1.0.json",
+  "title": "RepoLens shortlist",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "open_count", "items"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "open_count": {"type": "integer", "minimum": 0},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["component_ref", "reason", "evidence", "status"],
+        "properties": {
+          "component_ref": {"type": "string", "minLength": 1},
+          "reason": {"type": "string", "enum": ["BLOCK", "REVIEW", "UNKNOWN", "CONFLICT"]},
+          "evidence": {
+            "type": "object",
+            "required": ["source_layer"],
+            "properties": {
+              "source_layer": {
+                "type": "string",
+                "enum": ["syft", "api", "mobile", "scancode", "agent"]
+              },
+              "url": {"type": "string"},
+              "anchor": {"type": "string"},
+              "note": {"type": "string"}
+            },
+            "additionalProperties": false
+          },
+          "candidate_spdx": {"type": ["string", "null"]},
+          "status": {"type": "string", "enum": ["open", "approved", "rejected"]},
+          "decided_by": {"type": ["string", "null"]},
+          "decided_at": {"type": ["string", "null"]},
+          "note": {"type": ["string", "null"]}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

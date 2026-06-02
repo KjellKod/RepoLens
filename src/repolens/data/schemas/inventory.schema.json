@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repolens.example/schemas/inventory-1.0.json",
+  "title": "RepoLens inventory",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "components"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "license",
+          "origin",
+          "scope",
+          "distribution",
+          "versions",
+          "source_url",
+          "modified",
+          "found_in"
+        ],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "license": {"type": "string", "minLength": 1},
+          "origin": {"type": "string", "enum": ["third-party-oss", "first-party"]},
+          "scope": {"type": "string", "enum": ["runtime", "dev", "build", "test", "unknown"]},
+          "distribution": {
+            "type": "string",
+            "enum": ["server", "client-or-mobile", "not-distributed", "unknown"]
+          },
+          "versions": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "source_url": {"type": "string", "minLength": 1},
+          "modified": {
+            "anyOf": [
+              {"type": "boolean"},
+              {"type": "string", "const": "unknown"}
+            ]
+          },
+          "found_in": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "policy_tier": {"type": "string", "enum": ["ALLOW", "REVIEW", "BLOCK", "UNKNOWN"]},
+          "evidence_refs": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

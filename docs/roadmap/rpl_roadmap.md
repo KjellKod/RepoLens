@@ -56,7 +56,7 @@ Deliver F1–F5 and the X1/X2/X3 skeletons.
 **Delivery** (each Quest ticks its ID on merge)
 - [x] F1 — CLI skeleton + config + exit codes
 - [ ] F2 — Security primitives
-- [ ] F3 — Data model + on-disk schemas (the unlock)
+- [x] F3 — Data model + on-disk schemas (the unlock)
 - [ ] F4 — Tool bootstrap (pin + checksum/signature verify)
 - [ ] F5 — Policy engine (SPDX normalize, compound, tiers)
 - [x] X1 — test harness + fixtures + watermark (skeleton)

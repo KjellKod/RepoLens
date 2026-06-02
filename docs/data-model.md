@@ -1,0 +1,75 @@
+# Data Model
+
+RepoLens stores pipeline artifacts as plain JSON or NDJSON on disk. F3 freezes the
+schema version `1.0` contracts for the artifacts later stages read and write.
+
+## Layout
+
+```text
+work/<repo>/sbom.syft.json
+work/<repo>/resolved.ndjson
+inventory.json
+shortlist.json
+```
+
+`<repo>` is an opaque runtime input. Tests and fixtures use invented `acme-*` names
+only. Schema `$id` values use the neutral `https://repolens.example/` domain.
+
+## Schemas
+
+Packaged schemas live in `src/repolens/data/schemas/`:
+
+- `sbom.schema.json` validates the RepoLens-owned subset of Syft output. It is
+  intentionally permissive for tool-specific nested properties.
+- `resolved.schema.json` validates each `resolved.ndjson` line. The NDJSON file has no
+  header row; every line is a resolved item and must carry `schema_version`.
+- `inventory.schema.json` validates the deduped full dataset.
+- `shortlist.schema.json` validates the structured shortlist behind downstream human
+  approval and `shortlist.md` rendering.
+
+Schemas are self-contained and do not perform network `$ref` retrieval. Validation uses
+package-data schemas loaded by `importlib.resources`.
+
+## Store Boundary
+
+`repolens.data.store` is the shared disk boundary:
+
+- Reads enforce byte caps before loading data.
+- JSON reads enforce structural depth before `json.loads`.
+- Every read validates the parsed value against its schema before returning it.
+- Writes redact GitHub-token-shaped strings, validate, and atomically replace the final
+  artifact.
+- `resolved.ndjson` is written as a complete file, not incrementally appended.
+
+## Resume
+
+Resume is conservative. `is_repo_scanned(work_root, repo_ref)` returns true only when
+`work/<repo>/sbom.syft.json` exists and passes a cheap parse plus schema validation.
+Orphan temporary files, missing final artifacts, corrupt JSON, and schema-invalid
+artifacts are treated as incomplete so later stages redo the work.
+
+## Limits
+
+Default artifact caps are:
+
+| Artifact | Byte cap |
+| --- | ---: |
+| `sbom` | 64 MiB |
+| `resolved` | 16 MiB |
+| `inventory` | 16 MiB |
+| `shortlist` | 4 MiB |
+
+JSON depth defaults to 64. `resolved.ndjson` additionally caps lines at 1 MiB and
+records at 1,000,000. These constants are in `repolens.data.limits` and can be
+overridden by store helper parameters where appropriate.
+
+## Name Hygiene
+
+F3 fixtures use invented `acme-*` identifiers and `example` domains. The CI
+name-hygiene guard has two modes:
+
+- Always-on structural checks for token patterns and non-neutral URL shapes.
+- Optional injected denylist from `REPOLENS_FORBIDDEN_NAMES` for real runtime owner or
+  repository names. The real denylist stays untracked.
+
+No owner, repo, or company names are committed as code, tests, fixtures, or docs.

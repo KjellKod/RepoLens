@@ -1,0 +1,69 @@
+"""Safety limits for on-disk RepoLens artifacts."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+from repolens.data.errors import LimitExceeded
+
+SCHEMA_VERSION = "1.0"
+
+MAX_ARTIFACT_BYTES = {
+    "sbom": 64 * 1024 * 1024,
+    "resolved": 16 * 1024 * 1024,
+    "inventory": 16 * 1024 * 1024,
+    "shortlist": 4 * 1024 * 1024,
+}
+MAX_JSON_DEPTH = 64
+MAX_NDJSON_RECORDS = 1_000_000
+MAX_NDJSON_LINE_BYTES = 1 * 1024 * 1024
+
+
+def max_bytes_for(artifact_name: str) -> int:
+    """Return the byte cap for a known artifact type."""
+
+    try:
+        return MAX_ARTIFACT_BYTES[artifact_name]
+    except KeyError as exc:
+        raise ValueError(f"unknown artifact type: {artifact_name}") from exc
+
+
+def check_size(path: Path, max_bytes: int) -> None:
+    """Reject an artifact before reading if it exceeds the byte cap."""
+
+    size = path.stat().st_size
+    if size > max_bytes:
+        raise LimitExceeded(f"{path} is {size} bytes; limit is {max_bytes}")
+
+
+def scan_depth(raw: bytes, max_depth: int = MAX_JSON_DEPTH) -> None:
+    """Reject over-deep JSON before handing bytes to the parser.
+
+    The scanner only tracks structural brackets outside JSON strings. It is not a
+    replacement parser; it is a cheap pre-parser guard that keeps recursion-heavy
+    inputs away from ``json.loads``.
+    """
+
+    depth = 0
+    in_string = False
+    escaped = False
+
+    for byte in raw:
+        char = chr(byte)
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+
+        if char == '"':
+            in_string = True
+        elif char in "[{":
+            depth += 1
+            if depth > max_depth:
+                raise LimitExceeded(f"JSON depth exceeds limit {max_depth}")
+        elif char in "]}":
+            depth = max(0, depth - 1)

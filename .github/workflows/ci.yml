@@ -43,7 +43,7 @@ jobs:
         run: python -m pytest tests/unit
 
       - name: Integration tests
-        run: python -m pytest tests/integration tests/e2e tests/canaries
+        run: python -m pytest tests/integration tests/e2e tests/canaries tests/canary
 
       - name: Security canaries
         run: python scripts/ci/run_security_canaries.py
