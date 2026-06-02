@@ -5,9 +5,9 @@ from pathlib import Path
 import pytest
 
 from scripts.security_canary_gate import (
-    CanaryMatrix,
     MATRIX_PATH,
     ROOT,
+    CanaryMatrix,
     collect_nodeids,
     load_matrix,
     required_runtime_nodeids,
@@ -15,7 +15,6 @@ from scripts.security_canary_gate import (
     validate_collection,
     validate_no_inactive_markers,
 )
-
 
 pytestmark = [pytest.mark.offline, pytest.mark.security]
 
@@ -82,7 +81,10 @@ def test_active_canary_runtime_skip_fails_gate(tmp_path: Path) -> None:
 
 
 def test_name_hygiene_runtime_skip_fails_gate(tmp_path: Path) -> None:
-    nodeid = "tests/security/test_name_hygiene.py::test_offline_name_hygiene_scans_committed_security_surfaces"
+    nodeid = (
+        "tests/security/test_name_hygiene.py::"
+        "test_offline_name_hygiene_scans_committed_security_surfaces"
+    )
     matrix = CanaryMatrix(
         expected_active_count=0,
         active_nodeids=frozenset(),
@@ -92,7 +94,8 @@ def test_name_hygiene_runtime_skip_fails_gate(tmp_path: Path) -> None:
     report.write_text(
         """
         <testsuite>
-          <testcase classname="tests.security.test_name_hygiene" name="test_offline_name_hygiene_scans_committed_security_surfaces">
+          <testcase classname="tests.security.test_name_hygiene"
+                    name="test_offline_name_hygiene_scans_committed_security_surfaces">
             <skipped message="runtime skip" />
           </testcase>
         </testsuite>

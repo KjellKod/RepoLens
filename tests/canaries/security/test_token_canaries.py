@@ -2,7 +2,6 @@ import pytest
 
 from repolens.security.secrets import redact_mapping, redact_text
 
-
 pytestmark = [pytest.mark.offline, pytest.mark.security, pytest.mark.canary]
 
 

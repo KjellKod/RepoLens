@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping, Sequence
 
-
 TOKEN_PATTERNS = (
     re.compile(r"ghp_[A-Za-z0-9_]{20,}"),
     re.compile(r"gho_[A-Za-z0-9_]{20,}"),
@@ -34,6 +33,6 @@ def _redact_value(value: object) -> object:
         return {key: _redact_value(nested) for key, nested in value.items()}
     if isinstance(value, tuple):
         return tuple(_redact_value(item) for item in value)
-    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+    if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
         return [_redact_value(item) for item in value]
     return value

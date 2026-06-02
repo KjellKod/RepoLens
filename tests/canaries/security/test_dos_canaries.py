@@ -2,7 +2,6 @@ import pytest
 
 from repolens.security.limits import TimeBudget, TimeBudgetExceeded
 
-
 pytestmark = [pytest.mark.offline, pytest.mark.security, pytest.mark.canary]
 
 

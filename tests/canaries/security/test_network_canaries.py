@@ -2,7 +2,6 @@ import pytest
 
 from repolens.security.network import validate_fetch_target
 
-
 pytestmark = [pytest.mark.offline, pytest.mark.security, pytest.mark.canary]
 
 
@@ -42,8 +41,11 @@ def test_x2_ssrf_resolve_validate_blocks() -> None:
             resolver=lambda host: ("8.8.8.8",),
         )
 
-    assert validate_fetch_target(
-        "https://safe.example.invalid/license",
-        allowed_hosts=allowed_hosts,
-        resolver=lambda host: ("8.8.8.8",),
-    ) == "https://safe.example.invalid/license"
+    assert (
+        validate_fetch_target(
+            "https://safe.example.invalid/license",
+            allowed_hosts=allowed_hosts,
+            resolver=lambda host: ("8.8.8.8",),
+        )
+        == "https://safe.example.invalid/license"
+    )

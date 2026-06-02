@@ -4,7 +4,6 @@ import pytest
 
 from repolens.security.output import neutralize_csv_cell, sanitize_markdown_href
 
-
 pytestmark = [pytest.mark.offline, pytest.mark.security, pytest.mark.canary]
 
 
@@ -20,9 +19,9 @@ def test_x2_markdown_href_sanitizes() -> None:
         "[x](javascript:alert(1)) "
         "[encoded](jav&#x61;script:alert(1)) "
         "![](https://tracker.example.invalid/pixel) "
-        "<a href=\"data:text/html,abc\">raw</a> "
-        "<a href=\" javascript:alert(1)\">spaced</a> "
-        "<a href=\"jav&#x61;script:alert(1)\">encoded</a> "
+        '<a href="data:text/html,abc">raw</a> '
+        '<a href=" javascript:alert(1)">spaced</a> '
+        '<a href="jav&#x61;script:alert(1)">encoded</a> '
         "<javascript:alert(1)>"
     )
 

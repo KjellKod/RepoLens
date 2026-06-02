@@ -6,7 +6,6 @@ from collections.abc import Callable, Iterable
 from ipaddress import ip_address
 from urllib.parse import urlparse
 
-
 Resolver = Callable[[str], Iterable[str]]
 
 _BLOCKED_HOSTS = {"169.254.169.254"}

@@ -4,7 +4,6 @@ import pytest
 
 from repolens.security.clone import build_hardened_clone_command
 
-
 pytestmark = [pytest.mark.offline, pytest.mark.security, pytest.mark.canary]
 
 

@@ -3,16 +3,15 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import subprocess
 import sys
-import ast
 import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 MATRIX_PATH = Path("tests/canaries/security/canary_matrix.json")
@@ -95,7 +94,10 @@ def validate_collection(matrix: CanaryMatrix, collected: frozenset[str]) -> None
     )
     extra = collected_canary_ids - matrix.active_nodeids
     if extra:
-        raise SystemExit("collected canaries are not registered active matrix entries:\n" + "\n".join(sorted(extra)))
+        raise SystemExit(
+            "collected canaries are not registered active matrix entries:\n"
+            + "\n".join(sorted(extra))
+        )
 
     if not any(nodeid.startswith(EXPECTED_NAME_HYGIENE_NODE) for nodeid in collected):
         raise SystemExit("name hygiene tests were not collected")
@@ -156,9 +158,13 @@ def validate_active_outcomes(
 
     missing = required - seen
     if missing:
-        raise SystemExit("required security tests missing from runtime report:\n" + "\n".join(sorted(missing)))
+        raise SystemExit(
+            "required security tests missing from runtime report:\n" + "\n".join(sorted(missing))
+        )
     if skipped:
-        raise SystemExit("required security tests skipped or xfailed:\n" + "\n".join(sorted(skipped)))
+        raise SystemExit(
+            "required security tests skipped or xfailed:\n" + "\n".join(sorted(skipped))
+        )
 
 
 def run_tests(matrix: CanaryMatrix, required_nodeids: frozenset[str]) -> int:

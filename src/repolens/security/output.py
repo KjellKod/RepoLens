@@ -7,7 +7,6 @@ import re
 import unicodedata
 from urllib.parse import urlparse
 
-
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 _HTML_HREF_RE = re.compile(
     r"<a\b[^>]*\bhref\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^'\"\s>]+))[^>]*>(.*?)</a>",

@@ -7,11 +7,10 @@ from repolens.security.name_hygiene import (
     AllowlistEntry,
     committed_patterns,
     load_forbidden_patterns,
-    scan_repository,
     scan_paths,
+    scan_repository,
     validate_allowlist,
 )
-
 
 pytestmark = [pytest.mark.offline, pytest.mark.security, pytest.mark.name_hygiene]
 

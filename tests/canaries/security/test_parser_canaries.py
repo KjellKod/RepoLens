@@ -10,7 +10,6 @@ from repolens.security.parsers import (
     validate_archive_limits,
 )
 
-
 pytestmark = [pytest.mark.offline, pytest.mark.security, pytest.mark.canary]
 
 
@@ -26,7 +25,9 @@ def test_x2_parse_yaml_safe_load() -> None:
 
 def test_x2_parse_xml_rejects_doctype() -> None:
     with pytest.raises(ValueError, match="unsafe xml"):
-        parse_xml_safe("<!DOCTYPE data [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]><data>&xxe;</data>")
+        parse_xml_safe(
+            "<!DOCTYPE data [<!ENTITY xxe SYSTEM 'file:///etc/passwd'>]><data>&xxe;</data>"
+        )
     with pytest.raises(ValueError, match="unsafe xml"):
         parse_xml_safe(" " * 300 + "<!DOCTYPE data><data />")
 

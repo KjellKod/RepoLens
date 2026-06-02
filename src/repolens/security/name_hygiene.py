@@ -10,7 +10,6 @@ from pathlib import Path
 
 from repolens.security.secrets import TOKEN_PATTERNS
 
-
 _SYNTHETIC_SENTINEL_PARTS = ("x2", "synthetic", "forbidden", "name")
 SYNTHETIC_SENTINEL = "-".join(_SYNTHETIC_SENTINEL_PARTS)
 _SENTINEL_PATTERN = re.compile(re.escape(SYNTHETIC_SENTINEL), re.IGNORECASE)
