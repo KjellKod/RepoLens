@@ -1,0 +1,24 @@
+tests/canaries/test_f1_offline_canaries.py
+  s_589f074de75320::t_4ea3409c7d5d4f 58,60-61
+.github/workflows/ci.yml
+  s_589f074de75320::t_4ea3409c7d5d4f 40-41
+.github/scripts/name_hygiene_guard.py
+  s_589f074de75320::t_7b82a7f776894c 9,58
+  s_589f074de75320::t_4ea3409c7d5d4f 14,34,44-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "1fec118238ad1e6668ef16baef8f624a417fa66b",
+  "prompts": {},
+  "sessions": {
+    "s_589f074de75320": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a4-1493-77d2-9d0b-74175f188b83",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
