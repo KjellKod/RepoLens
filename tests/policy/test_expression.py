@@ -70,6 +70,16 @@ def test_unknown_with_restrictive_exception_does_not_allow_base_tier() -> None:
     assert decision.effective_tier == PolicyTier.BLOCK
 
 
+def test_exception_override_does_not_apply_to_unlisted_block_license() -> None:
+    decision = classify_license_input(
+        "AGPL-3.0-only WITH Autoconf-exception-3.0",
+        policy=load_default_policy(),
+    )
+
+    assert decision.tier == PolicyTier.UNKNOWN
+    assert decision.effective_tier == PolicyTier.BLOCK
+
+
 def test_plus_suffix_is_supported_for_compound_paths() -> None:
     decision = classify_license_input("GPL-2.0+ OR MIT", policy=load_default_policy())
     assert decision.tier == PolicyTier.ALLOW

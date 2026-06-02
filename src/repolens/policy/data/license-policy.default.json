@@ -116,11 +116,6 @@
       "license_id": "GPL-3.0-only",
       "exception_id": "Autoconf-exception-3.0",
       "target_tier": "ALLOW"
-    },
-    {
-      "license_id": null,
-      "exception_id": "Autoconf-exception-3.0",
-      "target_tier": "ALLOW"
     }
   ],
   "caveats": {
