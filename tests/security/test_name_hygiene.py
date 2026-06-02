@@ -42,10 +42,18 @@ def test_offline_name_hygiene_repo_scan_fails_seeded_bad_content(tmp_path: Path)
     usage = tmp_path / "docs" / "usage.md"
     usage.parent.mkdir()
     usage.write_text(SYNTHETIC_SENTINEL, encoding="utf-8")
+    skill = tmp_path / ".skills" / "security" / "SKILL.md"
+    skill.parent.mkdir(parents=True)
+    skill.write_text(SYNTHETIC_SENTINEL, encoding="utf-8")
+    ai_config = tmp_path / ".ai" / "allowlist.json"
+    ai_config.parent.mkdir()
+    ai_config.write_text(SYNTHETIC_SENTINEL, encoding="utf-8")
 
     violations = scan_repository(tmp_path, patterns=committed_patterns())
 
     assert {violation.path for violation in violations} == {
+        ".ai/allowlist.json",
+        ".skills/security/SKILL.md",
         "README.md",
         "docs/usage.md",
         "src/seeded.py",

@@ -35,6 +35,28 @@ def test_pending_canaries_have_reasons() -> None:
     assert all(entry.get("pending_reason") for entry in pending)
 
 
+def test_matrix_rejects_unknown_canary_status(tmp_path: Path) -> None:
+    matrix = tmp_path / "matrix.json"
+    matrix.write_text(
+        json.dumps(
+            {
+                "expected_active_count": 0,
+                "canaries": [
+                    {
+                        "id": "bad_status",
+                        "status": "pendng",
+                        "nodeid": "tests/canaries/security/test_demo.py::test_demo",
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(SystemExit, match="invalid status"):
+        load_matrix(matrix)
+
+
 def test_active_canary_runtime_skip_fails_gate(tmp_path: Path) -> None:
     nodeid = "tests/canaries/security/test_demo.py::test_runtime_skip"
     matrix = CanaryMatrix(

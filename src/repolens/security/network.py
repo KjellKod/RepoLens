@@ -39,14 +39,7 @@ def validate_fetch_target(
 
     for raw_ip in resolved:
         address = ip_address(raw_ip)
-        if (
-            address.is_private
-            or address.is_loopback
-            or address.is_link_local
-            or address.is_reserved
-            or address.is_multicast
-            or address.is_unspecified
-        ):
+        if not address.is_global:
             raise ValueError("fetch target resolved to a blocked address")
 
     return parsed.geturl()

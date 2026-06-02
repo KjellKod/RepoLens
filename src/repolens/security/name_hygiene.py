@@ -18,7 +18,17 @@ _ENV_DENYLIST_FILE = "REPOLENS_NAME_HYGIENE_DENYLIST_FILE"
 _ENV_FORBIDDEN_NAMES = "REPOLENS_FORBIDDEN_NAMES"
 _ENV_MODE = "REPOLENS_NAME_HYGIENE_MODE"
 _ALLOWED_ALLOWLIST_GLOB = "tests/fixtures/security/**"
-_DEFAULT_SCAN_ROOTS = ("src", "scripts", "tests", ".github", "docs", "README.md", "CONTRIBUTING.md")
+_DEFAULT_SCAN_ROOTS = (
+    "src",
+    "scripts",
+    "tests",
+    ".github",
+    ".ai",
+    ".skills",
+    "docs",
+    "README.md",
+    "CONTRIBUTING.md",
+)
 _EXCLUDED_DIRS = {"__pycache__", ".pytest_cache", ".git", ".quest"}
 _FORBIDDEN_ALLOWLIST_PREFIXES = (
     "src/",

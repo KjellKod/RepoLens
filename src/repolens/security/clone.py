@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 @dataclass(frozen=True)
@@ -17,8 +18,11 @@ class CloneInvocation:
 def build_hardened_clone_command(remote_url: str, destination: Path | str) -> CloneInvocation:
     """Return a hardened git clone invocation without executing it."""
 
-    if not remote_url.startswith("https://"):
+    parsed = urlparse(remote_url)
+    if parsed.scheme != "https":
         raise ValueError("clone remote must use https")
+    if parsed.username or parsed.password:
+        raise ValueError("clone remote must not embed credentials")
 
     destination_path = str(destination)
     argv = (
@@ -39,6 +43,7 @@ def build_hardened_clone_command(remote_url: str, destination: Path | str) -> Cl
     )
     env = {
         "GIT_TERMINAL_PROMPT": "0",
+        "GIT_CONFIG_GLOBAL": "/dev/null",
         "GIT_CONFIG_NOSYSTEM": "1",
     }
     return CloneInvocation(argv=argv, env=env)

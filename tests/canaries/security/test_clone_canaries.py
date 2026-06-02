@@ -18,7 +18,10 @@ def test_x2_clone_args_hardened() -> None:
     assert "protocol.file.allow=never" in invocation.argv
     assert "core.hooksPath=/dev/null" in invocation.argv
     assert invocation.env["GIT_TERMINAL_PROMPT"] == "0"
+    assert invocation.env["GIT_CONFIG_GLOBAL"] == "/dev/null"
     assert invocation.env["GIT_CONFIG_NOSYSTEM"] == "1"
 
     with pytest.raises(ValueError, match="https"):
         build_hardened_clone_command("file:///tmp/source.git", Path("dst"))
+    with pytest.raises(ValueError, match="credentials"):
+        build_hardened_clone_command("https://token@example.invalid/project.git", Path("dst"))

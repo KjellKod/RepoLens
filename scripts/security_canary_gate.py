@@ -29,6 +29,11 @@ class CanaryMatrix:
 
 def load_matrix(path: Path) -> CanaryMatrix:
     payload = json.loads(path.read_text(encoding="utf-8"))
+    allowed_statuses = {"active", "pending"}
+    for entry in payload["canaries"]:
+        status = entry.get("status")
+        if status not in allowed_statuses:
+            raise SystemExit(f"canary {entry.get('id', '<unknown>')} has invalid status: {status}")
     active_entries = [entry for entry in payload["canaries"] if entry["status"] == "active"]
     pending_entries = [entry for entry in payload["canaries"] if entry["status"] == "pending"]
 

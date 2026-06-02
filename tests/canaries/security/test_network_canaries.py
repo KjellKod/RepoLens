@@ -15,6 +15,12 @@ def test_x2_ssrf_resolve_validate_blocks() -> None:
             allowed_hosts=allowed_hosts,
             resolver=lambda host: ("169.254.169.254",),
         )
+    with pytest.raises(ValueError, match="blocked address"):
+        validate_fetch_target(
+            "https://metadata.example.invalid/license",
+            allowed_hosts=allowed_hosts,
+            resolver=lambda host: ("100.64.0.1",),
+        )
 
     with pytest.raises(ValueError, match="https"):
         validate_fetch_target(
