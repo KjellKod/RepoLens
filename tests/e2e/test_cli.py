@@ -18,6 +18,40 @@ class CliTests(unittest.TestCase):
     def test_help_returns_success(self) -> None:
         self.assertEqual(cli.main(["--help"]), 0)
 
+    def test_each_stage_help_is_actionable(self) -> None:
+        expected_stages = {
+            "discover": "Stage 1/6",
+            "scan": "Stage 2/6",
+            "resolve": "Stage 3/6",
+            "flag": "Stage 4/6",
+            "shortlist": "Stage 5/6",
+            "report": "Stage 6/6",
+        }
+
+        for stage, marker in expected_stages.items():
+            with self.subTest(stage=stage):
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    code = cli.main([stage, "--help"])
+
+                help_text = stdout.getvalue()
+                self.assertEqual(code, 0)
+                self.assertIn(marker, help_text)
+                self.assertIn("Before:", help_text)
+                self.assertIn("Example:", help_text)
+                self.assertIn("Output:", help_text)
+                self.assertIn("Next:", help_text)
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            cli.main(["flag", "--help"])
+        self.assertIn("(planned — not yet available)", stdout.getvalue())
+
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            cli.main(["shortlist", "--help"])
+        self.assertIn("(planned — not yet available)", stdout.getvalue())
+
     def test_console_help_returns_success(self) -> None:
         result = subprocess.run(
             ["repolens", "--help"],

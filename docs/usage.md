@@ -113,8 +113,9 @@ denylist.
 ## CLI stages
 
 `repolens --help` is the primary health check for the shipped CLI entry point. The
-pipeline subcommands are registered as stage routes; shipped stages run real orchestration
-and later roadmap components fill in the remaining stubs.
+pipeline subcommands are registered as stage routes; `discover`, `scan`, `resolve`, and
+`report` run real orchestration. `flag` and `shortlist` are registered placeholders until
+those stages land.
 
 Exit codes are:
 
@@ -178,14 +179,16 @@ repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval 
 repolens scan      --work-root work --repos approved-repos.json   # hardened clone + Syft → per-repo SBOM (resumable)
 repolens resolve --work-root <WORK> --repo-ref <REPO_REF>
                                       # API-only license resolution for an existing SBOM
-repolens flag                        # tag + apply policy + dedup → inventory + shortlist
-repolens shortlist                   # evidence-anchored agent + human checkbox approval
-repolens report                      # gated: assemble main report + appendices
+repolens flag                        # planned: policy + shortlist
+repolens shortlist                   # planned: evidence + human approval
+repolens report --work-root <WORK> --out-dir reports
+                                      # assemble report.main.md + report.main.csv
 ```
 
-Discovery (you approve the repo list) and the final report (gated until the shortlist is
-clear) are the two human checkpoints. Everything else is automatic, read-only against
-your code, and resumable after an interruption.
+Discovery (you approve the repo list) and the final report are the shipped human
+checkpoints. The planned `flag` and `shortlist` stages will add the policy and approval
+gate once they land. The shipped scanner and resolver are read-only against your code and
+resumable after an interruption.
 
 ### Discover
 
@@ -254,10 +257,11 @@ license records or schema-valid unresolved records when evidence cannot be verif
 - `discovered.json` — the structured repository list for later stages.
 - `repos.candidate.md` — the sanitized human approval checklist with visible hard
   exclusion reasons.
-- `inventory.json` — the complete, tagged dataset.
-- `report.main.{md,csv,docx}` — the disclosure for the included categories.
-- `report.appendix.<category>.{md,csv}` — one per excluded category + first-party.
-- `shortlist.md` — the human approval / audit artifact, plus a per-item evidence log.
+- `<WORK>/work/<repo_ref>/sbom.syft.json` — the per-repo Syft SBOM from `scan`.
+- `<WORK>/work/<repo_ref>/resolved.ndjson` — license records and evidence from `resolve`.
+- `report.main.{md,csv}` — the shipped main disclosure output.
+- `inventory.json`, `shortlist.md`, `report.main.docx`, and
+  `report.appendix.<category>.*` — planned downstream artifacts, not emitted at HEAD.
 
 ## Safety
 
