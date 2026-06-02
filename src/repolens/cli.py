@@ -91,21 +91,19 @@ _STAGE_HELP = {
             "a Syft SBOM from scan at <WORK>/work/<REPO_REF>/sbom.syft.json.",
             "repolens resolve --work-root <WORK> --repo-ref <REPO_REF>",
             "<WORK>/work/<REPO_REF>/resolved.ndjson (license + evidence + tags per dependency).",
-            "`repolens flag` (planned — not yet available).",
+            "`repolens flag --work-root <WORK>`.",
         ),
     ),
     "flag": StageHelp(
         help="Apply the license policy and flag risky or unresolved licenses.",
         description=(
-            "Stage 4/6 — apply the license policy, flag risky/unknown licenses, deduplicate "
-            "(planned — not yet available)."
+            "Stage 4/6 — apply the license policy, flag risky/unknown licenses, and deduplicate."
         ),
         epilog=_stage_epilog(
-            "resolved.ndjson from resolve; policy handling is planned but not wired at HEAD.",
-            "repolens flag",
-            "planned — inventory.json and shortlist.md; at HEAD this route only "
-            "confirms CLI registration.",
-            "`repolens shortlist` after the flag stage lands.",
+            "resolved.ndjson files from resolve under <WORK>/work/<repo>/.",
+            "repolens flag --work-root work",
+            "inventory.json + shortlist.json + shortlist.md (the open BLOCK/REVIEW/UNKNOWN queue).",
+            "`repolens shortlist` to settle the open items.",
         ),
     ),
     "shortlist": StageHelp(
@@ -144,18 +142,26 @@ _DESCRIPTION = (
 )
 
 _EPILOG = (
+    "global options:\n"
+    "  Put global options before the stage name, e.g.\n"
+    "    repolens --config ./repolens.local.toml discover --owner <OWNER>\n"
+    "  Config files hold local taxonomy, policy, and report settings; owner is\n"
+    "  still supplied at runtime with --owner.\n"
+    "  Use stage options such as --work-root for output directories; --config is\n"
+    "  only for local config files.\n"
+    "\n"
     "typical run:\n"
     "  1. repolens discover --owner <OWNER>                     find + approve the repos\n"
     "  2. repolens scan --work-root work --repos approved-repos.json\n"
     "                                                           inventory dependencies\n"
     "  3. repolens resolve --work-root work --repo-ref <REPO_REF>\n"
     "                                                           resolve licenses\n"
-    "  4. repolens flag                                         flag risk / unknowns (planned)\n"
+    "  4. repolens flag --work-root work                        flag risk / unknowns\n"
     "  5. repolens shortlist                                    resolve the flags (planned)\n"
     "  6. repolens report --work-root work --out-dir reports    build the main disclosure\n"
     "\n"
-    "Discovery and report are the shipped checkpoints where you stay in control;\n"
-    "flag and shortlist are registered but planned. Run `repolens <stage> --help`\n"
+    "Discovery, flag, and report are shipped checkpoints where you stay in control;\n"
+    "shortlist is registered but planned. Run `repolens <stage> --help`\n"
     "for one stage. Full guide: docs/usage.md."
 )
 
@@ -171,7 +177,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         metavar="PATH",
-        help="Path to an untracked local config file (owner, categories, policy).",
+        help=(
+            "Global option before <stage>: path to an untracked local config file "
+            "(taxonomy, policy, report settings)."
+        ),
     )
     subparsers = parser.add_subparsers(
         dest="command",
@@ -221,6 +230,8 @@ def build_parser() -> argparse.ArgumentParser:
             _configure_scan_parser(subparser)
         elif command_name == "resolve":
             _configure_resolve_parser(subparser)
+        elif command_name == "flag":
+            _configure_flag_parser(subparser)
         elif command_name == "report":
             _configure_report_parser(subparser)
         else:
@@ -272,6 +283,17 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         help="Runtime repository reference used for the work/<repo-ref>/ artifact dir.",
     )
     subparser.set_defaults(handler=_resolve_stage)
+
+
+def _configure_flag_parser(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument(
+        "--work-root",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Root containing work/<repo>/resolved.ndjson; receives inventory + shortlist.",
+    )
+    subparser.set_defaults(handler=_flag_stage)
 
 
 def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
@@ -335,7 +357,10 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
             f"Discovered {result.repository_count} repositories: "
             f"{result.candidate_count} candidates, {result.hard_exclusion_count} hard exclusions.\n"
             f"Created {result.discovered_path} and {result.candidate_path}.\n"
-            f"Next: review {result.candidate_path}, tick approved repos, then continue to scan."
+            f"Manual step: open {result.candidate_path}, tick approved repos, and prepare "
+            "an approved repos JSON file.\n"
+            f"Next CLI stage: repolens scan --work-root {args.work_root} "
+            "--repos <APPROVED_REPOS_JSON>"
         ),
     )
 
@@ -363,6 +388,20 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
 
     path = run_resolve(args.work_root, args.repo_ref)
     return CommandResult(CommandStatus.SUCCESS, f"wrote {path.name}")
+
+
+def _flag_stage(args: argparse.Namespace) -> CommandResult:
+    from repolens.flag import run_flag
+
+    result = run_flag(args.work_root)
+    summary = (
+        f"flagged {result.open_count} open item(s) across {result.component_count} "
+        f"component(s); wrote {result.inventory_path.name}, "
+        f"{result.shortlist_json_path.name}, {result.shortlist_md_path.name}"
+    )
+    if result.open_count > 0:
+        return CommandResult(CommandStatus.FINDINGS_OPEN, summary)
+    return CommandResult(CommandStatus.SUCCESS, summary)
 
 
 def _load_repo_specs(path: Path, repo_spec_cls: type) -> list:

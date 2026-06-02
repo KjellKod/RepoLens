@@ -16,7 +16,16 @@ from repolens.data import store
 
 class CliTests(unittest.TestCase):
     def test_help_returns_success(self) -> None:
-        self.assertEqual(cli.main(["--help"]), 0)
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = cli.main(["--help"])
+
+        self.assertEqual(code, 0)
+        help_text = stdout.getvalue()
+        self.assertIn("Put global options before the stage name", help_text)
+        self.assertIn("repolens --config ./repolens.local.toml discover --owner <OWNER>", help_text)
+        self.assertIn("Config files hold local taxonomy, policy, and report settings", help_text)
+        self.assertIn("Use stage options such as --work-root for output directories", help_text)
 
     def test_each_stage_help_is_actionable(self) -> None:
         expected_stages = {
@@ -44,11 +53,6 @@ class CliTests(unittest.TestCase):
 
         stdout = io.StringIO()
         with redirect_stdout(stdout):
-            cli.main(["flag", "--help"])
-        self.assertIn("(planned — not yet available)", stdout.getvalue())
-
-        stdout = io.StringIO()
-        with redirect_stdout(stdout):
             cli.main(["shortlist", "--help"])
         self.assertIn("(planned — not yet available)", stdout.getvalue())
 
@@ -63,10 +67,10 @@ class CliTests(unittest.TestCase):
         self.assertIn("discover", result.stdout)
 
     def test_stage_command_routes_to_success(self) -> None:
-        self.assertEqual(cli.main(["flag"]), 0)
+        self.assertEqual(cli.main(["shortlist"]), 0)
 
     def test_stage_command_routes_findings_open_to_one(self) -> None:
-        self.assertEqual(cli.main(["flag", "--findings-open"]), 1)
+        self.assertEqual(cli.main(["shortlist", "--findings-open"]), 1)
 
     def test_discover_requires_owner(self) -> None:
         self.assertEqual(cli.main(["discover"]), 2)
@@ -98,7 +102,11 @@ class CliTests(unittest.TestCase):
         self.assertIn("Discovered 1 repositories", output)
         self.assertIn("work/discovered.json", output)
         self.assertIn("work/repos.candidate.md", output)
-        self.assertIn("Next: review", output)
+        self.assertIn("Manual step: open work/repos.candidate.md", output)
+        self.assertIn(
+            "Next CLI stage: repolens scan --work-root work --repos <APPROVED_REPOS_JSON>",
+            output,
+        )
 
     def test_discover_force_routes_to_real_handler(self) -> None:
         config = cli.load_config(".", None)
@@ -146,7 +154,7 @@ class CliTests(unittest.TestCase):
             ),
             redirect_stderr(stderr),
         ):
-            code = cli.main(["flag"])
+            code = cli.main(["shortlist"])
 
         self.assertEqual(code, 1)
         output = stderr.getvalue()
