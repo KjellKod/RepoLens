@@ -56,6 +56,26 @@ def test_list_repositories_parses_gh_json() -> None:
     assert repositories[0].private is True
 
 
+@pytest.mark.parametrize(
+    "owner",
+    [
+        "--json",
+        "-sentinel",
+        "sentinel-",
+        "sentinel_owner",
+        "sentinel/owner",
+        "sentinel owner",
+        "a" * 40,
+    ],
+)
+def test_list_repositories_rejects_owner_values_that_could_change_gh_args(owner: str) -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        raise AssertionError("invalid owners must not invoke gh")
+
+    with pytest.raises(InputError, match="--owner"):
+        list_repositories(owner, runner=runner)
+
+
 def test_list_repositories_rejects_timeout() -> None:
     def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
         raise subprocess.TimeoutExpired(command, timeout_seconds)

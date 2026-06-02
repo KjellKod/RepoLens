@@ -104,3 +104,14 @@ def test_p1_discover_gh_timeout_and_stdout_cap_fail_closed() -> None:
 
     with pytest.raises(LimitExceeded):
         list_repositories("sentinel-owner", runner=oversize_runner, stdout_max_bytes=2)
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_p1_discover_dash_prefixed_owner_rejected_before_gh() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        raise AssertionError("invalid owners must not invoke gh")
+
+    with pytest.raises(InputError, match="--owner"):
+        list_repositories("--json", runner=runner)

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "expected_active_count": 13,
+  "expected_active_count": 14,
   "markers": ["offline", "security", "canary"],
   "canaries": [
     {
@@ -80,6 +80,12 @@
       "status": "active",
       "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_gh_timeout_and_stdout_cap_fail_closed",
       "guardrail": "discover_dos_cap"
+    },
+    {
+      "id": "p1_discover_dash_prefixed_owner_rejected_before_gh",
+      "status": "active",
+      "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_dash_prefixed_owner_rejected_before_gh",
+      "guardrail": "discover_argument_hardening"
     },
     {
       "id": "x2_injection_agent_family",

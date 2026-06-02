@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -27,6 +28,7 @@ DEFAULT_GH_TIMEOUT_SECONDS = 30.0
 DEFAULT_GH_STDOUT_MAX_BYTES = 4 * 1024 * 1024
 DEFAULT_GH_LIMIT = 1000
 MAX_GH_LIMIT = 5000
+OWNER_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$")
 
 
 @dataclass(frozen=True)
@@ -49,9 +51,7 @@ def list_repositories(
 ) -> tuple[GhRepository, ...]:
     """Return repositories under ``owner`` by invoking ``gh repo list``."""
 
-    normalized_owner = owner.strip()
-    if not normalized_owner:
-        raise InputError("discover requires a non-empty --owner")
+    normalized_owner = validate_owner(owner)
     if limit < 1 or limit > MAX_GH_LIMIT:
         raise InputError(f"discover --limit must be between 1 and {MAX_GH_LIMIT}")
 
@@ -94,6 +94,20 @@ def build_repo_list_command(owner: str, limit: int) -> list[str]:
         "--limit",
         str(limit),
     ]
+
+
+def validate_owner(owner: str) -> str:
+    """Return a normalized GitHub owner name that cannot be parsed as a ``gh`` flag."""
+
+    normalized_owner = owner.strip()
+    if not normalized_owner:
+        raise InputError("discover requires a non-empty --owner")
+    if not OWNER_PATTERN.fullmatch(normalized_owner):
+        raise InputError(
+            "discover --owner must be a GitHub owner name using letters, numbers, "
+            "and non-leading/non-trailing hyphens"
+        )
+    return normalized_owner
 
 
 def subprocess_gh_runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
