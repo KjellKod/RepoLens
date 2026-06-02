@@ -83,7 +83,19 @@ intentional: it keeps the private denylist out of normal directory listings, red
 the chance that someone notices the file and force-adds it past `.gitignore`. The guard
 matches case-insensitively and discovers the file from the scan root upward; when
 running inside a linked git worktree, it also checks the main checkout that owns the
-shared `.git` directory. See
+shared `.git` directory.
+
+Run the check locally — it auto-discovers `.name-hygiene.local.json` and scans the
+tracked tree:
+
+```bash
+python -m repolens.security.name_hygiene                 # scan: exit 0 = clean, non-zero = a forbidden name is committed
+python -m repolens.security.name_hygiene --require-denylist   # same, but fail if no denylist is configured (CI uses this)
+python -m repolens.security.name_hygiene --self-test          # prove the guard fires, using an invented sentinel (no config needed)
+```
+
+Findings are reported as `sha256:` hashes, never the literal matched name, so the
+denylist value never leaks into output. See
 [docs/usage.md](docs/usage.md#configuration-all-untracked--local) for details.
 
 ## Contributing

@@ -50,11 +50,21 @@ configure the one variable:
 REPOLENS_FORBIDDEN_NAMES = name1,name2,...     # the real forbidden literals
 ```
 
-Run it locally the same way (substitute your own forbidden names):
+Run it locally either way — via the env var, or with names kept in a gitignored
+`.name-hygiene.local.json` that the guard auto-discovers from the repo root upward (no
+env var needed):
 
 ```
+# A) explicit names via env var
 REPOLENS_FORBIDDEN_NAMES="name1,name2" python3 -m repolens.security.name_hygiene --require-denylist
+
+# B) names from .name-hygiene.local.json (auto-discovered)
+python3 -m repolens.security.name_hygiene                 # scan tracked tree; exit 0 = clean
+python3 -m repolens.security.name_hygiene --self-test     # prove the guard fires (invented sentinel; no config)
 ```
+
+Findings are emitted as `sha256:` hashes, never the literal name, so a real forbidden
+value never appears in output or logs.
 
 Findings are reported only by a non-reversible `sha256:` token id, so a real name never
 lands in CI logs.
