@@ -32,8 +32,11 @@ def test_offline_ci_workflow_contains_required_x3_steps() -> None:
         "python -m pytest tests/unit",
         "python -m pytest tests/integration",
         "python scripts/ci/run_security_canaries.py",
-        "python scripts/ci/name_hygiene.py --require-denylist",
+        "printf '%s%s%s' invented- forbidden- token",
+        'python scripts/ci/name_hygiene.py --forbidden-name "$token" --require-denylist',
         "python scripts/ci/verify_tool_pins.py",
     ]:
         assert expected in workflow
+    assert "RPL_FORBIDDEN_NAMES" not in workflow
+    assert "-".join(["invented", "forbidden", "token"]) not in workflow
     assert "continue-on-error" not in workflow

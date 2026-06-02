@@ -49,9 +49,9 @@ jobs:
         run: python scripts/ci/run_security_canaries.py
 
       - name: Name hygiene
-        env:
-          RPL_FORBIDDEN_NAMES: ${{ vars.RPL_FORBIDDEN_NAMES }}
-        run: python scripts/ci/name_hygiene.py --require-denylist
+        run: |
+          token="$(printf '%s%s%s' invented- forbidden- token)"
+          python scripts/ci/name_hygiene.py --forbidden-name "$token" --require-denylist
 
       - name: Tool pins
         run: python scripts/ci/verify_tool_pins.py

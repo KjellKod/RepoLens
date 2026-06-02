@@ -10,7 +10,7 @@ __pycache__/
 .quest/
 # Quest worktree root (ephemeral build checkouts — never commit)
 .worktrees/
-# Runtime-only local config, including owner/name denylist files.
+# Runtime-only local config, including name-hygiene.local.json denylist files.
 *.local.*
 
 # Distribution / packaging

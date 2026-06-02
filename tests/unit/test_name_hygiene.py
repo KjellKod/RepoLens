@@ -49,9 +49,9 @@ def test_name_hygiene_ci_mode_fails_when_denylist_absent(tmp_path: Path) -> None
 
 
 def test_name_hygiene_accepts_ignored_local_config_path(tmp_path: Path) -> None:
-    local_config = tmp_path / "owner.local.json"
+    local_config = tmp_path / "owner.LOCAL.json"
     local_config.write_text(
-        json.dumps({"forbidden_names": ["invented-local-token"]}),
+        json.dumps({"Forbidden_Names": ["Invented-Local-Token"]}),
         encoding="utf-8",
     )
     (tmp_path / "visible.txt").write_text("invented-local-token\n", encoding="utf-8")
@@ -64,6 +64,71 @@ def test_name_hygiene_accepts_ignored_local_config_path(tmp_path: Path) -> None:
     assert payload["findings"] == [{"path": "visible.txt", "token_id": "sha256:ee978e4bd10bc74d"}]
     assert "invented-local-token" not in proc.stdout
     assert "invented-local-token" not in proc.stderr
+
+
+def test_name_hygiene_discovers_default_local_config_upward(tmp_path: Path) -> None:
+    local_config = tmp_path / "name-hygiene.local.json"
+    local_config.write_text(
+        json.dumps({"forbidden_names": ["invented-upward-token"]}),
+        encoding="utf-8",
+    )
+    scan_root = tmp_path / "nested" / "repo"
+    scan_root.mkdir(parents=True)
+    (scan_root / "visible.txt").write_text("Invented-Upward-Token\n", encoding="utf-8")
+
+    proc = run_name_hygiene(scan_root, "--require-denylist")
+
+    assert proc.returncode == 1
+    payload = result_payload(proc)
+    assert payload["denylist_status"] == "present"
+    assert payload["findings"] == [{"path": "visible.txt", "token_id": "sha256:f7483a1db8ff60e0"}]
+    assert "invented-upward-token" not in proc.stdout
+    assert "Invented-Upward-Token" not in proc.stdout
+
+
+def test_name_hygiene_discovers_default_local_config_from_mother_repo(
+    tmp_path: Path,
+) -> None:
+    mother = tmp_path / "RepoLens"
+    worktree = tmp_path / "feature-worktree"
+    mother.mkdir()
+    subprocess.run(["git", "init"], cwd=mother, check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test User",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "init",
+        ],
+        cwd=mother,
+        check=True,
+        capture_output=True,
+    )
+    subprocess.run(
+        ["git", "worktree", "add", worktree.as_posix(), "-b", "feature"],
+        cwd=mother,
+        check=True,
+        capture_output=True,
+    )
+    (mother / "Name-Hygiene.Local.Json").write_text(
+        json.dumps({"forbidden_names": ["invented-mother-token"]}),
+        encoding="utf-8",
+    )
+    (worktree / "visible.txt").write_text("INVENTED-MOTHER-TOKEN\n", encoding="utf-8")
+
+    proc = run_name_hygiene(worktree, "--require-denylist")
+
+    assert proc.returncode == 1
+    payload = result_payload(proc)
+    assert payload["denylist_status"] == "present"
+    assert payload["findings"] == [{"path": "visible.txt", "token_id": "sha256:cb6deeba778edb92"}]
+    assert "invented-mother-token" not in proc.stdout
+    assert "INVENTED-MOTHER-TOKEN" not in proc.stdout
 
 
 def test_name_hygiene_scans_tracked_local_config_files(tmp_path: Path) -> None:
