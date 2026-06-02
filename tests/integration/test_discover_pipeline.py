@@ -115,3 +115,52 @@ def test_discover_pipeline_writes_approval_artifacts_with_mocked_gh(tmp_path: Pa
     )
     assert rerun.discovered_path == result.discovered_path
     assert read_discovered(tmp_path)["generated_at"] == "2026-01-02T00:00:00Z"
+
+
+def test_discover_pipeline_fetch_path_uses_only_named_repos(tmp_path: Path) -> None:
+    commands: list[list[str]] = []
+
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        commands.append(list(command))
+        name = command[3].split("/", 1)[1]
+        return GhRunResult(
+            0,
+            json.dumps(
+                {
+                    "name": name,
+                    "nameWithOwner": f"sentinel-owner/{name}",
+                    "description": "fixture repo",
+                    "url": f"https://example.invalid/{name}",
+                    "isArchived": False,
+                    "isPrivate": False,
+                    "repositoryTopics": [{"name": "runtime"}],
+                }
+            ),
+            "",
+        )
+
+    config = Config(values={}, sources=())
+
+    result = run_discover(
+        owner="sentinel-owner",
+        work_root=tmp_path,
+        config=config,
+        repos=("sentinel-alpha", "sentinel-beta"),
+        runner=runner,
+        generated_at="2026-01-01T00:00:00Z",
+    )
+
+    # One `gh repo view` per name, input order preserved.
+    assert [cmd[:4] for cmd in commands] == [
+        ["gh", "repo", "view", "sentinel-owner/sentinel-alpha"],
+        ["gh", "repo", "view", "sentinel-owner/sentinel-beta"],
+    ]
+    assert result.repository_count == 2
+
+    discovered = read_discovered(tmp_path)
+    names = {repo["name"] for repo in discovered["repositories"]}
+    assert names == {"sentinel-alpha", "sentinel-beta"}
+
+    approval = (tmp_path / "repos.candidate.md").read_text(encoding="utf-8")
+    assert "sentinel-owner/sentinel-alpha" in approval
+    assert "sentinel-owner/sentinel-beta" in approval

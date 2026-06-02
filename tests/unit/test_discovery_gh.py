@@ -7,8 +7,30 @@ from collections.abc import Sequence
 import pytest
 
 from repolens.data.errors import LimitExceeded
-from repolens.discovery.gh import GhRunResult, build_repo_list_command, list_repositories
+from repolens.discovery.gh import (
+    GhRunner,
+    GhRunResult,
+    build_repo_list_command,
+    build_repo_view_command,
+    fetch_repositories,
+    list_repositories,
+    parse_repos_option,
+)
 from repolens.exit_codes import InputError
+
+
+def _repo_view_runner(payload: dict[str, object]) -> tuple[list[list[str]], GhRunner]:
+    commands: list[list[str]] = []
+
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        commands.append(list(command))
+        name = command[3].split("/", 1)[1]
+        body = dict(payload)
+        body.setdefault("name", name)
+        body.setdefault("nameWithOwner", f"sentinel-owner/{name}")
+        return GhRunResult(0, json.dumps(body), "")
+
+    return commands, runner
 
 
 def test_build_repo_list_command_uses_gh_without_shell() -> None:
@@ -103,3 +125,145 @@ def test_list_repositories_redacts_failed_gh_stderr() -> None:
 
     assert token not in str(excinfo.value)
     assert "[REDACTED_TOKEN]" in str(excinfo.value)
+
+
+# --- parse_repos_option --------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("a,b", ("a", "b")),
+        ("a, b ,c", ("a", "b", "c")),
+        ("a,b,", ("a", "b")),
+        ("a,a,b", ("a", "b")),
+        ("repo.name_1-2", ("repo.name_1-2",)),
+    ],
+)
+def test_parse_repos_option_splits_strips_dedupes(raw: str, expected: tuple) -> None:
+    assert parse_repos_option(raw) == expected
+
+
+@pytest.mark.parametrize("raw", ["", " , ", ",,"])
+def test_parse_repos_option_rejects_empty_results(raw: str) -> None:
+    with pytest.raises(InputError, match="at least one repo name"):
+        parse_repos_option(raw)
+
+
+def test_parse_repos_option_rejects_cross_owner_slug_with_clear_message() -> None:
+    with pytest.raises(InputError, match="cross-owner"):
+        parse_repos_option("a/b")
+
+
+@pytest.mark.parametrize(
+    "raw, match",
+    [
+        ("-evil", "dash or dot"),
+        (".hidden", "dash or dot"),
+        (".", r"'\.' or '\.\.'"),
+        ("..", r"'\.' or '\.\.'"),
+        ("bad name", "letters, numbers"),
+        ("a" * 101, "at most 100"),
+    ],
+)
+def test_parse_repos_option_rejects_invalid_tokens(raw: str, match: str) -> None:
+    with pytest.raises(InputError, match=match):
+        parse_repos_option(raw)
+
+
+# --- build_repo_view_command --------------------------------------------
+
+
+def test_build_repo_view_command_uses_gh_without_shell_or_limit() -> None:
+    assert build_repo_view_command("sentinel-owner", "sentinel-alpha") == [
+        "gh",
+        "repo",
+        "view",
+        "sentinel-owner/sentinel-alpha",
+        "--json",
+        "name,nameWithOwner,description,url,isArchived,isPrivate,repositoryTopics",
+    ]
+
+
+# --- fetch_repositories --------------------------------------------------
+
+
+def test_fetch_repositories_one_view_per_name_in_input_order() -> None:
+    commands, runner = _repo_view_runner({"isPrivate": True})
+
+    repositories = fetch_repositories(
+        "sentinel-owner", ("sentinel-beta", "sentinel-alpha"), runner=runner
+    )
+
+    assert [list(cmd)[:4] for cmd in commands] == [
+        ["gh", "repo", "view", "sentinel-owner/sentinel-beta"],
+        ["gh", "repo", "view", "sentinel-owner/sentinel-alpha"],
+    ]
+    assert tuple(repo.name for repo in repositories) == ("sentinel-beta", "sentinel-alpha")
+
+
+def test_fetch_repositories_nonexistent_repo_names_failing_token() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        return GhRunResult(
+            1,
+            "",
+            "GraphQL: Could not resolve to a Repository with the name "
+            "'sentinel-owner/sentinel-missing'",
+        )
+
+    with pytest.raises(InputError) as excinfo:
+        fetch_repositories("sentinel-owner", ("sentinel-missing",), runner=runner)
+
+    message = str(excinfo.value)
+    assert "sentinel-missing" in message
+    assert "could not resolve repo name" in message
+    assert "sentinel-owner/sentinel-missing" not in message
+    assert "[REDACTED_PATH]" not in message
+
+
+def test_fetch_repositories_redacts_token_shaped_repo_name() -> None:
+    token = "ghp_" + "a" * 20
+
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        return GhRunResult(1, "", f"no such repo {token}")
+
+    with pytest.raises(InputError) as excinfo:
+        fetch_repositories("sentinel-owner", (token,), runner=runner)
+
+    assert token not in str(excinfo.value)
+    assert "[REDACTED_TOKEN]" in str(excinfo.value)
+
+
+def test_fetch_repositories_rejects_timeout() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        raise subprocess.TimeoutExpired(command, timeout_seconds)
+
+    with pytest.raises(InputError, match="timed out"):
+        fetch_repositories("sentinel-owner", ("sentinel-alpha",), runner=runner)
+
+
+def test_fetch_repositories_rejects_oversize_stdout() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        return GhRunResult(0, "{}", "")
+
+    with pytest.raises(LimitExceeded):
+        fetch_repositories("sentinel-owner", ("sentinel-alpha",), runner=runner, stdout_max_bytes=1)
+
+
+def test_fetch_repositories_rejects_more_than_max_limit() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        raise AssertionError("over-limit name lists must not invoke gh")
+
+    names = tuple(f"sentinel-{index}" for index in range(5001))
+    with pytest.raises(InputError, match="at most"):
+        fetch_repositories("sentinel-owner", names, runner=runner)
+
+
+def test_fetch_repositories_malformed_response_surfaces_view_wording() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        return GhRunResult(0, json.dumps([1, 2, 3]), "")
+
+    with pytest.raises(InputError, match="gh repo view") as excinfo:
+        fetch_repositories("sentinel-owner", ("sentinel-alpha",), runner=runner)
+
+    assert "gh repo list" not in str(excinfo.value)

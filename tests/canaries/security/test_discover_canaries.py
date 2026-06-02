@@ -6,7 +6,12 @@ from collections.abc import Sequence
 import pytest
 
 from repolens.data.errors import LimitExceeded
-from repolens.discovery.gh import GhRunResult, list_repositories
+from repolens.discovery.gh import (
+    GhRunResult,
+    fetch_repositories,
+    list_repositories,
+    parse_repos_option,
+)
 from repolens.discovery.models import CategorizedRepository, GhRepository
 from repolens.discovery.render import render_repos_candidate_markdown
 from repolens.exit_codes import InputError
@@ -115,3 +120,24 @@ def test_p1_discover_dash_prefixed_owner_rejected_before_gh() -> None:
 
     with pytest.raises(InputError, match="--owner"):
         list_repositories("--json", runner=runner)
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_p1_discover_repos_flag_injection_rejected_before_gh() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        raise AssertionError("flag-injection repo/owner tokens must not invoke gh")
+
+    # A dash-prefixed REPO token is rejected during parse, before any gh call.
+    with pytest.raises(InputError):
+        parse_repos_option("-evil")
+
+    # The fetch path is a new trust boundary: a flag-shaped owner is rejected by
+    # validate_owner before the runner is ever invoked.
+    with pytest.raises(InputError, match="--owner"):
+        fetch_repositories("--json", ("sentinel-alpha",), runner=runner)
+
+    # A dash-prefixed name that bypassed parse is still rejected before gh runs.
+    with pytest.raises(InputError):
+        fetch_repositories("sentinel-owner", ("-evil",), runner=runner)
