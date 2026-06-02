@@ -21,8 +21,9 @@ python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene 
 
 RepoLens is in active development: `repolens --help` shows the full pipeline
 (`discover → scan → resolve → flag → shortlist → report`), and each stage's own `--help`
-explains it. `discover --owner <OWNER>` is the first shipped pipeline stage; the remaining
-stage behavior arrives as those stages land.
+explains what to run before it, an example, its output, and the next step. `discover`,
+`scan`, `resolve`, and `report` have shipped behavior; `flag` and `shortlist` are
+registered placeholders until those stages land.
 
 ## What you get
 
@@ -63,17 +64,17 @@ with **anchored evidence under human approval**, never guessed.
 ## Usage
 
 ```
-repolens discover  --owner <OWNER>   # find + categorize repos; you approve the list
-repolens scan                        # inventory dependencies across all languages
-repolens resolve                     # resolve licenses cheapest-source-first
-repolens flag                        # apply policy; flag risky / unknown licenses
-repolens shortlist                   # resolve flagged items with evidence + approval
-repolens report                      # assemble the disclosure (main + appendices)
+repolens discover --owner <OWNER>                         # find + categorize repos; you approve the list
+repolens scan --work-root work --repos approved-repos.json # inventory dependencies across all languages
+repolens resolve --work-root work --repo-ref <REPO_REF>    # resolve licenses cheapest-source-first
+repolens flag                                             # planned: policy + shortlist
+repolens shortlist                                        # planned: evidence + approval
+repolens report --work-root work --out-dir reports         # assemble the main disclosure
 ```
 
-Discovery and the final report are **human-gated**; everything between is automatic and
-resumable. The owner, repo categories, and report header are runtime inputs — never
-baked into the tool. **Full guide: [docs/usage.md](docs/usage.md).**
+Discovery and the final report are the shipped human checkpoints; the flag and shortlist
+gates are planned. The owner, repo categories, and report header are runtime inputs —
+never baked into the tool. **Full guide: [docs/usage.md](docs/usage.md).**
 
 ## Local Name Hygiene
 
