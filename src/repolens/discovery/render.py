@@ -19,14 +19,15 @@ def build_discovered_payload(
 ) -> dict[str, object]:
     """Build the schema-validated ``discovered.json`` value."""
 
-    repo_values = [_repo_payload(repo) for repo in repositories]
+    ordered_repositories = sort_discovered_repositories(repositories)
+    repo_values = [_repo_payload(repo) for repo in ordered_repositories]
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": generated_at,
         "owner": owner,
         "repository_count": len(repo_values),
-        "candidate_count": sum(1 for repo in repositories if not repo.hard_excluded),
-        "hard_exclusion_count": sum(1 for repo in repositories if repo.hard_excluded),
+        "candidate_count": sum(1 for repo in ordered_repositories if not repo.hard_excluded),
+        "hard_exclusion_count": sum(1 for repo in ordered_repositories if repo.hard_excluded),
         "repositories": repo_values,
     }
 
@@ -39,8 +40,9 @@ def render_repos_candidate_markdown(
 ) -> str:
     """Render a sanitized human approval file for discovered repositories."""
 
-    candidates = [repo for repo in repositories if not repo.hard_excluded]
-    excluded = [repo for repo in repositories if repo.hard_excluded]
+    ordered_repositories = sort_discovered_repositories(repositories)
+    candidates = [repo for repo in ordered_repositories if not repo.hard_excluded]
+    excluded = [repo for repo in ordered_repositories if repo.hard_excluded]
     lines = [
         "# Repository candidates",
         "",
@@ -70,6 +72,29 @@ def render_repos_candidate_markdown(
         lines.append("")
 
     return sanitize_markdown(redact_tokens("\n".join(lines).rstrip() + "\n"))
+
+
+def sort_discovered_repositories(
+    repositories: Sequence[CategorizedRepository],
+) -> tuple[CategorizedRepository, ...]:
+    """Return the deterministic review order for discovery artifacts."""
+
+    return tuple(sorted(repositories, key=_repository_sort_key))
+
+
+def _repository_sort_key(
+    item: CategorizedRepository,
+) -> tuple[bool, str, str, str, str, str, str]:
+    repo = item.repo
+    return (
+        item.hard_excluded,
+        item.category.casefold(),
+        repo.name.casefold(),
+        repo.name_with_owner.casefold(),
+        item.category,
+        repo.name,
+        repo.name_with_owner,
+    )
 
 
 def _repo_payload(item: CategorizedRepository) -> dict[str, object]:

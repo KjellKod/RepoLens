@@ -50,6 +50,28 @@ def test_discovered_payload_validates_counts() -> None:
     assert payload["hard_exclusion_count"] == 1
 
 
+def test_discovered_payload_sorts_candidates_then_exclusions_by_category_and_name() -> None:
+    payload = build_discovered_payload(
+        "sentinel-owner",
+        [
+            categorized("sentinel-zulu", category="runtime-bucket"),
+            categorized("sentinel-retired-zulu", category="legacy-bucket", reason="retired"),
+            categorized("Sentinel-Beta", category="ALPHA-bucket"),
+            categorized("sentinel-alpha", category="alpha-bucket"),
+            categorized("sentinel-retired-alpha", category="legacy-bucket", reason="retired"),
+        ],
+        generated_at="2026-01-01T00:00:00Z",
+    )
+
+    assert [repo["name"] for repo in payload["repositories"]] == [
+        "sentinel-alpha",
+        "Sentinel-Beta",
+        "sentinel-zulu",
+        "sentinel-retired-alpha",
+        "sentinel-retired-zulu",
+    ]
+
+
 def test_discovered_payload_count_mismatch_rejected() -> None:
     payload = build_discovered_payload(
         "sentinel-owner",
@@ -79,6 +101,31 @@ def test_candidate_markdown_defaults_candidates_checked_and_keeps_exclusions_pla
     assert "- `sentinel-owner/sentinel-archived`" in markdown
     assert "- [x] `sentinel-owner/sentinel-archived`" not in markdown
     assert "reason: `archived by GitHub`" in markdown
+
+
+def test_candidate_markdown_sorts_each_section_by_category_and_name() -> None:
+    markdown = render_repos_candidate_markdown(
+        "sentinel-owner",
+        [
+            categorized("sentinel-zulu", category="runtime-bucket"),
+            categorized("sentinel-retired-zulu", category="legacy-bucket", reason="retired"),
+            categorized("Sentinel-Beta", category="ALPHA-bucket"),
+            categorized("sentinel-alpha", category="alpha-bucket"),
+            categorized("sentinel-retired-alpha", category="legacy-bucket", reason="retired"),
+        ],
+        generated_at="2026-01-01T00:00:00Z",
+    )
+
+    assert markdown.index("`sentinel-owner/sentinel-alpha`") < markdown.index(
+        "`sentinel-owner/Sentinel-Beta`"
+    )
+    assert markdown.index("`sentinel-owner/Sentinel-Beta`") < markdown.index(
+        "`sentinel-owner/sentinel-zulu`"
+    )
+    assert markdown.index("`sentinel-owner/sentinel-zulu`") < markdown.index("## Hard exclusions")
+    assert markdown.index("`sentinel-owner/sentinel-retired-alpha`") < markdown.index(
+        "`sentinel-owner/sentinel-retired-zulu`"
+    )
 
 
 def test_candidate_markdown_sanitizes_tokens_hrefs_images_and_descriptions() -> None:
