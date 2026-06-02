@@ -65,6 +65,7 @@ def classify_license_input(raw: str, policy: Policy | None = None) -> PolicyDeci
         tier = full_text_normalized.tier_override
 
     elif is_compound_expression:
+
         def mapper(leaf_id: str, exception_id: str | None) -> EvalResult:
             tier, leaf_reasons, normalized_id, leaf_caveats = _resolve_leaf(
                 leaf_id, active_policy, exception_id=exception_id
@@ -96,9 +97,7 @@ def classify_license_input(raw: str, policy: Policy | None = None) -> PolicyDeci
                 reasons.append("parse_error")
             reasons.append("compound_expression")
     else:
-        tier, leaf_reasons, _normalized_id, leaf_caveats = _resolve_leaf(
-            stripped, active_policy
-        )
+        tier, leaf_reasons, _normalized_id, leaf_caveats = _resolve_leaf(stripped, active_policy)
         reasons.extend(leaf_reasons)
         caveats.extend(leaf_caveats)
 

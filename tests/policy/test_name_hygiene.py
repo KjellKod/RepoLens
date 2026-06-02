@@ -28,9 +28,7 @@ from pathlib import Path
 
 # Built from fragments so the guard file does not itself contain a literal that
 # matches the email pattern when it scans itself.
-_EMAIL_RE = re.compile(
-    r"[A-Za-z0-9._%+-]+" + "@" + r"[A-Za-z0-9.-]+\.[A-Za-z]{2,}"
-)
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+" + "@" + r"[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 
 # Every file F5 adds. The guard scans itself too — proof that it carries no
 # forbidden literals.
@@ -46,6 +44,7 @@ F5_FILES = (
     "src/repolens/policy/tiers.py",
     "src/repolens/policy/types.py",
     "tests/policy/conftest.py",
+    "tests/policy/__init__.py",
     "tests/policy/test_canaries_policy.py",
     "tests/policy/test_engine.py",
     "tests/policy/test_expression.py",
@@ -78,7 +77,7 @@ def test_f5_files_have_no_forbidden_owner_repo_or_company_names() -> None:
     hits: list[str] = []
     for rel_path in F5_FILES:
         text = (root / rel_path).read_text(encoding="utf-8")
-        for match in _EMAIL_RE.finditer(text):
+        for _match in _EMAIL_RE.finditer(text):
             hits.append(f"{rel_path}: email-like token")
         for token_label, pattern in token_patterns:
             if pattern.search(text):

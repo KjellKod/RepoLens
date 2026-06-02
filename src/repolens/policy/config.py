@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
 import importlib.resources
 import json
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
 from functools import lru_cache
 from types import MappingProxyType
 
@@ -72,9 +72,7 @@ def load_default_policy() -> Policy:
         allow_ids=frozenset(tiers["ALLOW"]),
         review_ids=frozenset(tiers["REVIEW"]),
         block_ids=frozenset(tiers["BLOCK"]),
-        alias_map=MappingProxyType(
-            {key.lower(): value for key, value in raw["aliases"].items()}
-        ),
+        alias_map=MappingProxyType({key.lower(): value for key, value in raw["aliases"].items()}),
         deprecated_ids=frozenset(raw["deprecated_ids"]),
         unknown_literals=frozenset(value.upper() for value in raw["unknown_literals"]),
         non_spdx_patterns=non_spdx_patterns,

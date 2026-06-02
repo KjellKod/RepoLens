@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
 
 from repolens.policy.tiers import choose_higher_risk, choose_lower_risk
 from repolens.policy.types import PolicyTier
@@ -30,13 +30,13 @@ class _Parser:
         self._tokens = tokens
         self._index = 0
 
-    def parse(self) -> "_Node":
+    def parse(self) -> _Node:
         node = self._parse_or()
         if self._peek()[0] != "EOF":
             raise ParseError("Unexpected trailing token")
         return node
 
-    def _parse_or(self) -> "_Node":
+    def _parse_or(self) -> _Node:
         node = self._parse_and()
         while self._peek()[0] == "OR":
             self._advance()
@@ -44,7 +44,7 @@ class _Parser:
             node = _OrNode(left=node, right=rhs)
         return node
 
-    def _parse_and(self) -> "_Node":
+    def _parse_and(self) -> _Node:
         node = self._parse_with()
         while self._peek()[0] == "AND":
             self._advance()
@@ -52,7 +52,7 @@ class _Parser:
             node = _AndNode(left=node, right=rhs)
         return node
 
-    def _parse_with(self) -> "_Node":
+    def _parse_with(self) -> _Node:
         node = self._parse_primary()
         if self._peek()[0] != "WITH":
             return node
@@ -65,7 +65,7 @@ class _Parser:
             raise ParseError("WITH applies only to a simple SPDX license id")
         return _WithNode(base=node, exception=token_text)
 
-    def _parse_primary(self) -> "_Node":
+    def _parse_primary(self) -> _Node:
         token_type, token_text = self._advance()
         if token_type == "ID":
             return _LeafNode(license_id=token_text)
@@ -124,11 +124,7 @@ class _OrNode(_Node):
         left_result = self.left.evaluate(mapper)
         right_result = self.right.evaluate(mapper)
         chosen_tier = choose_lower_risk(left_result.tier, right_result.tier)
-
-        if chosen_tier == left_result.tier:
-            chosen_result = left_result
-        else:
-            chosen_result = right_result
+        chosen_result = left_result if chosen_tier == left_result.tier else right_result
 
         return EvalResult(
             tier=chosen_tier,
