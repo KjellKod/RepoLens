@@ -1,0 +1,19 @@
+src/repolens/cli.py
+  s_4c9474630b6e00::t_dcfd66918e7079 199
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "ba2872f889fdc5ee906b4644c269818c9306e071",
+  "prompts": {},
+  "sessions": {
+    "s_4c9474630b6e00": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e871b-67d5-7b52-a756-d641ea687351",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
