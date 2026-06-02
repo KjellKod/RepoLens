@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from repolens.data.errors import LimitExceeded
+from repolens.security.limits import DEFAULT_LIMITS
 
 SCHEMA_VERSION = "1.0"
 
@@ -12,7 +13,8 @@ MAX_ARTIFACT_BYTES = {
     "inventory": 16 * 1024 * 1024,
     "shortlist": 4 * 1024 * 1024,
 }
-MAX_JSON_DEPTH = 64
+#: Single source for the JSON structural-depth cap: the security-primitive default.
+MAX_JSON_DEPTH = DEFAULT_LIMITS.max_structure_depth
 MAX_NDJSON_RECORDS = 1_000_000
 MAX_NDJSON_LINE_BYTES = 1 * 1024 * 1024
 

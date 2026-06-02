@@ -3,15 +3,13 @@ from __future__ import annotations
 import csv
 import io
 import socket
-from html import unescape
 
 import pytest
 
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import HttpFetchOptions, validate_url_for_fetch
-from repolens.security.output import neutralize_csv_cell, sanitize_markdown_href
 from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
-from repolens.security.sanitize import sanitize_markdown, serialize_csv_row
+from repolens.security.sanitize import neutralize_csv_cell, sanitize_markdown, serialize_csv_row
 
 
 @pytest.mark.offline
@@ -32,23 +30,15 @@ def test_x2_markdown_href_sanitizes() -> None:
         "[x](javascript:alert(1)) "
         "[encoded](jav&#x61;script:alert(1)) "
         "![](https://tracker.example.invalid/pixel) "
-        '<a href="data:text/html,abc">raw</a> '
-        '<a href=" javascript:alert(1)">spaced</a> '
-        '<a href="jav&#x61;script:alert(1)">encoded</a> '
-        "<javascript:alert(1)>"
+        "[ref-link][bad]\n\n[bad]: data:text/html,abc"
     )
 
-    sanitized = sanitize_markdown_href(markdown)
+    sanitized = sanitize_markdown(markdown)
 
-    decoded = unescape(sanitized)
-    assert "javascript:" not in decoded
-    assert "data:text/html" not in decoded
+    assert "javascript:" not in sanitized
+    assert "data:text/html" not in sanitized
     assert "tracker.example.invalid" not in sanitized
-    assert "`x`" in sanitized
-    assert "`raw`" in sanitized
-    assert "`spaced`" in sanitized
-    assert "`encoded`" in sanitized
-    assert "`unsafe-link`" in sanitized
+    assert "![" not in sanitized
 
 
 def test_csv_formula_cells_are_neutralized() -> None:

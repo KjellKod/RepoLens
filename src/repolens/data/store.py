@@ -20,8 +20,8 @@ from repolens.data.limits import (
     max_bytes_for,
     scan_depth,
 )
-from repolens.data.redact import redact_tokens
 from repolens.data.validation import validate_artifact
+from repolens.security.redaction import redact_tokens_from_structure
 
 
 def repo_dir(work_root: str | Path, repo_ref: str) -> Path:
@@ -141,7 +141,7 @@ def _write_json_artifact(
     *,
     repo_ref: str | None = None,
 ) -> Path:
-    redacted = redact_tokens(value)
+    redacted = redact_tokens_from_structure(value)
     validate_artifact(redacted, artifact_name)
     path = _artifact_path(work_root, artifact_name, repo_ref)
     data = _json_bytes(redacted)
@@ -158,7 +158,7 @@ def write_resolved(
 ) -> Path:
     stamped = []
     for record in records:
-        redacted = redact_tokens(
+        redacted = redact_tokens_from_structure(
             {**record, "schema_version": record.get("schema_version", SCHEMA_VERSION)}
         )
         validate_artifact(redacted, "resolved")
