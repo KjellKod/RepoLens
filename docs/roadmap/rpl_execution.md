@@ -15,6 +15,53 @@ we run it*: which driver, and the fan-out model.
   security review, cross-component code review, tool-API research refresh).
 - **Plain prompts** ("just do it") only for trivial mechanical edits.
 
+## Build rules — read before starting any component
+
+Components are built in parallel by different people/agents. These rules are what stop
+parallel work from diverging (the cause of past cleanup churn). Follow them exactly.
+
+1. **One home per concern — extend, don't fork.** Before adding a workflow, script,
+   guard, helper, module, or env var, **search for the existing one and extend it**.
+   Never create a second CI gate, a second name-hygiene guard, a second redaction/SSRF/
+   sanitize helper, a second canary runner, or a new alias for an existing variable.
+   If a *shared* thing genuinely must change, that's a coordinated shared-contract change
+   (call it out in the PR) — not a per-component copy.
+2. **Frozen contracts — don't rename.** Depend on these; never rename them without
+   updating every dependent in the same PR: the **on-disk schemas** (F3), the **CI job
+   names** branch protection requires, the **env-var / GitHub-variable names**, and the
+   **canary-matrix node ids** (`tests/canaries/.../canary_matrix.json`). Renaming a
+   required CI job or a canary node id wedges every open PR.
+3. **Build against fixtures; integrate along the data flow.** Your component reads/writes
+   the F3 schemas — build and test against fixture data so you never wait on the
+   component upstream of you.
+4. **Definition of done (a component):** code + tests + its security canary, all green in
+   the **single** CI gate; the roadmap M<n> acceptance for the component met; then
+   **rebase → tick the delivery box → ready-to-review PR (pr-assistant) → ping**. Touching
+   a shared file (a workflow, a guard, a schema, the canary matrix)? Coordinate and say so.
+5. **No real names** in code, tests, or docs; the owner is a runtime input only.
+
+## Where things live — canonical homes (single source of truth)
+
+If you need one of these, it already exists **once**. Use/extend it — do not add a second.
+
+| Concern | The one home | Invoke / note |
+|---------|--------------|---------------|
+| Name-hygiene guard | `src/repolens/security/name_hygiene.py` | `python -m repolens.security.name_hygiene` |
+| Forbidden-names list | env/GitHub var **`REPOLENS_FORBIDDEN_NAMES`** (one name only) | comma-separated terms |
+| Token redaction | `src/repolens/security/redaction.py` | one redaction string |
+| SSRF / URL validation | `src/repolens/security/http_client.py` | resolver injectable for tests |
+| CSV / Markdown sanitization | `src/repolens/security/sanitize.py` | — |
+| Security-canary runner | `scripts/security_canary_gate.py` | called directly by CI |
+| Canary inventory | `tests/canaries/.../canary_matrix.json` | source of truth for active canaries |
+| Tests | `tests/<area>/`; canaries under `tests/canaries/` | one canary dir (plural) |
+| CI gate | **one** offline workflow + `security-canaries.yml` | `codex-ci-review` = advisory; `live-smoke` = scheduled; **no per-component workflows** |
+| Python version | **3.13** in every workflow | — |
+| Dependency pins | `pyproject.toml` is the source | lockfiles derive from it |
+| Runtime config / secrets | untracked `*.local.*` | never tracked; never in a public CI var |
+
+(The consolidation quest brings the current tree into line with this table — see
+[.ws/12-drift-audit-and-consolidation.md], which is gitignored scratch.)
+
 ## Drivers — when to use which
 
 | Driver | Use for | Not for |
@@ -123,10 +170,11 @@ Build <ID> <component> for the RepoLens repo.
   docs/roadmap/rpl_decisions.md.
 - Acceptance: the rpl_roadmap M<n> criteria for this component, plus every applicable
   canary in docs/roadmap/rpl_security.md is green.
-- Hard rules: orchestrate, don't reimplement scanners; security guardrails are
-  mandatory; no owner/repo/company names in code, tests, or docs (CI hygiene guard);
-  owner is a runtime input only. Public CI proves the hygiene guard with invented
-  sentinel names only; real denylist values live in gitignored local config.
+- Hard rules: follow **Build rules + Where things live** (above) — one home per concern,
+  extend don't fork, don't rename frozen contracts. Orchestrate, don't reimplement
+  scanners; security guardrails are mandatory; no owner/repo/company names in code, tests,
+  or docs (CI hygiene guard); owner is a runtime input only. Public CI proves the hygiene
+  guard with invented sentinel names only; real denylist values live in gitignored local config.
 - Output: code + tests + the component's canaries wired into CI.
 - On completion (in order):
   A. Rebase onto the latest origin/main and resolve conflicts — auto-resolve where it's
@@ -162,3 +210,17 @@ normal directory listing. The guard discovers that file from the scan root upwar
 for linked worktrees, checks the checkout that owns the shared `.git` directory. This
 keeps public CI repo-agnostic while letting local checks enforce real
 owner/repo/company names.
+
+## Glossary
+
+- **Round (R0–R3)** — a set of components launched in parallel; gates sit *between* rounds.
+- **Entry gate ("Opens when")** — the precondition to START a round.
+- **Standing gate** — security canaries + name-hygiene green; required to MERGE each PR.
+- **P3a / P3b, P6a / P6b** — components that deliver across two rounds; each half is its
+  own ID, so no ID ever appears in two rounds.
+- **Solo vs full workflow** — single-agent build vs plan → dual review → build → dual
+  review → fix.
+- **Sentinel self-test vs real-name scan** — the hygiene guard proves itself with a fake
+  seeded name (always, in public CI) vs scanning for real forbidden terms (local/private).
+- **Canonical home** — the single agreed location for a concern (see *Where things live*);
+  forking it is the drift this doc exists to prevent.

@@ -41,6 +41,11 @@ within a round. Rounds, their members, and their gates are defined **once** in t
 [execution doc → Rounds & gates](rpl_execution.md#rounds--gates) — that table is the
 single source of truth.
 
+**Before building a component**, read **Build rules + Where things live** in the
+[execution doc](rpl_execution.md#build-rules--read-before-starting-any-component) — one
+home per concern, extend don't fork, don't rename frozen contracts. (Skipping this is
+what caused the R0 drift.)
+
 **Critical path to first value:** F3 → P2 → P6a.
 
 ## Milestones
