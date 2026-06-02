@@ -7,6 +7,8 @@
 ## Prerequisites
 
 - `gh` (authenticated), `git`, `python3`.
+- `pip install -e .` (or `pip install -e '.[test]'` for the test suite) — provides the
+  `repolens` command and the importable package the `python -m repolens.*` commands use.
 - `syft` + `scancode` — installed and version-pinned by a future bootstrap step
   (checksum/signature-verified).
 - For mobile license enrichment (optional, auto-detected): a build toolchain
