@@ -41,6 +41,12 @@ within a round. Rounds, their members, and their gates are defined **once** in t
 [execution doc → Rounds & gates](rpl_execution.md#rounds--gates) — that table is the
 single source of truth.
 
+**Build in parallel, merge serially:** all quests in a round build at once, but their
+PRs merge **one at a time** — each rebases onto the latest `main` and recomputes
+`tests/canaries/security/canary_matrix.json`'s `expected_active_count` right before
+merge, because every quest in a round adds canaries to that one shared file. Once
+`X3b` lands (`strict: true`), GitHub enforces the rebase; until then it's discipline.
+
 **Before building a component**, read **Build rules + Where things live** in the
 [execution doc](rpl_execution.md#build-rules--read-before-starting-any-component) — one
 home per concern, extend don't fork, don't rename frozen contracts. (Skipping this is
@@ -56,12 +62,18 @@ what caused the R0 drift.)
 > Acceptance box is checked. `P3` and `P6` each deliver across two rounds, so each half
 > is its **own ID** — `P3a` (R1) / `P3b` (R2), `P6a` (R1) / `P6b` (R3) — and no ID ever
 > appears in two rounds. No separate status file or code is needed to know what's shipped.
+>
+> **Who delivers the X boxes:** from R1 onward, X1/X2/X3 "grown for round N" are shipped
+> **inside that round's P-quests** — each P-quest brings its own fixtures, canaries, and
+> CI wiring (R1 did exactly this: the canary matrix grew 9 → 31 through P1/P2/P3a/P6a).
+> Tick the round's X boxes when every P-quest of the round has merged with its canaries
+> active in the matrix. There is no separate X quest per round.
 
 ### M0 — Foundation & rails
 Deliver F1–F5 and the X1/X2/X3 skeletons.
 **Delivery** (each Quest ticks its ID on merge)
 - [x] F1 — CLI skeleton + config + exit codes
-- [ ] F2 — Security primitives
+- [x] F2 — Security primitives
 - [x] F3 — Data model + on-disk schemas (the unlock)
 - [x] F4 — Tool bootstrap (pin + checksum/signature verify)
 - [x] F5 — Policy engine (SPDX normalize, compound, tiers)
@@ -70,12 +82,12 @@ Deliver F1–F5 and the X1/X2/X3 skeletons.
 - [x] X3 — CI offline PR pipeline (skeleton)
 
 **Acceptance**
-- [ ] `repolens --help` runs; config loads from untracked local files.
-- [ ] F2 primitives implemented; their **security canaries pass offline**.
-- [ ] Bootstrap installs Syft/ScanCode pinned, **verifying checksum + signature**.
-- [ ] Name-hygiene guard **fails a deliberately seeded bad commit**; public CI uses
+- [x] `repolens --help` runs; config loads from untracked local files.
+- [x] F2 primitives implemented; their **security canaries pass offline**.
+- [x] Bootstrap installs Syft/ScanCode pinned, **verifying checksum + signature**.
+- [x] Name-hygiene guard **fails a deliberately seeded bad commit**; public CI uses
       invented sentinels, while real names are private gitignored local config.
-- [ ] F3 schemas frozen and documented.
+- [x] F3 schemas frozen and documented.
 
 ### M1 — Thin end-to-end inventory
 Deliver P1 + P2 + P3a (API layer) + P6a (main view, md/csv) against any `<OWNER>`.
@@ -84,52 +96,86 @@ Deliver P1 + P2 + P3a (API layer) + P6a (main view, md/csv) against any `<OWNER>
 - [x] P2 — scan (hardened clone + Syft)
 - [x] P3a — resolve, API layer only
 - [x] P6a — report, main view (md/csv)
-- [ ] X1 — fixtures grown to cover R1 components
-- [ ] X2 — canaries grown for R1 (clone canaries)
-- [ ] X3 — CI grown for R1
-- [ ] X3b — branch protection on `main` via `gh` (see [Branch protection](#branch-protection-applied-once-checks-exist-from-m1))
-- [ ] Docs — flesh out `docs/usage.md` for the shipped commands (grows M1 → M3)
+- [x] X1 — fixtures grown to cover R1 components (shipped inside the R1 P-quests)
+- [x] X2 — canaries grown for R1 (clone + scan + per-stage canaries; matrix 9 → 31)
+- [x] X3 — CI grown for R1 (all new canaries active in the matrix gate)
+- [ ] X3b — branch protection on `main` via `gh` (see [Branch protection](#branch-protection-applied-once-checks-exist-from-m1)) — **the open M1 step**
+- [x] Docs — flesh out `docs/usage.md` for the shipped commands (grows M1 → M3)
 
 **Acceptance**
 - [ ] End-to-end run on a fixture owner **and** dogfood on RepoLens itself.
 - [ ] Multi-language deduped inventory with provenance, versions, source URLs.
-- [ ] Clone hardening + **clone canaries green**; the watermark canary passes.
-- [ ] Zero owner/repo strings anywhere (hygiene guard green).
+- [x] Clone hardening + **clone canaries green**; the watermark canary passes.
+- [x] Zero owner/repo strings anywhere (hygiene guard green).
 - [ ] `main` is protected: required checks must pass **and** the branch must be
-      up to date before a PR can merge.
+      up to date before a PR can merge. *(Today: `security-canaries` + `codex-review`
+      required, but `strict: false` and `offline-ci` not required — X3b closes this.)*
 
 ### M2 — Resolution depth + flagging
 Deliver P3b (full: sandboxed mobile native + ScanCode on unknowns) + P4.
-**Delivery** (each Quest ticks its ID on merge)
-- [ ] P3b — resolve full (mobile sandbox + ScanCode-on-unknowns)
-- [ ] P4 — flag (tag `origin`/`scope`/`distribution` + policy + dedup)
-- [ ] X1 — fixtures grown for R2
-- [ ] X2 — canaries grown for R2 (mobile sandbox canaries)
-- [ ] X3 — CI grown for R2
 
-**Acceptance**
-- [ ] Planted AGPL dep → BLOCK queue; planted no-license dep → UNKNOWN queue, with reasons.
-- [ ] ScanCode invoked **only** on items unresolved by APIs.
-- [ ] Mobile auto-detected; native enrichment runs **only sandboxed**; **mobile sandbox
-      canaries green** (token absent, egress blocked); run never hard-fails on a missing toolchain.
-- [ ] Components carry `origin`/`scope`/`distribution`; dedup correct.
+**Scope boundary (read first):** P3b **extends the merged P3a** `resolve` — same CLI
+route, same `resolved.ndjson` contract — and stops there. P4 **consumes**
+`resolved.ndjson`. P3b never tags or applies policy (that's P4); P4 never resolves
+licenses (that's P3). The "planted AGPL → BLOCK" acceptance is **P4's**, not P3b's.
+
+**Delivery** (each Quest ticks its ID on merge)
+- [ ] P3b — resolve full: (1) ScanCode invoked **only** on items the API ladder left
+      unresolved, scoped to a single package dir / `LICENSE*` files
+      ([architecture, ladder step 3](rpl_architecture.md)); (2) mobile native enrichment
+      (AboutLibraries / LicensePlist) — auto-detected, **opt-in and off by default**,
+      run only inside the sandbox spec of [security.md §2 + §4](rpl_security.md)
+      (no secrets mounted, read-only repo mount, egress allowlist, quotas + timeout).
+- [ ] P4 — flag: tag `origin`/`scope`/`distribution`, apply F5 policy tiers, dedup →
+      write `inventory.json` + `shortlist.md`; exit non-zero while any item is open.
+- [ ] X1 — fixtures grown for R2: planted AGPL dep, planted no-license dep, one Android
+      and one iOS fixture repo (invented names) — shipped inside the P3b/P4 quests
+- [ ] X2 — canaries grown for R2: mobile sandbox canaries (`GITHUB_TOKEN` absent inside
+      the sandbox; egress blocked) — shipped inside the P3b quest
+- [ ] X3 — CI grown for R2: new canaries active in the matrix, `expected_active_count`
+      recomputed — shipped inside the P3b/P4 quests
+
+**Acceptance** (owner in bold)
+- [ ] **P4** — planted AGPL dep → BLOCK queue; planted no-license dep → UNKNOWN queue,
+      each with a stated reason.
+- [ ] **P3b** — ScanCode invoked **only** on items unresolved by APIs.
+- [ ] **P3b** — mobile auto-detected; native enrichment runs **only sandboxed**; **mobile
+      sandbox canaries green** (token absent, egress blocked); a missing mobile toolchain
+      degrades gracefully — it never hard-fails the run.
+- [ ] **P4** — components carry `origin`/`scope`/`distribution`; dedup correct.
 
 ### M3 — Human-in-loop + gated full report
 Deliver P5 + P6b (full: categories → main + appendices + docx, gate).
-**Delivery** (each Quest ticks its ID on merge)
-- [ ] P5 — shortlist (capability-minimized agent + human approval)
-- [ ] P6b — report full (categories → main + appendices + docx, gate)
-- [ ] X1 — fixtures grown for R3
-- [ ] X2 — canaries grown for R3 (injection canaries)
-- [ ] X3 — CI grown for R3 (+ dogfood on self)
 
-**Acceptance**
-- [ ] **Injection canaries green**: suspicious content routed to human, never auto-resolved;
-      every cited evidence URL re-fetched and verified.
-- [ ] `report` **refuses to assemble** while any flagged item is open.
-- [ ] Excluded categories + first-party appear in appendices (nothing deleted).
-- [ ] docx renders from the generic template; org/legal text injected at runtime.
-- [ ] **Full [definition of done](rpl_requirements.md)** met; dogfood disclosure produced.
+**Scope boundary (read first):** P5 owns the *resolution* of flagged items (the
+agent + the human checkboxes + evidence re-verification). P6b owns the *assembly*
+(categories, appendices, docx, and the refuse-while-open gate). P6b reads P5's
+resolved shortlist; it never resolves items itself.
+
+**Delivery** (each Quest ticks its ID on merge)
+- [ ] P5 — shortlist: capability-minimized resolution agent (**no shell, no secrets,
+      no arbitrary network** — fetch/sanitize only via the F2 primitives) + the
+      two-queue `shortlist.md` with human checkboxes; every cited evidence URL is
+      **re-fetched and verified** before an item can close. **Security-critical: full
+      workflow lane** ([execution doc](rpl_execution.md#execution-intensity--model-lanes)).
+- [ ] P6b — report full: extends the merged P6a with category selection →
+      `report.main.{md,csv,docx}` + `report.appendix.<category>.*`; docx from the
+      generic template with org/legal text injected at runtime; **refuses to assemble
+      while any flagged item is open**.
+- [ ] X1 — fixtures grown for R3: injection-bearing fixtures (prompt-injection content
+      in package metadata / LICENSE files) — shipped inside the P5 quest
+- [ ] X2 — canaries grown for R3: injection canaries — shipped inside the P5 quest
+- [ ] X3 — CI grown for R3: + the scheduled **dogfood-on-self** job — shipped inside
+      the P5/P6b quests
+
+**Acceptance** (owner in bold)
+- [ ] **P5** — **injection canaries green**: suspicious content routed to human, never
+      auto-resolved; every cited evidence URL re-fetched and verified.
+- [ ] **P6b** — `report` **refuses to assemble** while any flagged item is open.
+- [ ] **P6b** — excluded categories + first-party appear in appendices (nothing deleted).
+- [ ] **P6b** — docx renders from the generic template; org/legal text injected at runtime.
+- [ ] **Round** — full [definition of done](rpl_requirements.md) met; dogfood disclosure
+      produced for RepoLens itself.
 
 ## Standing gates (every milestone)
 
@@ -142,15 +188,20 @@ Deliver P5 + P6b (full: categories → main + appendices + docx, gate).
 ## Branch protection (applied once checks exist, from M1)
 
 Once the offline PR checks are real (M1), enable GitHub branch protection on `main`
-via `gh` so merges are safe and current:
+via `gh` so merges are safe and current.
 
-- **Required status checks must pass** — lint, unit, integration, security canaries,
-  and the name-hygiene guard. (The Codex review is advisory / `continue-on-error`; do
-  **not** mark it required, or an OpenAI quota hiccup would block every merge.)
-- **Require branches to be up to date before merging** — set `strict: true` on the
-  required checks, so a PR must be rebased on the latest `main` before it can merge
-  (pairs with the quest brief's rebase-before-PR step).
-- Recommended: require a PR (no direct pushes to `main`) and ≥1 approving review.
+**Where we are today:** `security-canaries` + `codex-review` are required, ≥1 review,
+`strict: false`, admins can bypass. **Ticking X3b means closing the two gaps:**
+
+- **Add `offline-ci` to the required checks** — it carries lint, unit, integration,
+  the canary matrix gate, and the name-hygiene guard, and today it could fail without
+  blocking a merge.
+- **Set `strict: true`** — a PR must be up to date with `main` before merging, which
+  makes the "recompute the canary-matrix count at final rebase" rule machine-enforced
+  instead of discipline.
+- `codex-review` stays required for now (deliberate trade-off vs. the original
+  "advisory-only" advice); if OpenAI quota flakiness ever blocks merges, demote it
+  to advisory and note it here.
 
 Applied with `gh api` (branch-protection / rulesets) — a one-time config step, kept in
 a small script and re-run to update the required-check set as tests grow. It's a roadmap
