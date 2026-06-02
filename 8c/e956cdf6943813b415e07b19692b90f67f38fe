@@ -1,0 +1,63 @@
+src/repolens/bootstrap/record.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 41
+src/repolens/bootstrap/syft.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 50
+  s_5eb8163e1d2a26::t_490050dbba5144 16-21,56-177
+tests/bootstrap/fixtures/pins.latest.bad.toml
+  s_b56e249965f74f::t_fad6c90a61042d 20-21
+src/repolens/bootstrap/pins.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 138
+tests/bootstrap/test_name_hygiene.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 33-107
+tests/bootstrap/test_syft_bootstrap.py
+  s_5eb8163e1d2a26::t_490050dbba5144 18
+  s_b56e249965f74f::t_8f2c78ba7602da 74
+tests/bootstrap/test_orchestrate.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 54-59
+tools/pins_lint.py
+  s_5eb8163e1d2a26::t_490050dbba5144 17-22
+src/repolens/bootstrap/pins.toml
+  s_b56e249965f74f::t_19127ab662ab42 7-72
+tests/bootstrap/test_scancode.py
+  s_5eb8163e1d2a26::t_490050dbba5144 46-50
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 57
+tests/bootstrap/test_supply_chain_canary.py
+  s_5eb8163e1d2a26::t_490050dbba5144 21-73
+src/repolens/bootstrap/scancode.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 78
+  s_5eb8163e1d2a26::t_490050dbba5144 53-66,79
+tests/bootstrap/conftest.py
+  s_5eb8163e1d2a26::t_490050dbba5144 11-48
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 69-115
+src/repolens/bootstrap/verify.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 54
+tests/bootstrap/test_pins_lint.py
+  s_5eb8163e1d2a26::t_fc68e7aa8311fd 9
+  s_5eb8163e1d2a26::t_490050dbba5144 5,12-16
+tools/name_hygiene.py
+  s_5eb8163e1d2a26::t_8bc4a112aacaf7 36-58
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "8ce956cdf6943813b415e07b19692b90f67f38fe",
+  "prompts": {},
+  "sessions": {
+    "s_5eb8163e1d2a26": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019e85dc-9f2b-7d40-82f5-f6725ea600ba",
+        "model": "unknown"
+      },
+      "human_author": null
+    },
+    "s_b56e249965f74f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85dc-9f2b-7d40-82f5-f6725ea600ba",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
