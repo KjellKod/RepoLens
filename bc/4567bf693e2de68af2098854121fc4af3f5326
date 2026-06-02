@@ -1,0 +1,23 @@
+scripts/apply_branch_protection.sh
+  s_bb8787cf071d6e::t_cf523f73beef28 1-30
+docs/roadmap/rpl_roadmap.md
+  s_bb8787cf071d6e::t_a38c1dfef15895 110-113
+  s_bb8787cf071d6e::t_ab8d55ae0d2f5e 102
+  s_bb8787cf071d6e::t_4b1acab3172e4e 194,196-200
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "bc4567bf693e2de68af2098854121fc4af3f5326",
+  "prompts": {},
+  "sessions": {
+    "s_bb8787cf071d6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c1f98f3-95b8-4b2c-84ce-cb4d9a149af9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
