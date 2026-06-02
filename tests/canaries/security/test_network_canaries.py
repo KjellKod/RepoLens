@@ -35,6 +35,12 @@ def test_x2_ssrf_resolve_validate_blocks() -> None:
             allowed_hosts=allowed_hosts,
             resolver=lambda host: ("198.51.100.4",),
         )
+    with pytest.raises(ValueError, match="credentials"):
+        validate_fetch_target(
+            "https://token@safe.example.invalid/license",
+            allowed_hosts=allowed_hosts,
+            resolver=lambda host: ("8.8.8.8",),
+        )
 
     assert validate_fetch_target(
         "https://safe.example.invalid/license",

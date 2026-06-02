@@ -25,6 +25,8 @@ def validate_fetch_target(
         raise ValueError("fetch target must use https")
     if not parsed.hostname:
         raise ValueError("fetch target must include a host")
+    if parsed.username or parsed.password:
+        raise ValueError("fetch target must not embed credentials")
 
     host = parsed.hostname.lower().rstrip(".")
     allowed = {entry.lower().rstrip(".") for entry in allowed_hosts}
