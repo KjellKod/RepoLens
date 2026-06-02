@@ -7,137 +7,137 @@
             "id": "x2_csv_formula_neutralizes",
             "status": "active",
             "nodeid": "tests/canaries/security/test_output_canaries.py::test_x2_csv_formula_neutralizes",
-            "guardrail": "csv_formula_neutralization",
+            "guardrail": "csv_formula_neutralization"
         },
         {
             "id": "x2_markdown_href_sanitizes",
             "status": "active",
             "nodeid": "tests/canaries/security/test_output_canaries.py::test_x2_markdown_href_sanitizes",
-            "guardrail": "markdown_href_sanitization",
+            "guardrail": "markdown_href_sanitization"
         },
         {
             "id": "x2_ssrf_resolve_validate_blocks",
             "status": "active",
             "nodeid": "tests/canaries/security/test_network_canaries.py::test_x2_ssrf_resolve_validate_blocks",
-            "guardrail": "ssrf_resolve_then_validate",
+            "guardrail": "ssrf_resolve_then_validate"
         },
         {
             "id": "x2_token_redaction_scrubs",
             "status": "active",
             "nodeid": "tests/canaries/security/test_token_canaries.py::test_x2_token_redaction_scrubs",
-            "guardrail": "token_redaction",
+            "guardrail": "token_redaction"
         },
         {
             "id": "x2_parse_yaml_safe_load",
             "status": "active",
             "nodeid": "tests/canaries/security/test_parser_canaries.py::test_x2_parse_yaml_safe_load",
-            "guardrail": "yaml_safe_load",
+            "guardrail": "yaml_safe_load"
         },
         {
             "id": "x2_parse_xml_rejects_doctype",
             "status": "active",
             "nodeid": "tests/canaries/security/test_parser_canaries.py::test_x2_parse_xml_rejects_doctype",
-            "guardrail": "xml_doctype_rejection",
+            "guardrail": "xml_doctype_rejection"
         },
         {
             "id": "x2_parse_zip_rejects_high_ratio",
             "status": "active",
             "nodeid": "tests/canaries/security/test_parser_canaries.py::test_x2_parse_zip_rejects_high_ratio",
-            "guardrail": "archive_ratio_cap",
+            "guardrail": "archive_ratio_cap"
         },
         {
             "id": "x2_clone_args_hardened",
             "status": "active",
             "nodeid": "tests/canaries/security/test_clone_canaries.py::test_x2_clone_args_hardened",
-            "guardrail": "clone_argument_hardening",
+            "guardrail": "clone_argument_hardening"
         },
         {
             "id": "x2_dos_time_budget_aborts",
             "status": "active",
             "nodeid": "tests/canaries/security/test_dos_canaries.py::test_x2_dos_time_budget_aborts",
-            "guardrail": "deterministic_time_budget",
+            "guardrail": "deterministic_time_budget"
         },
         {
             "id": "p1_discover_token_absent_from_candidate_markdown",
             "status": "active",
             "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_token_absent_from_candidate_markdown",
-            "guardrail": "discover_token_redaction",
+            "guardrail": "discover_token_redaction"
         },
         {
             "id": "p1_discover_markdown_hrefs_and_images_neutralized",
             "status": "active",
             "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_markdown_hrefs_and_images_neutralized",
-            "guardrail": "discover_markdown_sanitization",
+            "guardrail": "discover_markdown_sanitization"
         },
         {
             "id": "p1_discover_malformed_and_multiline_metadata_are_inert",
             "status": "active",
             "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_malformed_and_multiline_metadata_are_inert",
-            "guardrail": "discover_markdown_sanitization",
+            "guardrail": "discover_markdown_sanitization"
         },
         {
             "id": "p1_discover_gh_timeout_and_stdout_cap_fail_closed",
             "status": "active",
             "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_gh_timeout_and_stdout_cap_fail_closed",
-            "guardrail": "discover_dos_cap",
+            "guardrail": "discover_dos_cap"
         },
         {
             "id": "p1_discover_dash_prefixed_owner_rejected_before_gh",
             "status": "active",
             "nodeid": "tests/canaries/security/test_discover_canaries.py::test_p1_discover_dash_prefixed_owner_rejected_before_gh",
-            "guardrail": "discover_argument_hardening",
+            "guardrail": "discover_argument_hardening"
         },
         {
             "id": "x2_clone_post_checkout_hook",
             "status": "active",
             "nodeid": "tests/canaries/security/test_clone_canaries.py::test_post_checkout_hook_does_not_execute",
-            "guardrail": "clone_hook_does_not_execute",
+            "guardrail": "clone_hook_does_not_execute"
         },
         {
             "id": "x2_clone_submodule_not_contacted",
             "status": "active",
             "nodeid": "tests/canaries/security/test_clone_canaries.py::test_submodule_is_not_checked_out_or_contacted",
-            "guardrail": "submodule_not_checked_out",
+            "guardrail": "submodule_not_checked_out"
         },
         {
             "id": "x2_clone_file_submodule_blocked",
             "status": "active",
             "nodeid": "tests/canaries/security/test_clone_canaries.py::test_file_protocol_submodule_is_blocked",
-            "guardrail": "file_protocol_submodule_blocked",
+            "guardrail": "file_protocol_submodule_blocked"
         },
         {
             "id": "x2_rce_lifecycle_no_execution",
             "status": "active",
             "nodeid": "tests/canaries/security/test_rce_canary.py::test_x2_rce_lifecycle_no_execution",
-            "guardrail": "no_untrusted_code_execution",
+            "guardrail": "no_untrusted_code_execution"
         },
         {
             "id": "x2_supply_chain_tamper_fails_closed",
             "status": "active",
             "nodeid": "tests/canaries/security/test_supply_chain_canary.py::test_x2_supply_chain_tamper_fails_closed",
-            "guardrail": "supply_chain_checksum_gate",
+            "guardrail": "supply_chain_checksum_gate"
         },
         {
             "id": "x2_scan_token_absent_from_artifacts",
             "status": "active",
             "nodeid": "tests/canaries/security/test_scan_token_canary.py::test_x2_scan_token_absent_from_artifacts",
-            "guardrail": "scan_output_token_redaction",
+            "guardrail": "scan_output_token_redaction"
         },
         {
             "id": "x2_scan_timeout_aborts",
             "status": "active",
             "nodeid": "tests/canaries/security/test_scan_timeout_canary.py::test_x2_scan_timeout_aborts",
-            "guardrail": "scan_per_repo_timeout",
+            "guardrail": "scan_per_repo_timeout"
         },
         {
             "id": "x2_injection_agent_family",
             "status": "pending",
-            "pending_reason": "Capability-minimized agent and evidence re-fetch flow are not present in M1.",
+            "pending_reason": "Capability-minimized agent and evidence re-fetch flow are not present in M1."
         },
         {
             "id": "x2_mobile_sandbox_family",
             "status": "pending",
-            "pending_reason": "Mobile/native license enrichment and sandboxing are deferred to P3b/R2.",
-        },
-    ],
+            "pending_reason": "Mobile/native license enrichment and sandboxing are deferred to P3b/R2."
+        }
+    ]
 }
