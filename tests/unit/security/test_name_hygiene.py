@@ -41,9 +41,7 @@ def test_name_hygiene_cli_passes_when_denylist_absent_and_not_required(
     assert main(["--root", tmp_path.as_posix()]) == 0
 
 
-def test_name_hygiene_cli_missing_root_returns_json_error(
-    monkeypatch, tmp_path, capsys
-) -> None:
+def test_name_hygiene_cli_missing_root_returns_json_error(monkeypatch, tmp_path, capsys) -> None:
     # A configured denylist + a non-existent --root must produce a clean JSON
     # error and exit 1 — never an uncaught FileNotFoundError traceback.
     monkeypatch.delenv("REPOLENS_FORBIDDEN_NAMES", raising=False)
