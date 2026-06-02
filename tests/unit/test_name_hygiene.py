@@ -150,6 +150,23 @@ def test_name_hygiene_scans_tracked_local_config_files(tmp_path: Path) -> None:
     assert "invented-tracked-local-token" not in proc.stderr
 
 
+def test_name_hygiene_scans_untracked_nonignored_files_in_git_repo(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "README.md").write_text("clean\n", encoding="utf-8")
+    subprocess.run(["git", "add", "README.md"], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "hygiene-test.txt").write_text("invented-untracked-token\n", encoding="utf-8")
+
+    proc = run_name_hygiene(tmp_path, "--forbidden-name", "invented-untracked-token")
+
+    assert proc.returncode == 1
+    payload = result_payload(proc)
+    assert payload["findings"] == [
+        {"path": "hygiene-test.txt", "token_id": "sha256:9ef5bf322198d6a9"}
+    ]
+    assert "invented-untracked-token" not in proc.stdout
+    assert "invented-untracked-token" not in proc.stderr
+
+
 def test_name_hygiene_skips_ignored_artifact_paths(tmp_path: Path) -> None:
     for skipped_dir in [".quest", ".worktrees", ".pytest_cache", ".venv", "build", "dist"]:
         path = tmp_path / skipped_dir / "artifact.txt"

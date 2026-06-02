@@ -116,10 +116,10 @@ def normalize_tokens(tokens: list[str]) -> list[str]:
     return sorted({token.strip().casefold() for token in tokens if token.strip()})
 
 
-def _git_files(root: Path) -> list[Path]:
+def _git_ls_files(root: Path, args: list[str]) -> list[Path]:
     try:
         proc = subprocess.run(
-            ["git", "ls-files", "-z"],
+            ["git", "ls-files", "-z", *args],
             cwd=root,
             check=True,
             capture_output=True,
@@ -128,6 +128,20 @@ def _git_files(root: Path) -> list[Path]:
     except (subprocess.CalledProcessError, FileNotFoundError):
         return []
     return [root / item.decode("utf-8") for item in proc.stdout.split(b"\0") if item]
+
+
+def _git_files(root: Path) -> list[tuple[Path, bool]]:
+    candidates: list[tuple[Path, bool]] = []
+    seen: set[Path] = set()
+    for path in _git_ls_files(root, ["--cached"]):
+        if path not in seen:
+            candidates.append((path, True))
+            seen.add(path)
+    for path in _git_ls_files(root, ["--others", "--exclude-standard"]):
+        if path not in seen:
+            candidates.append((path, False))
+            seen.add(path)
+    return candidates
 
 
 def _walk_files(root: Path) -> list[Path]:
@@ -155,9 +169,13 @@ def should_scan(relative_path: Path, *, tracked: bool = False) -> bool:
 
 
 def iter_candidate_files(root: Path) -> list[Path]:
-    tracked_files = _git_files(root)
-    if tracked_files:
-        return [path for path in tracked_files if should_scan(path.relative_to(root), tracked=True)]
+    git_files = _git_files(root)
+    if git_files:
+        return [
+            path
+            for path, tracked in git_files
+            if should_scan(path.relative_to(root), tracked=tracked)
+        ]
     return _walk_files(root)
 
 
