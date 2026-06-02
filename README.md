@@ -11,6 +11,18 @@ them**, and adds the workflow, policy, evidence, and reporting on top.
 > design, decisions, security model, and build plan; **[docs/usage.md](docs/usage.md)** for
 > how to run it.
 
+## Quickstart
+
+```bash
+pip install -e .                                       # install the `repolens` command (editable)
+repolens --help                                        # the stages, and the typical run
+python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene guard works
+```
+
+RepoLens is in active development: `repolens --help` shows the full pipeline
+(`discover → scan → resolve → flag → shortlist → report`), and each stage's own `--help`
+explains it. Stage flags (e.g. `discover --owner <OWNER>`) arrive as those stages land.
+
 ## What you get
 
 - **A deduplicated license disclosure** — `Name | License | …`, as a main report plus
@@ -85,8 +97,8 @@ matches case-insensitively and discovers the file from the scan root upward; whe
 running inside a linked git worktree, it also checks the main checkout that owns the
 shared `.git` directory.
 
-Run the check locally — it auto-discovers `.name-hygiene.local.json` and scans the
-tracked tree:
+Run the check locally (after `pip install -e .` — see [Quickstart](#quickstart)). It
+auto-discovers `.name-hygiene.local.json` and scans the tracked tree:
 
 ```bash
 python -m repolens.security.name_hygiene                 # scan: exit 0 = clean, non-zero = a forbidden name is committed
