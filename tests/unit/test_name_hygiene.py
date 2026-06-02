@@ -6,34 +6,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "ci" / "name_hygiene.py"
-LEGACY_SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "check_name_hygiene.py"
+from repolens.security.name_hygiene import check_structural
+
+MODULE = "repolens.security.name_hygiene"
 
 
 def run_name_hygiene(root: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        [sys.executable, SCRIPT.as_posix(), "--root", root.as_posix(), *args],
+        [sys.executable, "-m", MODULE, "--root", root.as_posix(), *args],
         text=True,
         capture_output=True,
         check=False,
-    )
-
-
-def run_legacy_guard(
-    *paths: Path, forbidden_names: str | None = None
-) -> subprocess.CompletedProcess[str]:
-    env = os.environ.copy()
-    if forbidden_names is None:
-        env.pop("REPOLENS_FORBIDDEN_NAMES", None)
-    else:
-        env["REPOLENS_FORBIDDEN_NAMES"] = forbidden_names
-
-    return subprocess.run(
-        [sys.executable, LEGACY_SCRIPT.as_posix(), *(path.as_posix() for path in paths)],
-        text=True,
-        capture_output=True,
-        check=False,
-        env=env,
     )
 
 
@@ -91,7 +74,7 @@ def test_name_hygiene_accepts_runtime_forbidden_names_env(tmp_path: Path) -> Non
     (tmp_path / "visible.txt").write_text(f"{token}\n", encoding="utf-8")
 
     proc = subprocess.run(
-        [sys.executable, SCRIPT.as_posix(), "--root", tmp_path.as_posix()],
+        [sys.executable, "-m", MODULE, "--root", tmp_path.as_posix()],
         text=True,
         capture_output=True,
         check=False,
@@ -240,20 +223,27 @@ def test_name_hygiene_skips_ignored_artifact_paths(tmp_path: Path) -> None:
     assert payload["findings"] == []
 
 
-def test_legacy_name_hygiene_env_denylist_fails_without_echoing_terms(tmp_path: Path) -> None:
+def test_structural_env_denylist_fails_without_echoing_terms(tmp_path: Path) -> None:
     doc = tmp_path / "notes.md"
     doc.write_text("This mentions internal-demo-name in prose.\n", encoding="utf-8")
 
-    result = run_legacy_guard(doc, forbidden_names="other-name\ninternal-demo-name")
+    proc = run_name_hygiene(
+        tmp_path,
+        "--forbidden-name",
+        "other-name",
+        "--forbidden-name",
+        "internal-demo-name",
+    )
 
-    assert result.returncode == 1
-    assert "forbidden-literal" in result.stderr
-    assert "denylist-entry" in result.stderr
-    assert "internal-demo-name" not in result.stderr
-    assert "other-name" not in result.stderr
+    assert proc.returncode == 1
+    payload = result_payload(proc)
+    assert payload["passed"] is False
+    assert payload["findings"] == [{"path": "notes.md", "token_id": "sha256:9200e8e052fb282d"}]
+    assert "internal-demo-name" not in proc.stdout
+    assert "other-name" not in proc.stdout
 
 
-def test_legacy_name_hygiene_structural_checks_redact_tokens(tmp_path: Path) -> None:
+def test_structural_checks_flag_redacted_tokens_and_non_neutral_url(tmp_path: Path) -> None:
     fixture = tmp_path / "fixtures" / "sample.json"
     fixture.parent.mkdir()
     token = "ghp_" + "0123456789abcdefghijklmnop"
@@ -262,21 +252,19 @@ def test_legacy_name_hygiene_structural_checks_redact_tokens(tmp_path: Path) -> 
         encoding="utf-8",
     )
 
-    result = run_legacy_guard(fixture)
+    findings = check_structural([fixture])
+    checks = {finding.check for finding in findings}
 
-    assert result.returncode == 1
-    assert "github-token" in result.stderr
-    assert token[:12] not in result.stderr
-    assert "redacted-token" in result.stderr
-    assert "non-neutral-url" in result.stderr
+    assert "github-token" in checks
+    assert "non-neutral-url" in checks
+    assert all(token[:12] not in finding.detail for finding in findings)
 
 
-def test_legacy_name_hygiene_quoted_keyed_domain_fails(tmp_path: Path) -> None:
+def test_structural_checks_flag_quoted_keyed_domain(tmp_path: Path) -> None:
     fixture = tmp_path / "fixtures" / "sample.json"
     fixture.parent.mkdir()
     fixture.write_text('{"homepage": "sample.invalid-name.biz"}\n', encoding="utf-8")
 
-    result = run_legacy_guard(fixture)
+    findings = check_structural([fixture])
 
-    assert result.returncode == 1
-    assert "non-neutral-domain" in result.stderr
+    assert any(finding.check == "non-neutral-domain" for finding in findings)

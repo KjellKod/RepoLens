@@ -157,3 +157,23 @@ def test_zip_symlink_rejected() -> None:
         archive.writestr(info, "target")
     with pytest.raises(ParseSecurityError, match="links"):
         inspect_archive(raw.getvalue())
+
+
+def test_zip_high_entry_count_rejected() -> None:
+    raw = io.BytesIO()
+    with zipfile.ZipFile(raw, "w") as archive:
+        for index in range(6):
+            archive.writestr(f"acme-{index}.txt", "x")
+    with pytest.raises(ParseSecurityError, match="entry count"):
+        inspect_archive(raw.getvalue(), SecurityLimits(max_archive_entries=5))
+
+
+def test_nested_archive_is_not_expanded() -> None:
+    inner = io.BytesIO()
+    with zipfile.ZipFile(inner, "w") as archive:
+        archive.writestr("inner.txt", "x")
+    outer = io.BytesIO()
+    with zipfile.ZipFile(outer, "w") as archive:
+        archive.writestr("inner.zip", inner.getvalue())
+    inspection = inspect_archive(outer.getvalue())
+    assert inspection.entries == 1

@@ -10,10 +10,11 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from repolens.security.redaction import redact_tokens
+
 from .config import load_config
 from .exit_codes import ExitCode, InputError
 
-TOKEN_PATTERN = re.compile(r"(ghp_|github_pat_|ghs_)[A-Za-z0-9_]+")
 PATH_PATTERN = re.compile(r"(/[^\s:]+)+")
 
 
@@ -90,5 +91,5 @@ def _exit_code_for_result(result: CommandResult) -> int:
 
 
 def _sanitize(message: str) -> str:
-    redacted = TOKEN_PATTERN.sub("[REDACTED_TOKEN]", message)
+    redacted = redact_tokens(message)
     return PATH_PATTERN.sub("[REDACTED_PATH]", redacted)

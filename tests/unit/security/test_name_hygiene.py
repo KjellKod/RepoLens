@@ -22,6 +22,19 @@ def test_name_hygiene_self_test() -> None:
     assert main(["--self-test"]) == 0
 
 
-def test_name_hygiene_cli_fails_when_runtime_terms_empty(monkeypatch) -> None:
+def test_name_hygiene_cli_fails_closed_when_denylist_required_but_empty(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv("REPOLENS_FORBIDDEN_NAMES", raising=False)
     monkeypatch.delenv("NAME_HYGIENE_FORBIDDEN_TERMS", raising=False)
-    assert main([]) == 2
+    monkeypatch.delenv("REPOLENS_NAME_DENYLIST", raising=False)
+    assert main(["--root", tmp_path.as_posix(), "--require-denylist"]) == 1
+
+
+def test_name_hygiene_cli_passes_when_denylist_absent_and_not_required(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.delenv("REPOLENS_FORBIDDEN_NAMES", raising=False)
+    monkeypatch.delenv("NAME_HYGIENE_FORBIDDEN_TERMS", raising=False)
+    monkeypatch.delenv("REPOLENS_NAME_DENYLIST", raising=False)
+    assert main(["--root", tmp_path.as_posix()]) == 0

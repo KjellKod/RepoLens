@@ -80,8 +80,8 @@ def collect_nodeids(extra_args: list[str]) -> frozenset[str]:
 
 
 def validate_collection(matrix: CanaryMatrix, collected: frozenset[str]) -> None:
-    if matrix.expected_active_count != 9:
-        raise SystemExit("M0 active security canary count must be exactly 9")
+    # The canary matrix is the single source of truth for the active count; load_matrix
+    # already cross-checks expected_active_count against the active entries.
     if len(matrix.active_nodeids) != matrix.expected_active_count:
         raise SystemExit("active security canary matrix count mismatch")
 

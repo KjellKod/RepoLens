@@ -232,11 +232,8 @@ __marimo__/
 .DS_Store
 
 # Runtime config that may carry an owner/org name, legal boilerplate, or report
-# header. Keep ALL of these out of git so no company identity enters history.
-*.local.toml
-*.local.yaml
-*.local.yml
-*.local.json
+# header. Kept out of git via the broad `*.local.*` rule above so no company
+# identity enters history.
 *.secret.*
 report.config.*
 owner.config.*

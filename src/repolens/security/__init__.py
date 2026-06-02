@@ -1,6 +1,6 @@
 """Security primitives for untrusted repository inputs and outputs."""
 
-from repolens.security.checksum import compute_sha256, verify_sha256
+from repolens.security.checksum import compute_file_sha256, verify_sha256
 from repolens.security.clone import (
     CloneInvocation,
     CloneOptions,
@@ -70,7 +70,7 @@ __all__ = [
     "UnsafeArchiveError",
     "build_hardened_clone_command",
     "cap_text",
-    "compute_sha256",
+    "compute_file_sha256",
     "fetch_url",
     "hardened_clone",
     "inspect_archive",

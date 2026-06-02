@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from repolens.data.errors import SchemaValidationError
 from repolens.data.store import (
     iter_resolved,
     read_inventory,
@@ -14,6 +15,7 @@ from repolens.data.store import (
     write_sbom,
     write_shortlist,
 )
+from repolens.security.redaction import REDACTION
 
 
 def test_write_then_read_all_artifacts(
@@ -52,3 +54,28 @@ def test_repo_ref_rejects_dot_path_segments(
 ) -> None:
     with pytest.raises(ValueError):
         write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
+
+
+def test_untrusted_malformed_sbom_on_disk_rejected(
+    tmp_path: Path, repo_ref: str, sbom: dict[str, object]
+) -> None:
+    del sbom["repo"]
+    work = tmp_path / "work" / repo_ref
+    work.mkdir(parents=True)
+    (work / "sbom.syft.json").write_text("{}", encoding="utf-8")
+
+    with pytest.raises(SchemaValidationError):
+        read_sbom(tmp_path, repo_ref)
+
+
+def test_token_absent_from_written_artifacts(
+    tmp_path: Path, repo_ref: str, sbom: dict[str, object]
+) -> None:
+    token = "ghp_" + "1234567890abcdef"
+    sbom["source"] = f"https://example.invalid/{token}"
+
+    path = write_sbom(tmp_path, repo_ref, sbom)
+
+    text = path.read_text(encoding="utf-8")
+    assert token not in text
+    assert REDACTION in text

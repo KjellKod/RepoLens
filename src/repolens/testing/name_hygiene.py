@@ -1,61 +1,30 @@
-"""Offline repository name-hygiene guard."""
+"""Offline repository name-hygiene guard for the X1 test harness.
+
+This is a thin reuse of the canonical guard in
+:mod:`repolens.security.name_hygiene`. It carries only the X1-specific default
+owner/repo token set; all scanning, finding representation, and skip rules come
+from the canonical module so there is a single name-hygiene implementation.
+"""
 
 from __future__ import annotations
 
 import argparse
-from collections.abc import Iterable, Iterator, Sequence
-from dataclasses import dataclass
+from collections.abc import Sequence
 from pathlib import Path
+
+from repolens.security.name_hygiene import (
+    SKIPPED_SEGMENTS,
+    NameHygieneFinding,
+    scan_literal_paths,
+)
 
 DEFAULT_FORBIDDEN_TOKENS = (
     "GITHUB" + "_OWNER=",
     "REPOLENS" + "_OWNER=",
     "--owner " + "real",
 )
-ALLOWED_SYNTHETIC_TERMS = ("acme-", "example.invalid", "invalid.acme")
-SKIPPED_PATH_PARTS = frozenset(
-    {
-        ".git",
-        ".mypy_cache",
-        ".pytest_cache",
-        ".quest",
-        ".ruff_cache",
-        ".tox",
-        ".venv",
-        "__pycache__",
-        "build",
-        "dist",
-        "node_modules",
-        "target",
-        "venv",
-    }
-)
-TEXT_EXTENSIONS = frozenset(
-    {
-        "",
-        ".cfg",
-        ".ini",
-        ".json",
-        ".md",
-        ".mod",
-        ".py",
-        ".toml",
-        ".txt",
-        ".xml",
-        ".yaml",
-        ".yml",
-    }
-)
 
-
-@dataclass(frozen=True)
-class NameHygieneFinding:
-    path: Path
-    line: int
-    token: str
-
-    def format(self) -> str:
-        return f"{self.path}:{self.line}: forbidden token {self.token!r}"
+__all__ = ["DEFAULT_FORBIDDEN_TOKENS", "NameHygieneFinding", "main", "scan_paths"]
 
 
 def scan_paths(
@@ -63,62 +32,9 @@ def scan_paths(
     *,
     forbidden_tokens: Sequence[str] = DEFAULT_FORBIDDEN_TOKENS,
 ) -> list[NameHygieneFinding]:
-    """Scan text files under root for forbidden owner/repo tokens."""
-    root_path = Path(root)
-    validate_root(root_path)
-    findings: list[NameHygieneFinding] = []
-    for path in iter_text_files(root_path):
-        try:
-            text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            continue
+    """Scan text files under ``root`` for forbidden owner/repo tokens."""
 
-        display_path = _display_path(path, root_path)
-        for line_number, line in enumerate(text.splitlines(), start=1):
-            for token in forbidden_tokens:
-                if token and token in line:
-                    findings.append(NameHygieneFinding(display_path, line_number, token))
-    return findings
-
-
-def validate_root(root: Path) -> None:
-    if not root.exists():
-        raise FileNotFoundError(f"name hygiene root does not exist: {root}")
-    if not root.is_file() and not root.is_dir():
-        raise NotADirectoryError(f"name hygiene root is not a file or directory: {root}")
-
-
-def iter_text_files(root: Path) -> Iterator[Path]:
-    """Yield likely text files while skipping generated and ignored directories."""
-    if root.is_file():
-        if _should_scan(root):
-            yield root
-        return
-
-    for path in sorted(root.rglob("*")):
-        if not path.is_file() or not _should_scan(path):
-            continue
-        yield path
-
-
-def _should_scan(path: Path) -> bool:
-    parts = set(path.parts)
-    if parts.intersection(SKIPPED_PATH_PARTS):
-        return False
-    if path.is_symlink():
-        return False
-    return path.suffix.lower() in TEXT_EXTENSIONS
-
-
-def _display_path(path: Path, root: Path) -> Path:
-    try:
-        return path.relative_to(root)
-    except ValueError:
-        return path
-
-
-def format_findings(findings: Iterable[NameHygieneFinding]) -> str:
-    return "\n".join(finding.format() for finding in findings)
+    return scan_literal_paths(Path(root), list(forbidden_tokens))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -142,8 +58,12 @@ def main(argv: list[str] | None = None) -> int:
         print("name hygiene ok")
         return 0
 
-    print(format_findings(findings))
+    print("\n".join(finding.render() for finding in findings))
     return 1
+
+
+# Re-export skip set so callers that introspect it keep working.
+_SKIPPED_SEGMENTS = SKIPPED_SEGMENTS
 
 
 if __name__ == "__main__":

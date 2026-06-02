@@ -18,7 +18,7 @@ build-backend = "setuptools.build_meta"
 name = "repolens"
 version = "0.1.0"
 description = "CLI foundation for a license disclosure orchestrator."
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
   "defusedxml>=0.7.1",
   "jsonschema==4.26.0",
@@ -26,9 +26,11 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# pyproject is the single source for dependency pins; lockfiles derive from it.
+# requirements-dev.txt carries the same versions with --require-hashes.
 test = [
-    "pytest==8.3.5",
-    "ruff==0.11.13",
+    "pytest==9.0.3",
+    "ruff==0.12.0",
 ]
 
 [project.scripts]
@@ -44,6 +46,8 @@ where = ["src"]
 
 [tool.ruff]
 line-length = 100
+# Lint target stays at py311 so PEP 695 (py312+) rewrites are not forced on the
+# existing typing helpers; the runtime/CI Python is 3.13.
 target-version = "py311"
 extend-exclude = [".github/scripts/codex_review.py"]
 

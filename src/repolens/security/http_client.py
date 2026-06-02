@@ -6,11 +6,16 @@ import http.client
 import ipaddress
 import socket
 import ssl
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from urllib.parse import urljoin, urlparse
 
 from repolens.security.errors import FetchSecurityError
 from repolens.security.limits import DEFAULT_LIMITS, SecurityLimits
+
+#: A resolver maps a hostname to the IP addresses it resolves to. Injectable so tests can
+#: exercise resolve-then-validate without touching the network.
+Resolver = Callable[[str, int], Iterable[str]]
 
 _NAT64_NETWORKS = (
     ipaddress.ip_network("64:ff9b::/96"),
@@ -18,6 +23,8 @@ _NAT64_NETWORKS = (
 )
 _IPV4_COMPAT_NETWORK = ipaddress.ip_network("::/96")
 _SITE_LOCAL_IPV6_NETWORK = ipaddress.ip_network("fec0::/10")
+#: RFC 6598 carrier-grade NAT / shared address space — never a legitimate fetch target.
+_SHARED_ADDRESS_NETWORK = ipaddress.ip_network("100.64.0.0/10")
 _BLOCKED_IPV4_HOSTS = {ipaddress.ip_address("169.254.169.254")}
 _AUTH_HEADER_NAMES = {"authorization", "proxy-authorization"}
 
@@ -67,14 +74,26 @@ def fetch_url(url: str, options: HttpFetchOptions) -> FetchResult:
     return _fetch_url(url, options, redirects_remaining=options.max_redirects)
 
 
-def validate_url_for_fetch(url: str, options: HttpFetchOptions) -> tuple[str, int, str]:
-    """Validate a URL and return host, port, and a pinned IP address."""
+def validate_url_for_fetch(
+    url: str,
+    options: HttpFetchOptions,
+    *,
+    resolver: Resolver | None = None,
+) -> tuple[str, int, str]:
+    """Validate a URL and return host, port, and a pinned IP address.
+
+    ``resolver`` is injectable so tests can exercise the resolve-then-validate flow
+    deterministically; it defaults to a real DNS lookup. A resolver must return the
+    IP addresses ``host`` resolves to (the same contract as :func:`_resolve_host`).
+    """
 
     parsed = urlparse(url)
     if parsed.scheme.lower() != "https":
         raise FetchSecurityError("only https URLs are allowed")
     if not parsed.hostname:
         raise FetchSecurityError("URL must include a host")
+    if parsed.username or parsed.password:
+        raise FetchSecurityError("URL must not embed credentials")
     host = parsed.hostname.lower()
     if not _host_allowed(host, options.allowed_hosts):
         raise FetchSecurityError("host is not allowlisted")
@@ -85,7 +104,8 @@ def validate_url_for_fetch(url: str, options: HttpFetchOptions) -> tuple[str, in
     port = 443 if parsed_port is None else parsed_port
     if port <= 0:
         raise FetchSecurityError("invalid URL port")
-    addresses = _resolve_host(host, port)
+    resolve = resolver or _resolve_host
+    addresses = list(resolve(host, port))
     if not addresses:
         raise FetchSecurityError("host did not resolve")
     unsafe = [ip for ip in addresses if _is_blocked_ip(ip)]
@@ -201,6 +221,8 @@ def _is_blocked_ip(value: str) -> bool:
         if any(ip in network for network in _NAT64_NETWORKS):
             return True
     if ip in _BLOCKED_IPV4_HOSTS:
+        return True
+    if isinstance(ip, ipaddress.IPv4Address) and ip in _SHARED_ADDRESS_NETWORK:
         return True
     return any(
         (

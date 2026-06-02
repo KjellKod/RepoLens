@@ -15,7 +15,7 @@ def test_name_hygiene_guard_fails_on_forbidden_token(tmp_path):
     findings = scan_paths(tmp_path)
 
     assert len(findings) == 1
-    assert findings[0].token == forbidden_token
+    assert findings[0].term == forbidden_token
 
 
 def test_name_hygiene_guard_allows_synthetic_fixtures(synthetic_fixture_root):

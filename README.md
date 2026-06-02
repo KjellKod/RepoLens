@@ -64,9 +64,13 @@ baked into the tool. **Full guide: [docs/usage.md](docs/usage.md).**
 
 ## Local Name Hygiene
 
-RepoLens is repo-agnostic, so public CI does **not** store real owner, repository, or
-company names in GitHub variables. Instead, CI proves the guard is wired with an
-invented runtime sentinel, and real forbidden names stay in a private gitignored file:
+RepoLens is repo-agnostic, so no real owner, repository, or company name is ever
+committed. Public CI proves the guard is wired two ways: an invented runtime sentinel
+that needs no configuration, plus a tracked-tree scan whose denylist comes from the
+`REPOLENS_FORBIDDEN_NAMES` GitHub Actions **variable** (never a committed literal). The
+variable holds runtime-only forbidden names; it is read at scan time and never written
+back into the repo. For local runs, real forbidden names stay in a private gitignored
+file instead:
 
 ```json
 {

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from repolens.data.redact import REDACTION, redact_tokens
+from repolens.security.redaction import REDACTION, redact_tokens_from_structure
 
 
 def test_redact_tokens_deep_walks() -> None:
@@ -14,7 +14,7 @@ def test_redact_tokens_deep_walks() -> None:
         refresh: "key is token-shaped",
     }
 
-    redacted = redact_tokens(value)
+    redacted = redact_tokens_from_structure(value)
 
     assert redacted["token"] == f"prefix {REDACTION} suffix"
     assert redacted["nested"] == [REDACTION, REDACTION, REDACTION]
