@@ -1,0 +1,59 @@
+src/repolens/report/main.py
+  s_205fa72ef1528b::t_cf714515ebe67b 1-305
+tests/unit/test_report_main.py
+  s_205fa72ef1528b::t_77cd01af1dc66b 183
+  s_205fa72ef1528b::t_0bae5f1639bb7b 1-182,184-248
+src/repolens/cli.py
+  s_205fa72ef1528b::t_cf714515ebe67b 16,133-134,186-200,308-313
+tests/canaries/security/test_token_canaries.py
+  s_205fa72ef1528b::t_a522ff9322792a 43-61
+  s_205fa72ef1528b::t_0bae5f1639bb7b 1-2,6,35-36,40-42,66-74
+  s_5af9159cccdbdc::t_d55af2e27f15ec 5,37-39,62-65
+src/repolens/report/__init__.py
+  s_205fa72ef1528b::t_cf714515ebe67b 1-23
+tests/e2e/test_cli.py
+  s_205fa72ef1528b::t_0bae5f1639bb7b 10,124-163
+  s_205fa72ef1528b::t_fbf06df59c30c3 164-165
+docs/roadmap/rpl_roadmap.md
+  s_21a9b5f4b751ee::t_29e23e857ad155 86
+src/repolens/data/store.py
+  s_5af9159cccdbdc::t_e7cc15e937c358 150,169,201,238,261-266
+tests/canaries/security/test_output_canaries.py
+  s_205fa72ef1528b::t_2759fe0b7eae75 56-59,66-67
+  s_205fa72ef1528b::t_0bae5f1639bb7b 6,11,47-49,54,61-65,73-77,82,84-96,98-100,163-189
+  s_5af9159cccdbdc::t_915f27894490a7 10,50-53,55,78-81,83,190-200
+  s_205fa72ef1528b::t_77cd01af1dc66b 60
+  s_205fa72ef1528b::t_314763129c753c 68-72,97
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "dbd4fb22b1dafb7c986db64e8a047436feb1e487",
+  "prompts": {},
+  "sessions": {
+    "s_205fa72ef1528b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e88ab-23ce-7570-9025-5958b04c5776",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_21a9b5f4b751ee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "79fe0369-7c96-4041-854b-6af8f8a5c15d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_5af9159cccdbdc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e894e-e84d-7ce2-844c-c22a5e4ae471",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
