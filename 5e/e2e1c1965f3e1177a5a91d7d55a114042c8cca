@@ -1,0 +1,41 @@
+tests/unit/security/test_parsers.py
+  s_13521cbbb9b763::t_56d8cdfb30ee5f 15,114-121,133-149
+tests/unit/security/test_content.py
+  s_13521cbbb9b763::t_56d8cdfb30ee5f 16-22
+src/repolens/security/clone.py
+  s_13521cbbb9b763::t_0540d6520a9c10 126
+src/repolens/security/content.py
+  s_13521cbbb9b763::t_0540d6520a9c10 47,69-71,92-95
+src/repolens/security/http_client.py
+  s_13521cbbb9b763::t_0540d6520a9c10 20,199
+src/repolens/security/redaction.py
+  s_13521cbbb9b763::t_0540d6520a9c10 33
+tests/unit/security/test_clone.py
+  s_13521cbbb9b763::t_56d8cdfb30ee5f 32
+src/repolens/security/parsers.py
+  s_13521cbbb9b763::t_0540d6520a9c10 252-253,312,316
+tests/unit/security/test_http_client.py
+  s_13521cbbb9b763::t_56d8cdfb30ee5f 94
+src/repolens/security/sanitize.py
+  s_13521cbbb9b763::t_0540d6520a9c10 105-109
+tests/unit/security/test_redaction.py
+  s_13521cbbb9b763::t_56d8cdfb30ee5f 29-32
+tests/unit/security/test_sanitize.py
+  s_13521cbbb9b763::t_56d8cdfb30ee5f 71-74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5ee2e1c1965f3e1177a5a91d7d55a114042c8cca",
+  "prompts": {},
+  "sessions": {
+    "s_13521cbbb9b763": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85dd-a0e3-7030-ab17-0d49fa04e64d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
