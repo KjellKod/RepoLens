@@ -10,6 +10,7 @@ requirements file must be fully transitively pinned and is paired with
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections.abc import Callable
 from pathlib import Path
@@ -21,6 +22,8 @@ PipRunner = Callable[[list[str]], int]
 
 #: Path of the hash-pinned requirements file shipped with the package.
 DEFAULT_REQUIREMENTS_PATH = Path(__file__).with_name("scancode.requirements.txt")
+SCANCODE_REQUIREMENTS_SOURCE_PREFIX = "hash-pinned-requirements:"
+SCANCODE_WRAPPER_MARKER = "repolens-scancode-wrapper/v1"
 
 _HASH_RE = re.compile(r"--hash=sha256:[0-9a-f]{64}")
 
@@ -84,6 +87,46 @@ def load_requirements(path: Path | str = DEFAULT_REQUIREMENTS_PATH) -> str:
     text = Path(path).read_text(encoding="utf-8")
     validate_requirements(text)
     return text
+
+
+def requirements_sha256(path: Path | str) -> str:
+    """Return the SHA-256 of a validated hash-pinned requirements file."""
+
+    req = Path(path)
+    validate_requirements(req.read_text(encoding="utf-8"))
+    return hashlib.sha256(req.read_bytes()).hexdigest()
+
+
+def build_scancode_wrapper(version: str, requirements_digest: str) -> str:
+    """Build the canonical bootstrap-produced ScanCode command wrapper."""
+
+    if not version.strip():
+        raise ValueError("ScanCode version must be non-empty")
+    if not _HASH_RE.fullmatch(f"--hash=sha256:{requirements_digest}"):
+        raise ValueError("ScanCode requirements digest must be a lowercase sha256")
+    return (
+        "#!/bin/sh\n"
+        f"# {SCANCODE_WRAPPER_MARKER}\n"
+        f"# scancode-version: {version.strip()}\n"
+        f"# requirements-sha256: {requirements_digest}\n"
+        'exec python3 -m scancode.cli "$@"\n'
+    )
+
+
+def write_scancode_wrapper(
+    dest: Path | str,
+    *,
+    version: str,
+    requirements_digest: str,
+    make_executable: Callable[[Path], None],
+) -> Path:
+    """Write the canonical ScanCode wrapper and mark it executable."""
+
+    wrapper = Path(dest)
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    wrapper.write_text(build_scancode_wrapper(version, requirements_digest), encoding="utf-8")
+    make_executable(wrapper)
+    return wrapper
 
 
 def build_pip_argv(requirements_path: Path | str, *, python: str = "python3") -> list[str]:

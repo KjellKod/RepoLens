@@ -15,7 +15,13 @@ from pathlib import Path
 from .errors import BootstrapError, IntegrityError, UsageError
 from .pins import DEFAULT_PINS_PATH, Pins, current_platform, load_pins
 from .record import write_tool_versions
-from .scancode import DEFAULT_REQUIREMENTS_PATH, install_scancode
+from .scancode import (
+    DEFAULT_REQUIREMENTS_PATH,
+    SCANCODE_REQUIREMENTS_SOURCE_PREFIX,
+    install_scancode,
+    requirements_sha256,
+    write_scancode_wrapper,
+)
 from .syft import (
     Acquire,
     CommandRunner,
@@ -99,8 +105,25 @@ def run(
         )
         resolved.append(syft_tool)
 
-        # 3. ScanCode — hash-pinned pip install (runner injected).
+        # 3. ScanCode — hash-pinned pip install (runner injected), then expose a
+        #    deterministic wrapper whose content matches the recorded proof.
         install_scancode(requirements_path, runner=pip_runner)
+        scancode_digest = requirements_sha256(requirements_path)
+        scancode_tool = write_scancode_wrapper(
+            dest_dir / "scancode",
+            version=pins.tool("scancode").version,
+            requirements_digest=scancode_digest,
+            make_executable=make_executable,
+        )
+        resolved.append(
+            ResolvedTool(
+                name="scancode",
+                version=pins.tool("scancode").version,
+                digest=scancode_digest,
+                path=scancode_tool,
+                source=f"{SCANCODE_REQUIREMENTS_SOURCE_PREFIX}{Path(requirements_path).name}",
+            )
+        )
 
         # 4. Record versions.
         write_tool_versions(pins, resolved, versions_out)

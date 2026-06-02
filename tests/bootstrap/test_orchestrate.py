@@ -10,6 +10,11 @@ import pytest
 
 from repolens.bootstrap import errors, orchestrate
 from repolens.bootstrap.orchestrate import EXIT_INTEGRITY, EXIT_OK, run, run_safe
+from repolens.bootstrap.scancode import (
+    SCANCODE_REQUIREMENTS_SOURCE_PREFIX,
+    build_scancode_wrapper,
+    requirements_sha256,
+)
 
 from .conftest import PLATFORM
 
@@ -92,9 +97,21 @@ def test_run_happy_path_writes_versions(
     assert rc == EXIT_OK
     assert (tmp_path / "tools" / "syft").exists()
     assert (tmp_path / "tools" / "cosign").exists()
+    scancode_wrapper = tmp_path / "tools" / "scancode"
+    assert scancode_wrapper.exists()
+    scancode_digest = requirements_sha256(req_file)
+    assert scancode_wrapper.read_text(encoding="utf-8") == build_scancode_wrapper(
+        "32.3.1", scancode_digest
+    )
     payload = json.loads(versions_out.read_text())
     assert payload["tools"]["syft"]["version"] == "1.18.1"
+    assert payload["tools"]["scancode"] == {
+        "version": "32.3.1",
+        "digest": scancode_digest,
+        "source": f"{SCANCODE_REQUIREMENTS_SOURCE_PREFIX}{req_file.name}",
+    }
     pip_runner.assert_called_once()
+    assert scancode_wrapper in [call.args[0] for call in make_exe.mock_calls]
 
 
 def test_run_tampered_syft_raises_integrity(

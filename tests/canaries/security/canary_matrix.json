@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 34,
+    "expected_active_count": 41,
     "markers": [
         "offline",
         "security",
@@ -212,14 +212,51 @@
             "guardrail": "markdown_href_sanitization"
         },
         {
+            "id": "p3b_mobile_sandbox_token_absent_read_only",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3b_mobile_sandbox_spec_has_no_token_env_and_read_only_mount",
+            "guardrail": "mobile_sandbox_token_absent_read_only"
+        },
+        {
+            "id": "p3b_mobile_sandbox_egress_metadata_blocked",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3b_mobile_sandbox_egress_blocks_metadata",
+            "guardrail": "mobile_sandbox_egress_metadata_blocked"
+        },
+        {
+            "id": "p3b_mobile_missing_sandbox_non_fatal",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3b_mobile_missing_sandbox_is_non_fatal",
+            "guardrail": "mobile_missing_sandbox_non_fatal"
+        },
+        {
+            "id": "p3b_scancode_scoped_targets",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3b_scancode_rejects_broad_and_outside_targets",
+            "guardrail": "scancode_scoped_targets_only"
+        },
+        {
+            "id": "p3b_scancode_token_free_env",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3b_scancode_runner_env_is_token_free",
+            "guardrail": "scancode_token_absent_from_process_env"
+        },
+        {
+            "id": "p3b_scancode_timeout_fails_closed",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3b_scancode_timeout_fails_closed",
+            "guardrail": "scancode_timeout_fails_closed"
+        },
+        {
+            "id": "p3b_scancode_unresolved_only",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3b_scancode_runs_only_for_unresolved_records",
+            "guardrail": "scancode_unresolved_only"
+        },
+        {
             "id": "x2_injection_agent_family",
             "status": "pending",
             "pending_reason": "Capability-minimized agent and evidence re-fetch flow are not present in M1."
-        },
-        {
-            "id": "x2_mobile_sandbox_family",
-            "status": "pending",
-            "pending_reason": "Mobile/native license enrichment and sandboxing are deferred to P3b/R2."
         }
     ]
 }
