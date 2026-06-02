@@ -99,7 +99,7 @@ Deliver P1 + P2 + P3a (API layer) + P6a (main view, md/csv) against any `<OWNER>
 - [x] X1 — fixtures grown to cover R1 components (shipped inside the R1 P-quests)
 - [x] X2 — canaries grown for R1 (clone + scan + per-stage canaries; matrix 9 → 31)
 - [x] X3 — CI grown for R1 (all new canaries active in the matrix gate)
-- [ ] X3b — branch protection on `main` via `gh` (see [Branch protection](#branch-protection-applied-once-checks-exist-from-m1)) — **the open M1 step**
+- [x] X3b — branch protection on `main` via `gh` (see [Branch protection](#branch-protection-applied-once-checks-exist-from-m1)); re-apply with `scripts/apply_branch_protection.sh`
 - [x] Docs — flesh out `docs/usage.md` for the shipped commands (grows M1 → M3)
 
 **Acceptance**
@@ -107,9 +107,10 @@ Deliver P1 + P2 + P3a (API layer) + P6a (main view, md/csv) against any `<OWNER>
 - [ ] Multi-language deduped inventory with provenance, versions, source URLs.
 - [x] Clone hardening + **clone canaries green**; the watermark canary passes.
 - [x] Zero owner/repo strings anywhere (hygiene guard green).
-- [ ] `main` is protected: required checks must pass **and** the branch must be
-      up to date before a PR can merge. *(Today: `security-canaries` + `codex-review`
-      required, but `strict: false` and `offline-ci` not required — X3b closes this.)*
+- [x] `main` is protected: required checks must pass **and** the branch must be
+      up to date before a PR can merge. *(Live: `security-canaries` + `codex-review` +
+      `offline-ci` required, `strict: true`, ≥1 review — verified via
+      `scripts/apply_branch_protection.sh`.)*
 
 ### M2 — Resolution depth + flagging
 Deliver P3b (full: sandboxed mobile native + ScanCode on unknowns) + P4.
@@ -190,15 +191,13 @@ resolved shortlist; it never resolves items itself.
 Once the offline PR checks are real (M1), enable GitHub branch protection on `main`
 via `gh` so merges are safe and current.
 
-**Where we are today:** `security-canaries` + `codex-review` are required, ≥1 review,
-`strict: false`, admins can bypass. **Ticking X3b means closing the two gaps:**
+**Live since X3b** (re-apply / evolve with `scripts/apply_branch_protection.sh`):
 
-- **Add `offline-ci` to the required checks** — it carries lint, unit, integration,
-  the canary matrix gate, and the name-hygiene guard, and today it could fail without
-  blocking a merge.
-- **Set `strict: true`** — a PR must be up to date with `main` before merging, which
-  makes the "recompute the canary-matrix count at final rebase" rule machine-enforced
-  instead of discipline.
+- **Required checks:** `security-canaries`, `codex-review`, `offline-ci` (lint, unit,
+  integration, the canary matrix gate, and the name-hygiene guard).
+- **`strict: true`** — a PR must be up to date with `main` before merging, which makes
+  the "recompute the canary-matrix count at final rebase" rule machine-enforced.
+- **≥1 approving review** required.
 - `codex-review` stays required for now (deliberate trade-off vs. the original
   "advisory-only" advice); if OpenAI quota flakiness ever blocks merges, demote it
   to advisory and note it here.
