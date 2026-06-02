@@ -16,7 +16,6 @@ from repolens.data.limits import (
     MAX_NDJSON_LINE_BYTES,
     MAX_NDJSON_RECORDS,
     SCHEMA_VERSION,
-    check_size,
     max_bytes_for,
     scan_depth,
 )
@@ -113,8 +112,7 @@ def load_json_capped(
     """Read JSON with size and depth guards before full parser trust."""
 
     artifact = Path(path)
-    check_size(artifact, max_bytes)
-    raw = artifact.read_bytes()
+    raw = _read_capped_bytes(artifact, max_bytes)
     scan_depth(raw, max_depth)
     try:
         return json.loads(raw)
@@ -204,9 +202,13 @@ def iter_resolved(
     """Yield validated resolved records from an NDJSON file."""
 
     artifact = Path(path)
-    check_size(artifact, max_bytes or max_bytes_for("resolved"))
+    byte_cap = max_bytes or max_bytes_for("resolved")
+    total_bytes = 0
     with artifact.open("rb") as handle:
         for index, line in enumerate(handle, start=1):
+            total_bytes += len(line)
+            if total_bytes > byte_cap:
+                raise LimitExceeded(f"{artifact} exceeds {byte_cap} bytes")
             if index > max_records:
                 raise LimitExceeded(f"{artifact} exceeds {max_records} records")
             if len(line) > max_line_bytes:
@@ -244,3 +246,11 @@ def _parse_error_message(exc: UnicodeDecodeError | json.JSONDecodeError) -> str:
     if isinstance(exc, json.JSONDecodeError):
         return exc.msg
     return exc.reason
+
+
+def _read_capped_bytes(path: Path, max_bytes: int) -> bytes:
+    with path.open("rb") as handle:
+        data = handle.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        raise LimitExceeded(f"{path} exceeds {max_bytes} bytes")
+    return data

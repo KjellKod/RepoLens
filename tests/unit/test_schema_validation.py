@@ -47,3 +47,19 @@ def test_wrong_type_rejected(sbom: dict[str, object]) -> None:
 
     with pytest.raises(SchemaValidationError, match="artifacts"):
         validate_artifact(sbom, "sbom")
+
+
+def test_inventory_rejects_empty_version(inventory: dict[str, object]) -> None:
+    components = inventory["components"]
+    assert isinstance(components, list)
+    components[0]["versions"] = [""]
+
+    with pytest.raises(SchemaValidationError, match="versions"):
+        validate_artifact(inventory, "inventory")
+
+
+def test_shortlist_open_count_must_match_open_items(shortlist: dict[str, object]) -> None:
+    shortlist["open_count"] = 0
+
+    with pytest.raises(SchemaValidationError, match="open_count"):
+        validate_artifact(shortlist, "shortlist")

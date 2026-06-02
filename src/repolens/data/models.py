@@ -9,11 +9,13 @@ Origin = Literal["third-party-oss", "first-party"]
 Scope = Literal["runtime", "dev", "build", "test", "unknown"]
 Distribution = Literal["server", "client-or-mobile", "not-distributed", "unknown"]
 PolicyTier = Literal["ALLOW", "REVIEW", "BLOCK", "UNKNOWN"]
+SchemaVersion = Literal["1.0"]
+Modified = bool | Literal["unknown"]
 
 
 @dataclass(frozen=True)
 class ResolvedItem:
-    schema_version: str
+    schema_version: SchemaVersion
     name: str
     version: str
     repo: str
@@ -22,7 +24,7 @@ class ResolvedItem:
     spdx_id: str | None = None
     purl: str | None = None
     declared_license_raw: str | None = None
-    modified: bool | str = "unknown"
+    modified: Modified = "unknown"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -41,7 +43,7 @@ class InventoryComponent:
     distribution: Distribution
     versions: list[str]
     source_url: str
-    modified: bool | str
+    modified: Modified
     found_in: list[str]
     policy_tier: PolicyTier | None = None
     evidence_refs: list[str] = field(default_factory=list)

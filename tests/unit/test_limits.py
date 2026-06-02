@@ -15,9 +15,13 @@ def test_oversize_file_rejected_before_parse(
     path = tmp_path / "artifact.json"
     path.write_text('{"ok": true}', encoding="utf-8")
 
+    def fail_stat(_: Path) -> object:
+        raise AssertionError("size guard should not rely on a separate stat")
+
     def fail_parse(_: bytes) -> object:
         raise AssertionError("parser should not run")
 
+    monkeypatch.setattr(Path, "stat", fail_stat)
     monkeypatch.setattr("repolens.data.store.json.loads", fail_parse)
 
     with pytest.raises(LimitExceeded):

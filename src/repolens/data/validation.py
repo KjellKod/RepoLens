@@ -49,3 +49,20 @@ def validate_artifact(value: Any, artifact_name: str) -> None:
         if path:
             prefix = f"{prefix}.{path}"
         raise SchemaValidationError(f"{prefix}: {exc.message}") from exc
+    if artifact_name == "shortlist":
+        _validate_shortlist_open_count(value)
+
+
+def _validate_shortlist_open_count(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    items = value.get("items", [])
+    if not isinstance(items, list):
+        return
+    open_count = sum(
+        1
+        for item in items
+        if isinstance(item, dict) and item.get("status") == "open"
+    )
+    if value.get("open_count") != open_count:
+        raise SchemaValidationError("shortlist.open_count: must match open item count")

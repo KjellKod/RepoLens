@@ -31,7 +31,11 @@
             "type": "string",
             "enum": ["server", "client-or-mobile", "not-distributed", "unknown"]
           },
-          "versions": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+          "versions": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "minItems": 1
+          },
           "source_url": {"type": "string", "minLength": 1},
           "modified": {
             "anyOf": [

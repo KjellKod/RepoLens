@@ -11,9 +11,11 @@ def test_redact_tokens_deep_walks() -> None:
     value = {
         "token": f"prefix {classic} suffix",
         "nested": [fine_grained, user_to_server, refresh],
+        refresh: "key is token-shaped",
     }
 
     redacted = redact_tokens(value)
 
     assert redacted["token"] == f"prefix {REDACTION} suffix"
     assert redacted["nested"] == [REDACTION, REDACTION, REDACTION]
+    assert redacted[REDACTION] == "key is token-shaped"

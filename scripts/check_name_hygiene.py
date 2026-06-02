@@ -145,7 +145,7 @@ def env_findings(path: Path, text: str, forbidden_names: list[str]) -> list[Find
             if offset == -1:
                 break
             findings.append(
-                Finding(path, line_number(text, offset), "forbidden-literal", forbidden_name)
+                Finding(path, line_number(text, offset), "forbidden-literal", "denylist-entry")
             )
             start = offset + max(1, len(forbidden_name))
     return findings

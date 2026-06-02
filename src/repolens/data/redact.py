@@ -20,7 +20,7 @@ def redact_tokens(value: Any) -> Any:
     if isinstance(value, str):
         return TOKEN_RE.sub(REDACTION, value)
     if isinstance(value, Mapping):
-        return {key: redact_tokens(inner) for key, inner in value.items()}
+        return {redact_tokens(key): redact_tokens(inner) for key, inner in value.items()}
     if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray | str):
         return [redact_tokens(inner) for inner in value]
     return value

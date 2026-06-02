@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from repolens.data.errors import LimitExceeded
 
 SCHEMA_VERSION = "1.0"
@@ -26,14 +24,6 @@ def max_bytes_for(artifact_name: str) -> int:
         return MAX_ARTIFACT_BYTES[artifact_name]
     except KeyError as exc:
         raise ValueError(f"unknown artifact type: {artifact_name}") from exc
-
-
-def check_size(path: Path, max_bytes: int) -> None:
-    """Reject an artifact before reading if it exceeds the byte cap."""
-
-    size = path.stat().st_size
-    if size > max_bytes:
-        raise LimitExceeded(f"{path} is {size} bytes; limit is {max_bytes}")
 
 
 def scan_depth(raw: bytes, max_depth: int = MAX_JSON_DEPTH) -> None:
