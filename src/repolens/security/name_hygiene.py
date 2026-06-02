@@ -483,6 +483,8 @@ def normalize_tokens(tokens: list[str]) -> list[str]:
 
 
 def iter_candidate_files(root: Path) -> list[Path]:
+    if not root.exists():
+        raise FileNotFoundError(f"name hygiene root does not exist: {root}")
     if root.is_file():
         return [root]
     git_files = _git_files(root)

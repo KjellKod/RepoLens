@@ -34,7 +34,7 @@ _COMMITTED_TOKEN_PATTERNS = (
     re.compile(r"gho_[A-Za-z0-9_]{20,}"),
     re.compile(r"ghu_[A-Za-z0-9_]{20,}"),
     re.compile(r"ghr_[A-Za-z0-9_]{20,}"),
-    re.compile(r"github_pat_[A-Za-z0-9_]+"),
+    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),
     re.compile(r"ghs_[A-Za-z0-9_]{20,}"),
 )
 
