@@ -33,6 +33,23 @@ def test_security_canary_runner_invokes_x2_canary_suite_when_present(tmp_path: P
     assert payload["guardrail_canaries_green"] is True
 
 
+def test_security_canary_runner_invokes_x2_gate_when_present(tmp_path: Path) -> None:
+    gate = tmp_path / "scripts" / "security_canary_gate.py"
+    gate.parent.mkdir(parents=True)
+    gate.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    matrix = tmp_path / "tests" / "canaries" / "security" / "canary_matrix.json"
+    matrix.parent.mkdir(parents=True)
+    matrix.write_text("{}", encoding="utf-8")
+
+    proc = run_canaries(tmp_path)
+
+    assert proc.returncode == 0
+    payload = json.loads(proc.stdout)
+    assert payload["canary_suite_status"] == "delegated_x2"
+    assert payload["delegated"] is True
+    assert payload["guardrail_canaries_green"] is True
+
+
 def test_security_canary_runner_reports_absent_pending_x2_when_suite_missing(
     tmp_path: Path,
 ) -> None:

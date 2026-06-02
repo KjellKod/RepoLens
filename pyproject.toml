@@ -6,6 +6,7 @@ markers = [
   "offline: can run without live network or external services",
   "security: exercises security guardrails",
   "canary: mandatory security canary coverage",
+  "fixtures: fixture contract tests",
   "name_hygiene: verifies forbidden-name and token hygiene",
 ]
 [build-system]
@@ -19,6 +20,12 @@ description = "CLI foundation for a license disclosure orchestrator."
 requires-python = ">=3.11"
 dependencies = [
   "PyYAML==6.0.2",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest==8.3.5",
+    "ruff==0.11.13",
 ]
 
 [project.scripts]

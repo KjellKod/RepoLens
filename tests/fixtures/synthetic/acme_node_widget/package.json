@@ -1,0 +1,9 @@
+{
+  "name": "acme-node-widget",
+  "version": "0.1.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "dependencies": {
+    "acme-node-ui": "4.5.6"
+  }
+}

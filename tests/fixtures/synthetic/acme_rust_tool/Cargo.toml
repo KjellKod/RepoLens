@@ -1,0 +1,8 @@
+[package]
+name = "acme-rust-tool"
+version = "0.1.0"
+edition = "2021"
+license = "UNLICENSED"
+
+[dependencies]
+acme-rust-core = "0.8.0"

@@ -1,0 +1,13 @@
+<project>
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>invalid.acme</groupId>
+  <artifactId>acme-jvm-adapter</artifactId>
+  <version>0.1.0</version>
+  <dependencies>
+    <dependency>
+      <groupId>invalid.acme</groupId>
+      <artifactId>acme-jvm-helper</artifactId>
+      <version>2.0.1</version>
+    </dependency>
+  </dependencies>
+</project>
