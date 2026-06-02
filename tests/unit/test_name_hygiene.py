@@ -104,6 +104,7 @@ def test_name_hygiene_accepts_runtime_forbidden_names_env(tmp_path: Path) -> Non
     assert token not in proc.stdout
     assert token not in proc.stderr
 
+
 def test_name_hygiene_discovers_default_local_config_upward(tmp_path: Path) -> None:
     local_config = tmp_path / ".name-hygiene.local.json"
     local_config.write_text(
@@ -257,10 +258,7 @@ def test_legacy_name_hygiene_structural_checks_redact_tokens(tmp_path: Path) -> 
     fixture.parent.mkdir()
     token = "ghp_" + "0123456789abcdefghijklmnop"
     fixture.write_text(
-        "{\n"
-        f'  "token": "{token}",\n'
-        '  "homepage": "https://sample.invalid-name.biz/project"\n'
-        "}\n",
+        f'{{\n  "token": "{token}",\n  "homepage": "https://sample.invalid-name.biz/project"\n}}\n',
         encoding="utf-8",
     )
 

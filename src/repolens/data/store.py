@@ -6,6 +6,7 @@ import json
 import os
 import tempfile
 from collections.abc import Iterable
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -84,10 +85,8 @@ def atomic_write_bytes(path: str | Path, data: bytes) -> None:
                 os.close(directory_fd)
     finally:
         if temp_name is not None:
-            try:
+            with suppress(FileNotFoundError):
                 Path(temp_name).unlink()
-            except FileNotFoundError:
-                pass
 
 
 def _json_bytes(value: Any) -> bytes:

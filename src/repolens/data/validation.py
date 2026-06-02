@@ -21,9 +21,7 @@ def load_schema(artifact_name: str) -> dict[str, Any]:
 
     if artifact_name not in SCHEMA_NAMES:
         raise ValueError(f"unknown artifact schema: {artifact_name}")
-    schema_path = resources.files("repolens.data").joinpath(
-        f"schemas/{artifact_name}.schema.json"
-    )
+    schema_path = resources.files("repolens.data").joinpath(f"schemas/{artifact_name}.schema.json")
     value = json.loads(schema_path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"schema {artifact_name} must be a JSON object")
@@ -59,10 +57,6 @@ def _validate_shortlist_open_count(value: Any) -> None:
     items = value.get("items", [])
     if not isinstance(items, list):
         return
-    open_count = sum(
-        1
-        for item in items
-        if isinstance(item, dict) and item.get("status") == "open"
-    )
+    open_count = sum(1 for item in items if isinstance(item, dict) and item.get("status") == "open")
     if value.get("open_count") != open_count:
         raise SchemaValidationError("shortlist.open_count: must match open item count")

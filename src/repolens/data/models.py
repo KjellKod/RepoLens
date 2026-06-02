@@ -27,11 +27,7 @@ class ResolvedItem:
     modified: Modified = "unknown"
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            key: value
-            for key, value in self.__dict__.items()
-            if value is not None
-        }
+        return {key: value for key, value in self.__dict__.items() if value is not None}
 
 
 @dataclass(frozen=True)
@@ -49,8 +45,4 @@ class InventoryComponent:
     evidence_refs: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
-            key: value
-            for key, value in self.__dict__.items()
-            if value is not None
-        }
+        return {key: value for key, value in self.__dict__.items() if value is not None}

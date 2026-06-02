@@ -53,6 +53,9 @@ jobs:
           token="$(printf '%s%s%s' invented- forbidden- token)"
           python scripts/ci/name_hygiene.py --forbidden-name "$token" --require-denylist
 
+      - name: Structural name hygiene
+        run: python scripts/check_name_hygiene.py
+
       - name: Tool pins
         run: python scripts/ci/verify_tool_pins.py
 
