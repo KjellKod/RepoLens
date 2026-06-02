@@ -1,0 +1,16 @@
+[project]
+name = "x3-ci-harness"
+version = "0.0.0"
+requires-python = ">=3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = [".github/scripts/codex_review.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
