@@ -61,7 +61,7 @@ Deliver F1–F5 and the X1/X2/X3 skeletons.
 - [ ] F5 — Policy engine (SPDX normalize, compound, tiers)
 - [ ] X1 — test harness + fixtures + watermark (skeleton)
 - [ ] X2 — security canary suite (skeleton)
-- [ ] X3 — CI offline PR pipeline (skeleton)
+- [x] X3 — CI offline PR pipeline (skeleton)
 
 **Acceptance**
 - [ ] `repolens --help` runs; config loads from untracked local files.
