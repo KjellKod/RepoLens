@@ -1,0 +1,19 @@
+README.md
+  s_c1de120cdb9b59::t_b0abd870da9559 65-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "39ab17d4f21ad20004cc7ac848a8c38d8ffca18b",
+  "prompts": {},
+  "sessions": {
+    "s_c1de120cdb9b59": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85cd-190c-79e0-b899-b0babe50d69d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
