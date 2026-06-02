@@ -1,0 +1,24 @@
+tests/policy/__init__.py
+  s_a45d31dd03ba28::t_7f763f89aed8c0 1
+src/repolens/policy/expression.py
+  s_a45d31dd03ba28::t_bcdf60782f2287 5,33,39,47,55,68,127
+tests/policy/test_name_hygiene.py
+  s_a45d31dd03ba28::t_7f763f89aed8c0 47
+  s_a45d31dd03ba28::t_bcdf60782f2287 31,80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "4c936c26206c61e051644b662cc05d3f6f573563",
+  "prompts": {},
+  "sessions": {
+    "s_a45d31dd03ba28": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a8-999b-7b80-8f6e-275a586ecdda",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
