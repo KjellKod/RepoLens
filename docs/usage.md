@@ -176,7 +176,8 @@ hardening actually delivered above, not full sandboxing.
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
 repolens scan      --work-root work --repos approved-repos.json   # hardened clone + Syft → per-repo SBOM (resumable)
-repolens resolve                     # license ladder: APIs → mobile → ScanCode on unknowns
+repolens resolve --work-root <WORK> --repo-ref <REPO_REF>
+                                      # API-only license resolution for an existing SBOM
 repolens flag                        # tag + apply policy + dedup → inventory + shortlist
 repolens shortlist                   # evidence-anchored agent + human checkbox approval
 repolens report                      # gated: assemble main report + appendices
@@ -235,6 +236,18 @@ discarded. Use `--force` only when you intentionally want a fresh approval file.
   }
 }
 ```
+
+### Resolve
+
+For the API-only resolution stage, `<WORK>/work/<REPO_REF>/sbom.syft.json` must already
+exist:
+
+```bash
+repolens resolve --work-root <WORK> --repo-ref <REPO_REF>
+```
+
+The command writes `<WORK>/work/<REPO_REF>/resolved.ndjson` with SPDX-normalized
+license records or schema-valid unresolved records when evidence cannot be verified.
 
 ## Outputs
 

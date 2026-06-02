@@ -28,10 +28,10 @@ class CliTests(unittest.TestCase):
         self.assertIn("discover", result.stdout)
 
     def test_stage_command_routes_to_success(self) -> None:
-        self.assertEqual(cli.main(["resolve"]), 0)
+        self.assertEqual(cli.main(["flag"]), 0)
 
     def test_stage_command_routes_findings_open_to_one(self) -> None:
-        self.assertEqual(cli.main(["resolve", "--findings-open"]), 1)
+        self.assertEqual(cli.main(["flag", "--findings-open"]), 1)
 
     def test_discover_requires_owner(self) -> None:
         self.assertEqual(cli.main(["discover"]), 2)
@@ -111,7 +111,7 @@ class CliTests(unittest.TestCase):
             ),
             redirect_stderr(stderr),
         ):
-            code = cli.main(["resolve"])
+            code = cli.main(["flag"])
 
         self.assertEqual(code, 1)
         output = stderr.getvalue()

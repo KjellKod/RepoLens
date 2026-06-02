@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 21,
+    "expected_active_count": 28,
     "markers": ["offline", "security", "canary"],
     "canaries": [
         {
@@ -128,6 +128,48 @@
             "status": "active",
             "nodeid": "tests/canaries/security/test_scan_timeout_canary.py::test_x2_scan_timeout_aborts",
             "guardrail": "scan_per_repo_timeout"
+        },
+        {
+            "id": "p3a_resolve_off_allowlist_evidence",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_blocks_off_allowlist_evidence",
+            "guardrail": "resolve_off_allowlist_evidence"
+        },
+        {
+            "id": "p3a_resolve_bad_anchor",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_rejects_mismatched_evidence_anchor",
+            "guardrail": "resolve_evidence_anchor_validation"
+        },
+        {
+            "id": "p3a_resolve_similar_spdx_rejected",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_rejects_similar_spdx_evidence",
+            "guardrail": "resolve_exact_spdx_evidence"
+        },
+        {
+            "id": "p3a_resolve_allowlisted_host_private_ip",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_blocks_allowlisted_host_resolving_private_ip",
+            "guardrail": "resolve_ssrf_resolve_then_validate"
+        },
+        {
+            "id": "p3a_resolve_unversioned_no_fetch",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_does_not_fetch_unversioned_package",
+            "guardrail": "resolve_unversioned_no_fetch"
+        },
+        {
+            "id": "p3a_resolve_token_redaction",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_redacts_token_shaped_api_payload",
+            "guardrail": "resolve_token_redaction"
+        },
+        {
+            "id": "p3a_resolve_rejected_credential_url_absent",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_drops_rejected_credential_evidence_url",
+            "guardrail": "resolve_rejected_credential_url_absent"
         },
         {
             "id": "x2_injection_agent_family",
