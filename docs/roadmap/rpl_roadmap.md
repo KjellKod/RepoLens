@@ -41,15 +41,16 @@ within a round. Rounds, their members, and their gates are defined **once** in t
 [execution doc → Rounds & gates](rpl_execution.md#rounds--gates) — that table is the
 single source of truth.
 
-**Critical path to first value:** F3 → P2 → P6·main.
+**Critical path to first value:** F3 → P2 → P6a.
 
 ## Milestones
 
 > **Delivery tracking lives here, in the docs — not in code.** Each component's Quest
 > ticks its **Delivery** box when its PR merges; the **Acceptance** boxes are ticked
 > when their checks are green. A milestone is done when every Delivery box and every
-> Acceptance box is checked. `P3`/`P6` deliver across two rounds, so each split is its
-> own box. No separate status file or code is needed to know what's shipped.
+> Acceptance box is checked. `P3` and `P6` each deliver across two rounds, so each half
+> is its **own ID** — `P3a` (R1) / `P3b` (R2), `P6a` (R1) / `P6b` (R3) — and no ID ever
+> appears in two rounds. No separate status file or code is needed to know what's shipped.
 
 ### M0 — Foundation & rails
 Deliver F1–F5 and the X1/X2/X3 skeletons.
@@ -72,12 +73,12 @@ Deliver F1–F5 and the X1/X2/X3 skeletons.
 - [ ] F3 schemas frozen and documented.
 
 ### M1 — Thin end-to-end inventory
-Deliver P1 + P2 + P3(API layer only) + P6(main view, md/csv) against any `<OWNER>`.
+Deliver P1 + P2 + P3a (API layer) + P6a (main view, md/csv) against any `<OWNER>`.
 **Delivery** (each Quest ticks its ID on merge)
 - [ ] P1 — discover (gh → categorize → approval file)
 - [ ] P2 — scan (hardened clone + Syft)
-- [ ] P3·api — resolve, API layer only
-- [ ] P6·main — report, main view (md/csv)
+- [ ] P3a — resolve, API layer only
+- [ ] P6a — report, main view (md/csv)
 - [ ] X1 — fixtures grown to cover R1 components
 - [ ] X2 — canaries grown for R1 (clone canaries)
 - [ ] X3 — CI grown for R1
@@ -93,9 +94,9 @@ Deliver P1 + P2 + P3(API layer only) + P6(main view, md/csv) against any `<OWNER
       up to date before a PR can merge.
 
 ### M2 — Resolution depth + flagging
-Deliver P3(full: sandboxed mobile native + ScanCode on unknowns) + P4.
+Deliver P3b (full: sandboxed mobile native + ScanCode on unknowns) + P4.
 **Delivery** (each Quest ticks its ID on merge)
-- [ ] P3·full — resolve full (mobile sandbox + ScanCode-on-unknowns)
+- [ ] P3b — resolve full (mobile sandbox + ScanCode-on-unknowns)
 - [ ] P4 — flag (tag `origin`/`scope`/`distribution` + policy + dedup)
 - [ ] X1 — fixtures grown for R2
 - [ ] X2 — canaries grown for R2 (mobile sandbox canaries)
@@ -109,10 +110,10 @@ Deliver P3(full: sandboxed mobile native + ScanCode on unknowns) + P4.
 - [ ] Components carry `origin`/`scope`/`distribution`; dedup correct.
 
 ### M3 — Human-in-loop + gated full report
-Deliver P5 + P6(full: categories → main + appendices + docx, gate).
+Deliver P5 + P6b (full: categories → main + appendices + docx, gate).
 **Delivery** (each Quest ticks its ID on merge)
 - [ ] P5 — shortlist (capability-minimized agent + human approval)
-- [ ] P6·full — report full (categories → main + appendices + docx, gate)
+- [ ] P6b — report full (categories → main + appendices + docx, gate)
 - [ ] X1 — fixtures grown for R3
 - [ ] X2 — canaries grown for R3 (injection canaries)
 - [ ] X3 — CI grown for R3 (+ dogfood on self)

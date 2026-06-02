@@ -44,9 +44,9 @@ truth for round membership and gates.
 | Round | Milestone | Parallel Quests | Opens when |
 |-------|-----------|-----------------|-----------|
 | **R0** | M0 foundation | F1, F2, F3, F4, F5 + X1/X2/X3 skeletons | start |
-| **R1** | M1 thin slice | P1, P2, P3·api-layer, P6·main-view | **F3 schemas frozen** + F2 primitives + their canaries green |
-| **R2** | M2 depth | P3·full (mobile sandbox + ScanCode-on-unknowns), P4 | R1 integrated |
-| **R3** | M3 human-loop | P5, P6·full | R2 integrated |
+| **R1** | M1 thin slice | P1, P2, P3a, P6a | **F3 schemas frozen** + F2 primitives + their canaries green |
+| **R2** | M2 depth | P3b (mobile sandbox + ScanCode-on-unknowns), P4 | R1 integrated |
+| **R3** | M3 human-loop | P5, P6b | R2 integrated |
 
 `X1` (fixtures/watermark), `X2` (security canaries), `X3` (CI) start in R0 and **grow
 every round** alongside the components they cover.
@@ -62,10 +62,10 @@ every round** alongside the components they cover.
 | F5 | Policy engine (SPDX normalize, compound, tiers) | Quest | R0 |
 | P1 | discover (gh → categorize → approval file) | Quest | R1 |
 | P2 | scan (hardened clone + Syft) | Quest | R1 |
-| P3 | resolve (ladder; API adapters → mobile → ScanCode) | Quest | R1 (api) → R2 (full) |
+| P3a / P3b | resolve — **P3a**: API layer (R1); **P3b**: + mobile sandbox & ScanCode-on-unknowns (R2) | Quest | R1 / R2 |
 | P4 | flag (tag + policy + dedup) | Quest | R2 |
 | P5 | shortlist (capability-minimized agent + human) | Quest (critical) | R3 |
-| P6 | report (categories → main + appendix + docx) | Quest | R1 (main) → R3 (full) |
+| P6a / P6b | report — **P6a**: main view (R1); **P6b**: + categories, appendices, docx, gate (R3) | Quest | R1 / R3 |
 | X1 | test harness + fixtures + watermark | Quest | R0+ |
 | X2 | security canary suite | Quest | R0+ |
 | X3 | CI (offline PR + scheduled live-smoke + dogfood) | Quest | R0+ |
@@ -77,9 +77,9 @@ allowlist (`~/ws/extra/.ai/allowlist.json`) — no code involved.
 
 **Intensity**
 - **Full workflow** (plan → dual review + arbiter → build → dual review → fix) for
-  anything security-critical or contract-defining: **F2, F3, P3, P4, P5**.
+  anything security-critical or contract-defining: **F2, F3, P3b, P4, P5**.
 - **Solo / lighter** (single agent, fewer fix iterations — allowlist `solo`) is fine for
-  mechanical scaffolding and docs-shaped work: **F1, F4, the X* skeletons, P6·main**.
+  mechanical scaffolding and docs-shaped work: **F1, F4, the X* skeletons, P3a, P6a**.
 - `review_mode` (`auto`/`fast`/`full`) + `fast_review_thresholds` already auto-lighten
   review for tiny diffs.
 
