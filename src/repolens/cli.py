@@ -113,8 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
                 default=DEFAULT_GH_LIMIT,
                 metavar="N",
                 help=(
-                    f"Maximum repos to ask gh for, 1-{MAX_GH_LIMIT} "
-                    f"(default: {DEFAULT_GH_LIMIT})."
+                    f"Maximum repos to ask gh for, 1-{MAX_GH_LIMIT} (default: {DEFAULT_GH_LIMIT})."
                 ),
             )
             subparser.set_defaults(handler=_discover_command)
