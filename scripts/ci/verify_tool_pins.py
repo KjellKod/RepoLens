@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 import sys
+from itertools import chain
 from pathlib import Path
 
 FULL_SHA_RE = re.compile(r"^[0-9a-f]{40}$")
@@ -29,7 +30,9 @@ def action_ref_parts(value: str) -> tuple[str, str] | None:
 
 def validate_workflow_refs(root: Path, errors: list[str]) -> set[str]:
     observed: set[str] = set()
-    for workflow in sorted((root / ".github" / "workflows").glob("*.yml")):
+    workflow_dir = root / ".github" / "workflows"
+    workflows = sorted(chain(workflow_dir.glob("*.yml"), workflow_dir.glob("*.yaml")))
+    for workflow in workflows:
         content = workflow.read_text(encoding="utf-8")
         for match in WORKFLOW_USES_RE.finditer(content):
             uses_value = match.group(1).strip().strip('"').strip("'")

@@ -167,6 +167,21 @@ def test_name_hygiene_scans_untracked_nonignored_files_in_git_repo(tmp_path: Pat
     assert "invented-untracked-token" not in proc.stderr
 
 
+def test_name_hygiene_tolerates_missing_tracked_files(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    missing = tmp_path / "missing.txt"
+    missing.write_text("invented-missing-token\n", encoding="utf-8")
+    subprocess.run(["git", "add", missing.name], cwd=tmp_path, check=True, capture_output=True)
+    missing.unlink()
+
+    proc = run_name_hygiene(tmp_path, "--forbidden-name", "invented-missing-token")
+
+    assert proc.returncode == 0
+    payload = result_payload(proc)
+    assert payload["passed"] is True
+    assert payload["findings"] == []
+
+
 def test_name_hygiene_skips_ignored_artifact_paths(tmp_path: Path) -> None:
     for skipped_dir in [".quest", ".worktrees", ".pytest_cache", ".venv", "build", "dist"]:
         path = tmp_path / skipped_dir / "artifact.txt"

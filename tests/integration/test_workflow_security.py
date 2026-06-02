@@ -14,10 +14,15 @@ def test_live_smoke_workflow_is_not_pr_triggered_and_has_no_dispatch_ref_checkou
     assert "ref: ${{ inputs." not in workflow
     assert (
         "if: github.event_name != 'workflow_dispatch' "
-        "|| github.ref == format('refs/heads/{0}', github.event.repository.default_branch)"
-        in workflow
+        "|| github.ref == format('refs/heads/{0}', "
+        "github.event.repository.default_branch || 'main')" in workflow
     )
-    assert "ref: ${{ github.event.repository.default_branch }}" in workflow
+    assert "ref: ${{ github.event.repository.default_branch || 'main' }}" in workflow
+    assert (
+        "RPL_LIVE_REPOSITORY: "
+        "${{ inputs.target_repository || vars.RPL_LIVE_REPOSITORY "
+        "|| github.event.repository.name || github.repository }}" in workflow
+    )
     assert "persist-credentials: false" in workflow
     assert "permissions:\n  contents: read" in workflow
 

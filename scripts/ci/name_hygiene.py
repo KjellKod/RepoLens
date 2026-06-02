@@ -182,7 +182,7 @@ def iter_candidate_files(root: Path) -> list[Path]:
 def scan_file(path: Path, root: Path, tokens: list[str]) -> list[Finding]:
     try:
         content = path.read_text(encoding="utf-8")
-    except UnicodeDecodeError:
+    except (OSError, UnicodeDecodeError):
         return []
     normalized_content = content.casefold()
     relative = path.relative_to(root).as_posix()

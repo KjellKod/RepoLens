@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   live-smoke:
-    if: github.event_name != 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    if: github.event_name != 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch || 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -31,7 +31,7 @@ jobs:
       - name: Checkout trusted default-branch workflow code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          ref: ${{ github.event.repository.default_branch }}
+          ref: ${{ github.event.repository.default_branch || 'main' }}
           persist-credentials: false
 
       - name: Set up Python
@@ -45,6 +45,6 @@ jobs:
       - name: Run live smoke
         env:
           RPL_LIVE_OWNER: ${{ inputs.target_owner || vars.RPL_LIVE_OWNER || github.repository_owner }}
-          RPL_LIVE_REPOSITORY: ${{ inputs.target_repository || github.event.repository.name }}
+          RPL_LIVE_REPOSITORY: ${{ inputs.target_repository || vars.RPL_LIVE_REPOSITORY || github.event.repository.name || github.repository }}
           RPL_LIVE_TOKEN: ${{ secrets.RPL_LIVE_TOKEN || github.token }}
         run: python scripts/ci/live_smoke.py --mode r0
