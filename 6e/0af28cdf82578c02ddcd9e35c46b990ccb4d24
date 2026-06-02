@@ -1,0 +1,25 @@
+tests/security/test_security_gate_contract.py
+  s_4eedbf12295e64::t_83426b1d65e763 2,128-132
+tests/conftest.py
+  s_4eedbf12295e64::t_83426b1d65e763 13
+src/repolens/security/clone.py
+  s_4eedbf12295e64::t_83426b1d65e763 24-25
+tests/canaries/security/test_clone_canaries.py
+  s_4eedbf12295e64::t_83426b1d65e763 26-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6e0af28cdf82578c02ddcd9e35c46b990ccb4d24",
+  "prompts": {},
+  "sessions": {
+    "s_4eedbf12295e64": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85cc-c4f4-7032-b00d-03d77ce780fc",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
