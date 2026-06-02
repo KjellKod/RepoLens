@@ -1,0 +1,21 @@
+tests/policy/test_engine.py
+  s_a45d31dd03ba28::t_dc1dc3012ed205 44-59
+src/repolens/policy/config.py
+  s_a45d31dd03ba28::t_dc1dc3012ed205 5,11,29,33-34,75-77,81-82
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b7c3aabdc2d87edb1e6f13a68f4d25c8c365e59b",
+  "prompts": {},
+  "sessions": {
+    "s_a45d31dd03ba28": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a8-999b-7b80-8f6e-275a586ecdda",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
