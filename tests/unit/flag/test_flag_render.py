@@ -48,9 +48,7 @@ def test_empty_queues_render_none() -> None:
 
 
 def test_stated_reason_text_appears_in_md() -> None:
-    markdown = render_shortlist_markdown(
-        [_item(reason="BLOCK", note="BLOCK: canonical_id")]
-    )
+    markdown = render_shortlist_markdown([_item(reason="BLOCK", note="BLOCK: canonical_id")])
 
     assert "BLOCK: canonical_id" in markdown
 

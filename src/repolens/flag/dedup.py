@@ -48,9 +48,7 @@ class _GroupAccumulator:
     records: list[CollectedRecord] = field(default_factory=list)
 
 
-def build_group_outcomes(
-    records: Iterable[CollectedRecord], policy: Policy
-) -> list[GroupOutcome]:
+def build_group_outcomes(records: Iterable[CollectedRecord], policy: Policy) -> list[GroupOutcome]:
     """Group records by ``(name, spdx_key or "UNKNOWN")`` and build one outcome per group."""
 
     groups: dict[tuple[str, str], _GroupAccumulator] = {}
