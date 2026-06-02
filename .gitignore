@@ -8,6 +8,8 @@ __pycache__/
 #.quest artifacts
 .quest
 .quest/
+# Quest worktree root (ephemeral build checkouts — never commit)
+.worktrees/
 
 # Distribution / packaging
 .Python
