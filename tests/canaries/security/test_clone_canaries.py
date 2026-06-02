@@ -23,5 +23,7 @@ def test_x2_clone_args_hardened() -> None:
 
     with pytest.raises(ValueError, match="https"):
         build_hardened_clone_command("file:///tmp/source.git", Path("dst"))
+    with pytest.raises(ValueError, match="host"):
+        build_hardened_clone_command("https:///project.git", Path("dst"))
     with pytest.raises(ValueError, match="credentials"):
         build_hardened_clone_command("https://token@example.invalid/project.git", Path("dst"))

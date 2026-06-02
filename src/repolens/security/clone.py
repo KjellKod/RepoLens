@@ -21,6 +21,8 @@ def build_hardened_clone_command(remote_url: str, destination: Path | str) -> Cl
     parsed = urlparse(remote_url)
     if parsed.scheme != "https":
         raise ValueError("clone remote must use https")
+    if not parsed.hostname:
+        raise ValueError("clone remote must include a host")
     if parsed.username or parsed.password:
         raise ValueError("clone remote must not embed credentials")
 

@@ -10,3 +10,4 @@ def block_live_network(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(socket, "create_connection", fail_connect)
     monkeypatch.setattr(socket.socket, "connect", fail_connect)
+    monkeypatch.setattr(socket.socket, "connect_ex", fail_connect)

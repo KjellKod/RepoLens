@@ -1,4 +1,5 @@
 import json
+import socket
 from pathlib import Path
 
 import pytest
@@ -124,3 +125,8 @@ def test_required_runtime_nodeids_include_name_hygiene_collection() -> None:
         "tests/canaries/security/test_demo.py::test_canary",
         "tests/security/test_name_hygiene.py::test_guard",
     }
+
+
+def test_socket_connect_ex_is_blocked() -> None:
+    with pytest.raises(RuntimeError, match="live network is disabled"):
+        socket.socket().connect_ex(("127.0.0.1", 9))
