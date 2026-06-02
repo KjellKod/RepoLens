@@ -127,6 +127,8 @@ def build_parser() -> argparse.ArgumentParser:
             subparser.set_defaults(handler=_discover_command)
         elif command_name == "scan":
             _configure_scan_parser(subparser)
+        elif command_name == "resolve":
+            _configure_resolve_parser(subparser)
         else:
             subparser.add_argument(
                 "--findings-open",
@@ -161,6 +163,21 @@ def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
         help="Per-repo wall-clock budget for the Syft scan (default: clone timeout).",
     )
     subparser.set_defaults(handler=_handle_scan)
+
+
+def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument(
+        "--work-root",
+        required=True,
+        type=Path,
+        help="Root directory containing RepoLens work artifacts.",
+    )
+    subparser.add_argument(
+        "--repo-ref",
+        required=True,
+        help="Runtime repository reference used for the work/<repo-ref>/ artifact dir.",
+    )
+    subparser.set_defaults(handler=_resolve_stage)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -230,6 +247,13 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     report = scan_runner.scan_repos(args.work_root, repos, syft_path=syft_path, **extra)
     summary = f"scanned {len(report.scanned)} repositories ({len(report.skipped)} already complete)"
     return CommandResult(CommandStatus.SUCCESS, summary)
+
+
+def _resolve_stage(args: argparse.Namespace) -> CommandResult:
+    from repolens.resolve import run_resolve
+
+    path = run_resolve(args.work_root, args.repo_ref)
+    return CommandResult(CommandStatus.SUCCESS, f"wrote {path.name}")
 
 
 def _load_repo_specs(path: Path, repo_spec_cls: type) -> list:
