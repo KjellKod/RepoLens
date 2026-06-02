@@ -1,0 +1,48 @@
+src/repolens/data/limits.py
+  s_bb8787cf071d6e::t_5f48fd0756bd82 6,16-17
+tests/canaries/security/test_token_canaries.py
+  s_bb8787cf071d6e::t_25871603b5353d 3,15,20,27-29
+scripts/security_canary_gate.py
+  s_bb8787cf071d6e::t_91e3827a552380 83-84
+src/repolens/security/checksum.py
+  s_bb8787cf071d6e::t_c9fcd046d95ba1 11,20
+tests/canaries/security/test_output_canaries.py
+  s_bb8787cf071d6e::t_b2b6556d9edb49 12,33,36,38-39,41
+src/repolens/data/store.py
+  s_bb8787cf071d6e::t_1b4b93cc56bea0 161
+  s_bb8787cf071d6e::t_cf36ccedd19d84 24
+  s_bb8787cf071d6e::t_6ca7a4e9d80198 144
+tests/unit/security/test_checksum.py
+  s_bb8787cf071d6e::t_229536be8a1b7e 8,16
+src/repolens/security/__init__.py
+  s_bb8787cf071d6e::t_81fe488ed0bc6d 73
+  s_bb8787cf071d6e::t_15b4f527d76100 3
+tests/unit/test_redact.py
+  s_bb8787cf071d6e::t_39be7ed66f8db1 3,17
+src/repolens/cli.py
+  s_bb8787cf071d6e::t_c31378f8b17e3b 13-14
+  s_bb8787cf071d6e::t_b25481df327401 94
+src/repolens/security/http_client.py
+  s_bb8787cf071d6e::t_ed5321a9c4f2fc 225-226
+  s_bb8787cf071d6e::t_2ce9beb4fd89a0 26-27
+  s_bb8787cf071d6e::t_8db13a2a54de96 77-88,95-96,107-108
+  s_bb8787cf071d6e::t_805a4a7d369af8 9,16-18
+tests/canaries/security/test_network_canaries.py
+  s_bb8787cf071d6e::t_52863e107aecf0 3-4,10-15,17-18,20-21,23-24,26-27,30-31,33-34,37-38,40-41,43-44,46-47,50-54
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a584effce79bdba4b38a077ac404138ea917073d",
+  "prompts": {},
+  "sessions": {
+    "s_bb8787cf071d6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c1f98f3-95b8-4b2c-84ce-cb4d9a149af9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
