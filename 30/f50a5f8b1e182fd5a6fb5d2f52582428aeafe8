@@ -1,0 +1,19 @@
+.gitignore
+  s_bb8787cf071d6e::t_9a1fab48d4998d 11-12
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "30f50a5f8b1e182fd5a6fb5d2f52582428aeafe8",
+  "prompts": {},
+  "sessions": {
+    "s_bb8787cf071d6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c1f98f3-95b8-4b2c-84ce-cb4d9a149af9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
