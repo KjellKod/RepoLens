@@ -1,0 +1,19 @@
+tests/canaries/test_f1_offline_canaries.py
+  s_9e6fb6f1b1743f::t_e2fca1176da56b 33-34
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "942852c76c50598156eec80bbac471d3bcfe0d71",
+  "prompts": {},
+  "sessions": {
+    "s_9e6fb6f1b1743f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e871a-2b6f-7d50-9575-ce85c0a77c93",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
