@@ -39,6 +39,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "repolens.data" = ["schemas/*.json"]
+"repolens.policy.data" = ["*.json"]
 
 [tool.ruff]
 line-length = 100

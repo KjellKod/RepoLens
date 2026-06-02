@@ -58,7 +58,7 @@ Deliver F1–F5 and the X1/X2/X3 skeletons.
 - [ ] F2 — Security primitives
 - [x] F3 — Data model + on-disk schemas (the unlock)
 - [ ] F4 — Tool bootstrap (pin + checksum/signature verify)
-- [ ] F5 — Policy engine (SPDX normalize, compound, tiers)
+- [x] F5 — Policy engine (SPDX normalize, compound, tiers)
 - [x] X1 — test harness + fixtures + watermark (skeleton)
 - [x] X2 — security canary suite (skeleton)
 - [x] X3 — CI offline PR pipeline (skeleton)
