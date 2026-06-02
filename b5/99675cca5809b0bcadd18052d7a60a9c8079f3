@@ -1,0 +1,19 @@
+docs/roadmap/rpl_roadmap.md
+  s_21a9b5f4b751ee::t_29e23e857ad155 86
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "b599675cca5809b0bcadd18052d7a60a9c8079f3",
+  "prompts": {},
+  "sessions": {
+    "s_21a9b5f4b751ee": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "79fe0369-7c96-4041-854b-6af8f8a5c15d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
