@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import csv
-from html import unescape
 import io
 import socket
+from html import unescape
 
 import pytest
 
@@ -106,7 +106,10 @@ def test_ssrf_allowlisted_public_host_passes(monkeypatch: pytest.MonkeyPatch) ->
         return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
 
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
-    assert validate_url_for_fetch(
-        "https://allowed.example/acme",
-        HttpFetchOptions(allowed_hosts=frozenset({"allowed.example"})),
-    )[2] == "93.184.216.34"
+    assert (
+        validate_url_for_fetch(
+            "https://allowed.example/acme",
+            HttpFetchOptions(allowed_hosts=frozenset({"allowed.example"})),
+        )[2]
+        == "93.184.216.34"
+    )

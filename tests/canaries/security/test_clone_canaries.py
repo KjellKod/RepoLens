@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -42,7 +42,9 @@ def test_post_checkout_hook_does_not_execute(
     source = local_repo_factory()
     sentinel = tmp_path / "acme-hook-fired"
     hooks = source / ".git" / "hooks"
-    (hooks / "post-checkout").write_text(f"#!/bin/sh\nprintf fired > {sentinel}\n", encoding="utf-8")
+    (hooks / "post-checkout").write_text(
+        f"#!/bin/sh\nprintf fired > {sentinel}\n", encoding="utf-8"
+    )
     (hooks / "post-checkout").chmod(0o755)
 
     def fake_run(command, **kwargs):
@@ -100,9 +102,7 @@ def test_file_protocol_submodule_is_blocked(
 ) -> None:
     source = local_repo_factory(
         gitmodules=(
-            '[submodule "acme-lib"]\n'
-            "\tpath = vendor/acme-lib\n"
-            "\turl = file:///etc/passwd\n"
+            '[submodule "acme-lib"]\n' "\tpath = vendor/acme-lib\n" "\turl = file:///etc/passwd\n"
         )
     )
 

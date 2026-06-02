@@ -145,11 +145,7 @@ def _fetch_url(
 
 
 def _safe_headers(headers: dict[str, str]) -> dict[str, str]:
-    return {
-        key: value
-        for key, value in headers.items()
-        if key.lower() not in _AUTH_HEADER_NAMES
-    }
+    return {key: value for key, value in headers.items() if key.lower() not in _AUTH_HEADER_NAMES}
 
 
 def _read_capped(response: http.client.HTTPResponse, max_bytes: int) -> bytes:

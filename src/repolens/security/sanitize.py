@@ -17,7 +17,9 @@ _MARKDOWN_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]*)\)")
 _MARKDOWN_LINK_RE = re.compile(r"(?<!!)\[([^\]]+)\]\(([^)]*)\)")
 _MARKDOWN_REFERENCE_LINK_RE = re.compile(r"(?<!!)\[([^\]]+)\]\[([^\]]*)\]")
 _MARKDOWN_REFERENCE_DEF_RE = re.compile(r"(?m)^(\s*)\[([^\]]+)\]:\s*(\S+)(.*)$")
-_DANGEROUS_MARKDOWN_SCHEME_TEXT_RE = re.compile(r"\b(javascript|data|vbscript|file)\s*:", re.IGNORECASE)
+_DANGEROUS_MARKDOWN_SCHEME_TEXT_RE = re.compile(
+    r"\b(javascript|data|vbscript|file)\s*:", re.IGNORECASE
+)
 
 
 def neutralize_csv_cell(value: object) -> str:

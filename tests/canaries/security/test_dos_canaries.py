@@ -11,7 +11,6 @@ from repolens.security.errors import CloneSecurityError, FetchSecurityError, Par
 from repolens.security.http_client import HttpFetchOptions, fetch_url
 from repolens.security.limits import SecurityLimits, TimeBudget, TimeBudgetExceeded
 from repolens.security.parsers import parse_json_bytes
-
 from tests.unit.security.test_http_client import FakeConnection, FakeResponse, patch_dns
 
 

@@ -229,9 +229,9 @@ def _validate_structure(value: object, limits: SecurityLimits) -> None:
         if depth > limits.max_structure_depth:
             raise ParseSecurityError("parsed depth cap exceeded")
         if isinstance(item, dict):
-            stack.extend((key, depth + 1) for key in item.keys())
+            stack.extend((key, depth + 1) for key in item)
             stack.extend((child, depth + 1) for child in item.values())
-        elif isinstance(item, (list, tuple, set)):
+        elif isinstance(item, list | tuple | set):
             stack.extend((child, depth + 1) for child in item)
 
 

@@ -29,6 +29,6 @@ def redact_tokens_from_structure(value):
         return tuple(redact_tokens_from_structure(child) for child in value)
     if isinstance(value, list):
         return [redact_tokens_from_structure(child) for child in value]
-    if isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+    if isinstance(value, Sequence) and not isinstance(value, bytes | bytearray):
         return type(value)(redact_tokens_from_structure(child) for child in value)
     return value

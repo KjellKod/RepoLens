@@ -11,7 +11,12 @@ import pytest
 
 from repolens.security.errors import ParseSecurityError
 from repolens.security.limits import SecurityLimits
-from repolens.security.parsers import inspect_archive, parse_json_bytes, parse_xml_bytes, parse_yaml_bytes
+from repolens.security.parsers import (
+    inspect_archive,
+    parse_json_bytes,
+    parse_xml_bytes,
+    parse_yaml_bytes,
+)
 
 
 def test_yaml_safe_payload_parses() -> None:

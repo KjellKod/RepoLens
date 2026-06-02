@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
 
-
 TOKENS = [
     "ghp_" + "a" * 20,
     "ghs_" + "b" * 20,

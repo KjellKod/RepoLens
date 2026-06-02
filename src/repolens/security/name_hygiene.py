@@ -244,8 +244,7 @@ def _tracked_files(root: Path) -> list[Path]:
     completed = subprocess.run(
         ["git", "ls-files"],
         cwd=root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )
@@ -303,8 +302,7 @@ def _git(root: Path, *args: str) -> None:
     completed = subprocess.run(
         ["git", *args],
         cwd=root,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        capture_output=True,
         text=True,
         check=False,
     )

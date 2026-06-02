@@ -3,7 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 
 from repolens.security.name_hygiene import main, scan_tracked_files
-
 from tests.conftest import git
 
 

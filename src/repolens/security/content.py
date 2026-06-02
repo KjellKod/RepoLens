@@ -18,9 +18,15 @@ _BOUNDARY_RE = re.compile(
 )
 _MARKER_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("role_play", re.compile(r"\byou are now\b|\bact as\b", re.IGNORECASE)),
-    ("output_override", re.compile(r"\bignore (all )?(previous|above) instructions\b", re.IGNORECASE)),
+    (
+        "output_override",
+        re.compile(r"\bignore (all )?(previous|above) instructions\b", re.IGNORECASE),
+    ),
     ("container_escape", _BOUNDARY_RE),
-    ("imperative", re.compile(r"\b(output|return|print)\b.{0,32}\b(json|mit|license)\b", re.IGNORECASE)),
+    (
+        "imperative",
+        re.compile(r"\b(output|return|print)\b.{0,32}\b(json|mit|license)\b", re.IGNORECASE),
+    ),
     ("directional_unicode", _DIRECTIONAL_RE),
 )
 
@@ -38,10 +44,7 @@ class ContentScreen:
 
 
 def normalize_untrusted_text(value: bytes | str) -> str:
-    if isinstance(value, bytes):
-        text = value.decode("utf-8", errors="replace")
-    else:
-        text = value
+    text = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
     text = unicodedata.normalize("NFC", text)
     text = _DIRECTIONAL_RE.sub("", text)
     return _CONTROL_RE.sub("", text)
@@ -81,4 +84,7 @@ def wrap_untrusted_content(
     source_attr = html.escape(source, quote=True)
     path_attr = html.escape(path, quote=True)
     body = html.escape(screened.text, quote=False)
-    return f'<untrusted_content source="{source_attr}" path="{path_attr}">\n{body}\n</untrusted_content>'
+    return (
+        f'<untrusted_content source="{source_attr}" path="{path_attr}">\n'
+        f"{body}\n</untrusted_content>"
+    )

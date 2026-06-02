@@ -33,7 +33,7 @@ class FakeResponse:
 
 
 class FakeConnection:
-    instances: list["FakeConnection"] = []
+    instances: list[FakeConnection] = []
 
     def __init__(self, hostname, pinned_ip, *, port, timeout, context):
         del context
@@ -95,7 +95,9 @@ def test_rejects_host_not_on_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
         "64:ff9b::a9fe:a9fe",
     ],
 )
-def test_rejects_private_ipv4_and_ipv6_after_resolution(monkeypatch: pytest.MonkeyPatch, ip: str) -> None:
+def test_rejects_private_ipv4_and_ipv6_after_resolution(
+    monkeypatch: pytest.MonkeyPatch, ip: str
+) -> None:
     patch_dns(monkeypatch, ip)
     with pytest.raises(FetchSecurityError):
         validate_url_for_fetch("https://allowed.example/path", options())
@@ -119,13 +121,19 @@ def test_allows_public_allowlisted_host(monkeypatch: pytest.MonkeyPatch) -> None
         "https://allowed.example:99999/path",
     ],
 )
-def test_invalid_url_ports_raise_fetch_security_error(url: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("repolens.security.http_client._resolve_host", lambda host, port: ["93.184.216.34"])
+def test_invalid_url_ports_raise_fetch_security_error(
+    url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "repolens.security.http_client._resolve_host", lambda host, port: ["93.184.216.34"]
+    )
     with pytest.raises(FetchSecurityError, match="invalid URL port"):
         validate_url_for_fetch(url, options())
 
 
-def test_fetch_drops_authorization_header_and_uses_pinned_ip(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_fetch_drops_authorization_header_and_uses_pinned_ip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     dns_calls = 0
 
     def fake_getaddrinfo(host, port, **kwargs):

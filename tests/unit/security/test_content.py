@@ -32,5 +32,5 @@ def test_strip_boundary_tokens() -> None:
 def test_wrap_untrusted_content_escapes_attributes_and_body() -> None:
     wrapped = wrap_untrusted_content("<b>", source='acme "src"', path="a&b")
     assert 'source="acme &quot;src&quot;"' in wrapped
-    assert "path=\"a&amp;b\"" in wrapped
+    assert 'path="a&amp;b"' in wrapped
     assert "&lt;b&gt;" in wrapped

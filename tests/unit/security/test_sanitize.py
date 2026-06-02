@@ -62,7 +62,10 @@ def test_markdown_reference_style_unsafe_link_is_neutralized() -> None:
 
 
 def test_markdown_safe_link_survives() -> None:
-    assert markdown_link("acme", "https://allowed.example/path") == "[acme](https://allowed.example/path)"
+    assert (
+        markdown_link("acme", "https://allowed.example/path")
+        == "[acme](https://allowed.example/path)"
+    )
 
 
 def test_empty_markdown_url_rejected() -> None:

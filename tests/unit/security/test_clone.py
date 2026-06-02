@@ -90,7 +90,9 @@ def test_clone_cleans_tempdir_on_failure(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert len(calls) == 2
 
 
-def test_clone_failure_redacts_supported_tokens(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_clone_failure_redacts_supported_tokens(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     token = "ghp_" + "1234567890abcdef1234567890abcdef1234"
 
     def fake_run(command, **kwargs):
@@ -120,7 +122,9 @@ def test_clone_timeout_cleans_tempdir(monkeypatch: pytest.MonkeyPatch, tmp_path:
     monkeypatch.setattr(subprocess, "run", fake_run)
     limits = SecurityLimits(clone_timeout_seconds=0.01)
     with pytest.raises(CloneSecurityError, match="timed out"):
-        hardened_clone(CloneOptions("https://example.invalid/acme.git", tmp_path / "dst", limits=limits))
+        hardened_clone(
+            CloneOptions("https://example.invalid/acme.git", tmp_path / "dst", limits=limits)
+        )
     assert not list(tmp_path.glob(".dst.clone-*"))
 
 
