@@ -1,0 +1,38 @@
+tests/unit/test_name_hygiene.py
+  s_589f074de75320::t_0b7b5983e40ba9 70-71,73-83
+src/repolens/data/schemas/sbom.schema.json
+  s_589f074de75320::t_0b7b5983e40ba9 25,28
+.github/workflows/ci.yml
+  s_589f074de75320::t_0b7b5983e40ba9 27
+tests/unit/test_limits.py
+  s_589f074de75320::t_0b7b5983e40ba9 9,59-79
+requirements-ci.txt
+  s_589f074de75320::t_0b7b5983e40ba9 29-30,35-36
+src/repolens/data/store.py
+  s_589f074de75320::t_0b7b5983e40ba9 33-34,148-151,168-169,209,258-277
+tests/unit/test_resolved_ndjson.py
+  s_589f074de75320::t_0b7b5983e40ba9 64-73
+tests/unit/test_store_roundtrip.py
+  s_589f074de75320::t_0b7b5983e40ba9 45,47-54
+  s_589f074de75320::t_e77944394860e9 5-6
+scripts/check_name_hygiene.py
+  s_589f074de75320::t_0b7b5983e40ba9 46,116
+tests/unit/test_schema_validation.py
+  s_589f074de75320::t_0b7b5983e40ba9 61-68
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "2afcd3e5fca3b50733a3c0bb519a472f774f7602",
+  "prompts": {},
+  "sessions": {
+    "s_589f074de75320": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a4-1493-77d2-9d0b-74175f188b83",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
