@@ -1,0 +1,23 @@
+requirements-ci.txt
+  s_589f074de75320::t_0b5470c2ee2cd2 21-22,29-30
+src/repolens/cli.py
+  s_589f074de75320::t_0b5470c2ee2cd2 8
+.github/workflows/ci.yml
+  s_589f074de75320::t_0b5470c2ee2cd2 25,27,36-38,44-45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a0ae6a6bedaabd0b276b18a05b8d476d71abe3d5",
+  "prompts": {},
+  "sessions": {
+    "s_589f074de75320": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e85a4-1493-77d2-9d0b-74175f188b83",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
