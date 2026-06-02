@@ -1,3 +1,13 @@
+[tool.pytest.ini_options]
+addopts = "--strict-markers"
+pythonpath = ["src"]
+testpaths = ["tests"]
+markers = [
+  "offline: can run without live network or external services",
+  "security: exercises security guardrails",
+  "canary: mandatory security canary coverage",
+  "name_hygiene: verifies forbidden-name and token hygiene",
+]
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
@@ -16,10 +26,6 @@ repolens = "repolens.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 100
