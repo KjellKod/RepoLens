@@ -117,7 +117,7 @@ def _tool_argv(detection: MobileDetection) -> tuple[str, ...] | None:
     if detection.android:
         return ("aboutlibraries", "--export-license-json", "/out/licenses.json")
     if detection.ios:
-        return ("license-plist", "--output-path", "/out/licenses.json")
+        return ("license-plist", "--output-path", "/dev/stdout")
     return None
 
 

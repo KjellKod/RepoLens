@@ -205,3 +205,35 @@ def test_scancode_unlaunchable_executable_fails_closed(tmp_path: Path) -> None:
 
     assert outcome.spdx_id is None
     assert outcome.anchor == "unresolved:scancode_tool_unavailable"
+
+
+def test_unreadable_scancode_record_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    digest = "c" * 64
+    (tools / "scancode").write_text(build_scancode_wrapper("32.3.1", digest), encoding="utf-8")
+    (tools / "scancode").chmod(0o755)
+    write_scancode_record(tmp_path, digest=digest)
+    source = tmp_path / "source"
+    package_dir = source / "vendor" / "fixture-lib"
+    package_dir.mkdir(parents=True)
+    (package_dir / "module.py").write_text("", encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def unreadable_tool_versions(path: Path, *args: object, **kwargs: object) -> str:
+        if path == tmp_path / "tool_versions.json":
+            raise OSError("permission denied")
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unreadable_tool_versions)
+
+    outcome = run_scancode_fallback(
+        package_with_location("vendor/fixture-lib/module.py"),
+        work_root=tmp_path,
+        source_root=source,
+    )
+
+    assert outcome.spdx_id is None
+    assert outcome.anchor == "unresolved:scancode_tool_unavailable"

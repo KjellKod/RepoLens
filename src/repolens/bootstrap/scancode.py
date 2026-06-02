@@ -100,14 +100,17 @@ def requirements_sha256(path: Path | str) -> str:
 def build_scancode_wrapper(version: str, requirements_digest: str) -> str:
     """Build the canonical bootstrap-produced ScanCode command wrapper."""
 
-    if not version.strip():
+    clean_version = version.strip()
+    if not clean_version:
         raise ValueError("ScanCode version must be non-empty")
+    if "\n" in clean_version or "\r" in clean_version:
+        raise ValueError("ScanCode version must be a single line")
     if not _HASH_RE.fullmatch(f"--hash=sha256:{requirements_digest}"):
         raise ValueError("ScanCode requirements digest must be a lowercase sha256")
     return (
         "#!/bin/sh\n"
         f"# {SCANCODE_WRAPPER_MARKER}\n"
-        f"# scancode-version: {version.strip()}\n"
+        f"# scancode-version: {clean_version}\n"
         f"# requirements-sha256: {requirements_digest}\n"
         'exec python3 -m scancode.cli "$@"\n'
     )

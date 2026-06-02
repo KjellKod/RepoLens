@@ -107,7 +107,8 @@ def run(
 
         # 3. ScanCode — hash-pinned pip install (runner injected), then expose a
         #    deterministic wrapper whose content matches the recorded proof.
-        install_scancode(requirements_path, runner=pip_runner)
+        if install_scancode(requirements_path, runner=pip_runner) != 0:
+            raise IntegrityError("ScanCode install failed")
         scancode_digest = requirements_sha256(requirements_path)
         scancode_tool = write_scancode_wrapper(
             dest_dir / "scancode",

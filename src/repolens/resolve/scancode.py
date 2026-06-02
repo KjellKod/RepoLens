@@ -54,6 +54,8 @@ def resolve_scancode_path(work_root: str | Path) -> Path:
         raise InputError("tool_versions.json not found; ScanCode bootstrap record is required.")
     try:
         payload = json.loads(versions_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        raise InputError("tool_versions.json is not readable.") from exc
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise InputError("tool_versions.json is not valid JSON.") from exc
     if not isinstance(payload, dict) or payload.get("schema") != VERSIONS_SCHEMA:
@@ -78,6 +80,8 @@ def resolve_scancode_path(work_root: str | Path) -> Path:
         )
     try:
         wrapper = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise InputError("ScanCode wrapper is not readable.") from exc
     except UnicodeDecodeError as exc:
         raise InputError("ScanCode wrapper is not valid UTF-8.") from exc
     if wrapper != build_scancode_wrapper(version, digest):

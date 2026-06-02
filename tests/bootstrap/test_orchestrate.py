@@ -138,6 +138,27 @@ def test_run_tampered_syft_raises_integrity(
     assert not (tmp_path / "tv.json").exists()
 
 
+def test_run_scancode_install_failure_raises_integrity(
+    test_pins, acquire_factory, accepting_cosign_runner, req_file, tmp_path
+):
+    pins_path = _write_test_pins(tmp_path, test_pins)
+
+    with pytest.raises(errors.IntegrityError, match="ScanCode install failed"):
+        run(
+            pins_path=pins_path,
+            dest_dir=tmp_path / "tools",
+            versions_out=tmp_path / "tv.json",
+            acquire=acquire_factory(),
+            make_executable=MagicMock(),
+            cosign_runner=accepting_cosign_runner,
+            pip_runner=MagicMock(return_value=1),
+            requirements_path=req_file,
+            platform_key=PLATFORM,
+        )
+
+    assert not (tmp_path / "tv.json").exists()
+
+
 def test_run_safe_maps_integrity_to_exit_code(
     test_pins, acquire_factory, syft_tampered_bytes, accepting_cosign_runner, req_file, tmp_path
 ):

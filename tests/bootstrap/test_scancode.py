@@ -10,6 +10,7 @@ from repolens.bootstrap.errors import UnhashedRequirement
 from repolens.bootstrap.scancode import (
     DEFAULT_REQUIREMENTS_PATH,
     build_pip_argv,
+    build_scancode_wrapper,
     install_scancode,
     load_requirements,
     validate_requirements,
@@ -31,6 +32,11 @@ def test_pip_argv_has_require_hashes():
     assert "--no-deps" in argv
     assert "--only-binary=:all:" in argv
     assert argv[-2:] == ["--requirement", "/tmp/r.txt"]
+
+
+def test_scancode_wrapper_rejects_multiline_version():
+    with pytest.raises(ValueError, match="single line"):
+        build_scancode_wrapper("32.3.1\nmalicious", "a" * 64)
 
 
 def test_unhashed_line_rejected():

@@ -77,6 +77,35 @@ def test_native_enrichment_uses_sandbox_spec_without_tokens(tmp_path: Path) -> N
     assert not any("TOKEN" in key.upper() for key in spec.env)
 
 
+def test_ios_native_enrichment_reads_stdout_from_tool(tmp_path: Path) -> None:
+    (tmp_path / "Cartfile").write_text("", encoding="utf-8")
+    package = PackageFact("fixture-lib", "1.0.0", "swift", "fixture-repo", None, None)
+    seen: list[SandboxSpec] = []
+
+    def runner(spec: SandboxSpec):
+        seen.append(spec)
+        return type(
+            "Result",
+            (),
+            {
+                "returncode": 0,
+                "stdout": '{"libraries":[{"name":"fixture-lib","spdx":"Apache-2.0"}]}',
+                "stderr": "",
+            },
+        )()
+
+    outcome = enrich_mobile_native(
+        package,
+        detection=detect_mobile(tmp_path),
+        source_root=tmp_path,
+        sandbox_runner=runner,
+    )
+
+    assert outcome.candidate is not None
+    assert outcome.candidate.spdx_id == "Apache-2.0"
+    assert seen[0].argv == ("license-plist", "--output-path", "/dev/stdout")
+
+
 def test_missing_sandbox_is_non_fatal(tmp_path: Path) -> None:
     (tmp_path / "Cartfile").write_text("", encoding="utf-8")
     package = PackageFact("fixture-lib", "1.0.0", "swift", "fixture-repo", None, None)
