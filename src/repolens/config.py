@@ -97,4 +97,3 @@ def _deep_merge(target: dict[str, Any], update: Mapping[str, Any]) -> None:
 
 def _display_path(path: Path) -> str:
     return path.name
-

@@ -81,6 +81,7 @@ evidence**. A string→SPDX normalization pass runs before any policy lookup.
 
 ## Name hygiene
 - `<OWNER>` and all repo names are runtime/config inputs, never literals in code,
-  tests, fixtures, or docs. Live runs read the owner from an untracked env var.
-  Fixtures use invented names (`acme-*`). A CI guard fails any commit containing a
-  forbidden name.
+  tests, fixtures, or docs. Live runs read the owner from an untracked env var or local
+  config. Fixtures and public CI use invented names only. Real forbidden names live in
+  gitignored local config and are discovered from the main checkout when commands run
+  inside a linked worktree.

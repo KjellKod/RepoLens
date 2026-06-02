@@ -62,6 +62,26 @@ Discovery and the final report are **human-gated**; everything between is automa
 resumable. The owner, repo categories, and report header are runtime inputs — never
 baked into the tool. **Full guide: [docs/usage.md](docs/usage.md).**
 
+## Local Name Hygiene
+
+RepoLens is repo-agnostic, so public CI does **not** store real owner, repository, or
+company names in GitHub variables. Instead, CI proves the guard is wired with an
+invented runtime sentinel, and real forbidden names stay in a private gitignored file:
+
+```json
+{
+  "forbidden_names": ["private-owner-or-company-name"]
+}
+```
+
+Save that as `.name-hygiene.local.json` in the main checkout. The leading dot is
+intentional: it keeps the private denylist out of normal directory listings, reducing
+the chance that someone notices the file and force-adds it past `.gitignore`. The guard
+matches case-insensitively and discovers the file from the scan root upward; when
+running inside a linked git worktree, it also checks the main checkout that owns the
+shared `.git` directory. See
+[docs/usage.md](docs/usage.md#configuration-all-untracked--local) for details.
+
 ## Contributing
 
 Contributions are welcome — see **[CONTRIBUTING.md](CONTRIBUTING.md)**. In short: keep the

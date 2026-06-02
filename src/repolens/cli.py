@@ -5,10 +5,10 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Sequence
 
 from .config import load_config
 from .exit_codes import ExitCode, InputError

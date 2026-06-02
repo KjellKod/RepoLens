@@ -19,6 +19,8 @@
 - **License policy** — the ALLOW / REVIEW / BLOCK / UNKNOWN tiers.
 - **Report selection + header** — which categories land in the main report, and the
   org/legal boilerplate (injected at render time).
+- **Name-hygiene denylist** — private owner/repo/company names used only by the
+  local hygiene guard; never committed and never stored as a public GitHub variable.
 
 F1 local config is loaded only from untracked local files. Precedence is:
 
@@ -30,6 +32,24 @@ F1 local config is loaded only from untracked local files. Precedence is:
 
 On key collisions, the higher-precedence source replaces the lower-precedence value at
 that key path; non-colliding keys are preserved.
+
+The CI name-hygiene step uses only an invented sentinel token, proving the guard is
+wired without publishing private names. For local or deployment-specific checks, put
+private names in a gitignored `.name-hygiene.local.json` file:
+
+```json
+{
+  "forbidden_names": ["private-owner-or-company-name"]
+}
+```
+
+Matching is case-insensitive. The leading dot is intentional: it keeps the private
+denylist out of normal directory listings and lowers the chance that someone force-adds
+it past `.gitignore`. The file is discovered from the scan root upward, and when the
+command runs from a linked git worktree it also checks the main checkout that owns the
+shared `.git` directory. Prefer placing the file in the main checkout, e.g.
+`~/ws/extra/RepoLens/.name-hygiene.local.json`, so every worktree uses the same private
+denylist.
 
 ## F1 CLI Skeleton
 

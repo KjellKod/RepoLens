@@ -67,4 +67,3 @@ def _read_text(path: Path) -> str | None:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
