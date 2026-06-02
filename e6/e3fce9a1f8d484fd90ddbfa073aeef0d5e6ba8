@@ -1,0 +1,19 @@
+.github/scripts/codex_review.py
+  s_5af9159cccdbdc::t_f2c9644cea5d3d 1217-1221,1223-1225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "e6e3fce9a1f8d484fd90ddbfa073aeef0d5e6ba8",
+  "prompts": {},
+  "sessions": {
+    "s_5af9159cccdbdc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e894e-e84d-7ce2-844c-c22a5e4ae471",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
