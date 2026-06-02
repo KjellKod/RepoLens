@@ -116,6 +116,11 @@ def build_parser() -> argparse.ArgumentParser:
                     f"Maximum repos to ask gh for, 1-{MAX_GH_LIMIT} (default: {DEFAULT_GH_LIMIT})."
                 ),
             )
+            subparser.add_argument(
+                "--force",
+                action="store_true",
+                help="Overwrite an existing repos.candidate.md approval file.",
+            )
             subparser.set_defaults(handler=_discover_command)
         else:
             subparser.add_argument(
@@ -161,6 +166,7 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
         work_root=args.work_root,
         config=args.runtime_config,
         limit=args.limit,
+        force_candidate=args.force,
     )
     return CommandResult(
         CommandStatus.SUCCESS,

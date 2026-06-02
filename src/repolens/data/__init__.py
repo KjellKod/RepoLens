@@ -2,6 +2,7 @@
 
 from repolens.data.errors import (
     ArtifactError,
+    ArtifactExistsError,
     CorruptArtifactError,
     LimitExceeded,
     SchemaValidationError,
@@ -24,6 +25,7 @@ _STORE_EXPORTS = {
 
 __all__ = [
     "ArtifactError",
+    "ArtifactExistsError",
     "CorruptArtifactError",
     "LimitExceeded",
     "SchemaValidationError",

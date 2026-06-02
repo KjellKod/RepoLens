@@ -156,11 +156,16 @@ Useful flags:
 | `--owner <OWNER>` | Runtime owner/org passed to `gh repo list`; never commit it. |
 | `--work-root <DIR>` | Output directory for `discovered.json` and `repos.candidate.md`; default `work`. |
 | `--limit <N>` | Maximum repositories requested from `gh`; default `1000`, max `5000`. |
+| `--force` | Overwrite an existing `repos.candidate.md` approval file. |
 
 Taxonomy is optional and lives only in untracked local config. Unmatched repositories use
 `uncategorized` unless you set `default_category`. Categories classify only; they never
 exclude a repository from later scanning. Only GitHub-archived repositories or entries in
 the local `dead` map are hard-excluded, and the reason is written visibly.
+
+`repos.candidate.md` is a human-edited checkpoint. A second `discover` run refuses to
+overwrite it unless you pass `--force`, so existing approval checkboxes are not silently
+discarded. Use `--force` only when you intentionally want a fresh approval file.
 
 ```json
 {

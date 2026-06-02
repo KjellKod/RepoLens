@@ -4,7 +4,10 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
+import pytest
+
 from repolens.config import Config
+from repolens.data.errors import ArtifactExistsError
 from repolens.data.store import read_discovered
 from repolens.discovery.gh import GhRunResult
 from repolens.discovery.pipeline import run_discover
@@ -90,13 +93,25 @@ def test_discover_pipeline_writes_approval_artifacts_with_mocked_gh(tmp_path: Pa
     assert "ghp_" not in approval
     assert len(approval.encode("utf-8")) < 1_048_576
 
-    # Concrete rerun smoke: the same command boundary can overwrite both artifacts atomically.
+    # A rerun without explicit force must not clobber the human approval artifact.
+    with pytest.raises(ArtifactExistsError, match="--force"):
+        run_discover(
+            owner="sentinel-owner",
+            work_root=tmp_path,
+            config=config,
+            runner=runner,
+            generated_at="2026-01-02T00:00:00Z",
+        )
+    assert read_discovered(tmp_path)["generated_at"] == "2026-01-01T00:00:00Z"
+
+    # Concrete forced rerun smoke: the same command boundary can overwrite both artifacts.
     rerun = run_discover(
         owner="sentinel-owner",
         work_root=tmp_path,
         config=config,
         runner=runner,
         generated_at="2026-01-02T00:00:00Z",
+        force_candidate=True,
     )
     assert rerun.discovered_path == result.discovered_path
     assert read_discovered(tmp_path)["generated_at"] == "2026-01-02T00:00:00Z"

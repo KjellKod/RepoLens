@@ -30,6 +30,7 @@ def run_discover(
     limit: int = DEFAULT_GH_LIMIT,
     runner: GhRunner | None = None,
     generated_at: str | None = None,
+    force_candidate: bool = False,
 ) -> DiscoverResult:
     """Run discovery using ``gh`` metadata and local taxonomy config."""
 
@@ -41,6 +42,7 @@ def run_discover(
         owner=owner,
         repositories=categorized,
         generated_at=timestamp,
+        force_candidate=force_candidate,
     )
     return DiscoverResult(
         discovered_path=discovered_path,

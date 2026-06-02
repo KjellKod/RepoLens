@@ -13,5 +13,9 @@ class LimitExceeded(ArtifactError):
     """Raised when an artifact exceeds a configured safety limit."""
 
 
+class ArtifactExistsError(ArtifactError):
+    """Raised when writing would clobber a human-edited artifact."""
+
+
 class CorruptArtifactError(ArtifactError):
     """Raised when an artifact cannot be decoded or parsed safely."""

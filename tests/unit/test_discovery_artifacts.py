@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from repolens.data.errors import LimitExceeded, SchemaValidationError
+from repolens.data.errors import ArtifactExistsError, LimitExceeded, SchemaValidationError
 from repolens.data.store import read_discovered
 from repolens.data.validation import validate_artifact
 from repolens.discovery.artifacts import write_discovery_artifacts, write_repos_candidate_md
@@ -133,6 +133,40 @@ def test_write_discovery_artifacts_round_trips_json_and_markdown(tmp_path: Path)
     assert candidate_path == tmp_path / "repos.candidate.md"
     assert read_discovered(tmp_path)["repositories"][0]["name"] == "sentinel-alpha"
     assert "Repository candidates" in candidate_path.read_text(encoding="utf-8")
+
+
+def test_write_discovery_artifacts_refuses_to_overwrite_existing_candidate_md(
+    tmp_path: Path,
+) -> None:
+    candidate_path = tmp_path / "repos.candidate.md"
+    candidate_path.write_text("- [x] human selection\n", encoding="utf-8")
+
+    with pytest.raises(ArtifactExistsError, match="--force"):
+        write_discovery_artifacts(
+            tmp_path,
+            owner="sentinel-owner",
+            repositories=(categorized("sentinel-alpha"),),
+            generated_at="2026-01-01T00:00:00Z",
+        )
+
+    assert candidate_path.read_text(encoding="utf-8") == "- [x] human selection\n"
+    assert not (tmp_path / "discovered.json").exists()
+
+
+def test_write_discovery_artifacts_force_overwrites_existing_candidate_md(tmp_path: Path) -> None:
+    candidate_path = tmp_path / "repos.candidate.md"
+    candidate_path.write_text("- [x] human selection\n", encoding="utf-8")
+
+    write_discovery_artifacts(
+        tmp_path,
+        owner="sentinel-owner",
+        repositories=(categorized("sentinel-alpha"),),
+        generated_at="2026-01-01T00:00:00Z",
+        force_candidate=True,
+    )
+
+    assert "- [x] human selection" not in candidate_path.read_text(encoding="utf-8")
+    assert read_discovered(tmp_path)["repositories"][0]["name"] == "sentinel-alpha"
 
 
 def test_candidate_markdown_cap_rejects_oversize(
