@@ -102,8 +102,11 @@ def render_code_span(value: object) -> str:
 
 def _safe_markdown_url(url: str) -> bool:
     stripped = unicodedata.normalize("NFKC", url).strip()
-    parsed = urlparse(stripped)
-    scheme = parsed.scheme.lower()
+    try:
+        parsed = urlparse(stripped)
+        scheme = parsed.scheme.lower()
+    except ValueError:
+        return False
     if scheme in {"javascript", "data", "vbscript", "file"}:
         return False
     if scheme and scheme not in {"https", "http", "mailto"}:

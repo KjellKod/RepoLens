@@ -29,6 +29,7 @@ def test_clone_uses_all_hardening_flags(tmp_path: Path) -> None:
     assert "--no-tags" in command
     assert "--single-branch" in command
     assert "--no-recurse-submodules" in command
+    assert command[-3:] == ["--", "https://example.invalid/acme.git", str(tmp_path / "clone")]
 
 
 def test_clone_scrubs_git_environment() -> None:

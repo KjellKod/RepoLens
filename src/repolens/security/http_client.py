@@ -17,6 +17,7 @@ _NAT64_NETWORKS = (
     ipaddress.ip_network("64:ff9b:1::/48"),
 )
 _IPV4_COMPAT_NETWORK = ipaddress.ip_network("::/96")
+_SITE_LOCAL_IPV6_NETWORK = ipaddress.ip_network("fec0::/10")
 _BLOCKED_IPV4_HOSTS = {ipaddress.ip_address("169.254.169.254")}
 _AUTH_HEADER_NAMES = {"authorization", "proxy-authorization"}
 
@@ -194,6 +195,8 @@ def _is_blocked_ip(value: str) -> bool:
         if ip.ipv4_mapped is not None:
             return _is_blocked_ip(str(ip.ipv4_mapped))
         if ip in _IPV4_COMPAT_NETWORK:
+            return True
+        if ip in _SITE_LOCAL_IPV6_NETWORK:
             return True
         if any(ip in network for network in _NAT64_NETWORKS):
             return True

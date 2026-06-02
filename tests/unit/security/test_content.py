@@ -13,6 +13,13 @@ def test_normalize_strips_control_and_directional_chars() -> None:
     assert normalize_untrusted_text("a\x00b\u202ec") == "abc"
 
 
+def test_screen_detects_directional_unicode_before_stripping() -> None:
+    result = screen_untrusted_content("safe\u202eexe")
+
+    assert "directional_unicode" in result.markers
+    assert result.text == "safeexe"
+
+
 def test_cap_text_respects_utf8_boundary() -> None:
     assert cap_text("ééé", 3) == "é"
 

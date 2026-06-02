@@ -68,6 +68,10 @@ def test_markdown_safe_link_survives() -> None:
     )
 
 
+def test_malformed_markdown_url_is_neutralized() -> None:
+    assert sanitize_markdown("[x](http://[::1)") == "x"
+
+
 def test_empty_markdown_url_rejected() -> None:
     with pytest.raises(SanitizationError):
         markdown_link("acme", "")

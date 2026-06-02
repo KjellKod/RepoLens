@@ -249,6 +249,8 @@ def _validate_xml_tree(root, limits: SecurityLimits) -> None:
 
 
 def _validate_archive_path(name: str) -> None:
+    if "\\" in name:
+        raise ParseSecurityError("archive path traversal is blocked")
     path = PurePosixPath(name)
     if path.is_absolute() or ".." in path.parts:
         raise ParseSecurityError("archive path traversal is blocked")
@@ -307,11 +309,11 @@ def _deadline(seconds: float):
         raise TimeoutError("parse timed out")
 
     signal.signal(signal.SIGALRM, _raise_timeout)
-    signal.setitimer(signal.ITIMER_REAL, seconds)
+    previous_timer = signal.setitimer(signal.ITIMER_REAL, seconds)
     try:
         yield
     finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.setitimer(signal.ITIMER_REAL, *previous_timer)
         signal.signal(signal.SIGALRM, previous_handler)
 
 

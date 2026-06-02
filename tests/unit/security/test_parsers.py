@@ -12,6 +12,7 @@ import pytest
 from repolens.security.errors import ParseSecurityError
 from repolens.security.limits import SecurityLimits
 from repolens.security.parsers import (
+    _deadline,
     inspect_archive,
     parse_json_bytes,
     parse_xml_bytes,
@@ -110,6 +111,14 @@ def test_zip_path_traversal_rejected() -> None:
         inspect_archive(raw.getvalue())
 
 
+def test_zip_backslash_path_traversal_rejected() -> None:
+    raw = io.BytesIO()
+    with zipfile.ZipFile(raw, "w") as archive:
+        archive.writestr("..\\escape", "acme")
+    with pytest.raises(ParseSecurityError, match="traversal"):
+        inspect_archive(raw.getvalue())
+
+
 def test_tar_symlink_rejected() -> None:
     raw = io.BytesIO()
     info = tarfile.TarInfo("acme-link")
@@ -119,6 +128,25 @@ def test_tar_symlink_rejected() -> None:
         archive.addfile(info)
     with pytest.raises(ParseSecurityError, match="links"):
         inspect_archive(raw.getvalue())
+
+
+def test_deadline_restores_existing_sigalrm_timer(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[float, ...]] = []
+
+    def fake_setitimer(which, *args):
+        calls.append(args)
+        if args == (2.0,):
+            return (0.75, 0.25)
+        return (0.0, 0.0)
+
+    monkeypatch.setattr("signal.getsignal", lambda signum: "previous-handler")
+    monkeypatch.setattr("signal.signal", lambda signum, handler: None)
+    monkeypatch.setattr("signal.setitimer", fake_setitimer)
+
+    with _deadline(2.0):
+        pass
+
+    assert calls == [(2.0,), (0.75, 0.25)]
 
 
 def test_zip_symlink_rejected() -> None:

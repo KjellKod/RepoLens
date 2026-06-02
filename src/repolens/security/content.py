@@ -44,7 +44,7 @@ class ContentScreen:
 
 
 def normalize_untrusted_text(value: bytes | str) -> str:
-    text = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
+    text = _decode_text(value)
     text = unicodedata.normalize("NFC", text)
     text = _DIRECTIONAL_RE.sub("", text)
     return _CONTROL_RE.sub("", text)
@@ -66,8 +66,9 @@ def strip_boundary_tokens(value: bytes | str) -> str:
 
 
 def screen_untrusted_content(value: bytes | str) -> ContentScreen:
-    normalized = normalize_untrusted_text(value)
-    markers = tuple(name for name, pattern in _MARKER_PATTERNS if pattern.search(normalized))
+    raw_text = _CONTROL_RE.sub("", unicodedata.normalize("NFC", _decode_text(value)))
+    normalized = normalize_untrusted_text(raw_text)
+    markers = tuple(name for name, pattern in _MARKER_PATTERNS if pattern.search(raw_text))
     return ContentScreen(text=strip_boundary_tokens(normalized), markers=markers)
 
 
@@ -88,3 +89,7 @@ def wrap_untrusted_content(
         f'<untrusted_content source="{source_attr}" path="{path_attr}">\n'
         f"{body}\n</untrusted_content>"
     )
+
+
+def _decode_text(value: bytes | str) -> str:
+    return value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value

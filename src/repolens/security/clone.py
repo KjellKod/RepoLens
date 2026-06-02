@@ -123,7 +123,7 @@ def _build_clone_command(options: CloneOptions, clone_path: Path) -> list[str]:
     command.extend(_CLONE_FLAGS)
     if options.branch:
         command.extend(["--branch", options.branch])
-    command.extend([options.remote_url, str(clone_path)])
+    command.extend(["--", options.remote_url, str(clone_path)])
     return command
 
 

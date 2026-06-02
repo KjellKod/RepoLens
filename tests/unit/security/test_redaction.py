@@ -26,3 +26,7 @@ def test_redacts_nested_json_like_structures() -> None:
     assert "ghp_" not in repr(output)
     assert "ghs_" not in repr(output)
     assert "github_pat_" not in repr(output)
+
+
+def test_redacts_generic_sequences_without_reconstructing_type() -> None:
+    assert redact_tokens_from_structure(range(3)) == [0, 1, 2]

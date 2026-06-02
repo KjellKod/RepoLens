@@ -91,6 +91,7 @@ def test_rejects_host_not_on_allowlist(monkeypatch: pytest.MonkeyPatch) -> None:
         "::1",
         "fc00::1",
         "fe80::1",
+        "fec0::1",
         "::ffff:169.254.169.254",
         "64:ff9b::a9fe:a9fe",
     ],
