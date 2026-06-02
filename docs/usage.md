@@ -312,6 +312,12 @@ Taxonomy is optional and lives only in untracked local config. Unmatched reposit
 exclude a repository from later scanning. Only GitHub-archived repositories or entries in
 the local `dead` map are hard-excluded, and the reason is written visibly.
 
+Discovery artifacts use deterministic review order: candidates first, then hard
+exclusions. Within each group, repositories are sorted by category, then repo name, then
+full owner/name, case-insensitively. This applies to both `discovered.json` and
+`repos.candidate.md`, including when `discover --repos` receives names in a different
+order.
+
 To inspect only the hard exclusions and their recorded reasons:
 
 ```bash
