@@ -236,6 +236,15 @@ class ScanCliTests(unittest.TestCase):
             code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
             self.assertEqual(code, 2)
 
+    def test_scan_malformed_https_clone_url_exits_two(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root, [{"repo_ref": "acme-alpha", "clone_url": "https:///acme-alpha"}]
+            )
+            code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+            self.assertEqual(code, 2)
+
     def test_scan_credentialed_clone_url_exits_two(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work-root"
@@ -249,6 +258,26 @@ class ScanCliTests(unittest.TestCase):
                 ],
             )
             code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+            self.assertEqual(code, 2)
+
+    def test_scan_non_finite_timeout_exits_two(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            code = cli.main(
+                [
+                    "scan",
+                    "--work-root",
+                    str(work_root),
+                    "--repos",
+                    str(repos_path),
+                    "--timeout",
+                    "nan",
+                ]
+            )
             self.assertEqual(code, 2)
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from collections.abc import Callable, Sequence
@@ -220,7 +221,7 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
 
     repos = _load_repo_specs(args.repos, scan_runner.RepoSpec)
     syft_path = scan_runner.resolve_syft_path(args.work_root)
-    if args.timeout is not None and args.timeout <= 0:
+    if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
         raise InputError("--timeout must be a positive number of seconds")
     # scan_repos persists every successful SBOM and raises InternalError (exit 1)
     # if any repository fails; a clean run returns a report (exit 0). A None
@@ -251,9 +252,11 @@ def _load_repo_specs(path: Path, repo_spec_cls: type) -> list:
         clone_url = record.get("clone_url")
         if not isinstance(repo_ref, str) or not repo_ref:
             raise InputError(f"Repo list entry {index} is missing a 'repo_ref'")
-        if not isinstance(clone_url, str) or not clone_url.startswith("https://"):
+        if not isinstance(clone_url, str):
             raise InputError(f"Repo list entry {index} needs an https 'clone_url'")
         parsed_clone_url = urlparse(clone_url)
+        if parsed_clone_url.scheme != "https" or not parsed_clone_url.hostname:
+            raise InputError(f"Repo list entry {index} needs an https 'clone_url'")
         if parsed_clone_url.username or parsed_clone_url.password:
             raise InputError(f"Repo list entry {index} 'clone_url' must not embed credentials")
         specs.append(repo_spec_cls(repo_ref=repo_ref, clone_url=clone_url))
