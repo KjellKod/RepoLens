@@ -54,7 +54,7 @@ single source of truth.
 ### M0 — Foundation & rails
 Deliver F1–F5 and the X1/X2/X3 skeletons.
 **Delivery** (each Quest ticks its ID on merge)
-- [ ] F1 — CLI skeleton + config + exit codes
+- [x] F1 — CLI skeleton + config + exit codes
 - [ ] F2 — Security primitives
 - [ ] F3 — Data model + on-disk schemas (the unlock)
 - [ ] F4 — Tool bootstrap (pin + checksum/signature verify)
