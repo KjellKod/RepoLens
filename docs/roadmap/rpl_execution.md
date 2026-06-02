@@ -34,9 +34,12 @@ we run it*: which driver, and the fan-out model.
 
 ## Rounds & gates
 
-Each round = a set of Quests that can run in parallel. A round closes only when its
-**standing gate** is green: the full **security canary suite** ([rpl_security](rpl_security.md))
-passes offline **and** the name-hygiene guard is green.
+**The rule (no exceptions):** open a round only when its **Opens when** gate is green →
+then launch **every** Quest in that round in parallel → merge each only when the
+**standing gate** is green (security canary suite [rpl_security](rpl_security.md) +
+name-hygiene guard). The next round opens when the current one is fully merged. Never
+start a round early; never serialize within a round. This table is the single source of
+truth for round membership and gates.
 
 | Round | Milestone | Parallel Quests | Opens when |
 |-------|-----------|-----------------|-----------|

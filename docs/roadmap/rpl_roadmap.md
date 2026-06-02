@@ -35,24 +35,13 @@ foundation — not a later phase — and **gate every milestone**.
 
 ## Parallelism & critical path
 
-Rounds `R0–R3` (see the [execution doc](rpl_execution.md)) are the **delivery /
-integration** sequence. **Within each round, the listed components run as parallel
-Quests; gates sit *between* rounds, not inside them.**
+**The rule (no exceptions):** open a round only when its gate is green, then launch
+**every** Quest in that round in parallel. Never start a round early; never serialize
+within a round. Rounds, their members, and their gates are defined **once** in the
+[execution doc → Rounds & gates](rpl_execution.md#rounds--gates) — that table is the
+single source of truth.
 
-- **R0** — F1, F2, F3, F4, F5 launch in parallel. X1/X2/X3 start as skeletons alongside
-  and finalize against the pieces they cover (X2 ↔ F2, X1 ↔ F3, X3 ↔ F1/X1/X2).
-- **R1** — P1, P2, P3·api, P6·main run in parallel, decoupled by the **frozen F3
-  schemas** (each builds against fixtures).
-- **R2** — P3·full, P4 in parallel.
-- **R3** — P5, P6·full in parallel.
-- **Gates (between rounds):** F3 frozen + F2 & its canaries green → opens R1; R1
-  integrated → R2; R2 integrated → R3.
-- **Integration** follows the data flow (`discover→scan→resolve→flag→shortlist→report`),
-  but implementation does not serialize on it.
-- **Max-throughput option:** once F3 is frozen you *can* build all P-components at once
-  against fixtures (collapsing the R1–R3 *build* into one wave) and still **ship** in
-  R1→R2→R3 order. Default to the rounds so a thin slice lands first.
-- **Critical path to first value:** F3 → P2 → P6·main. Everything else runs alongside.
+**Critical path to first value:** F3 → P2 → P6·main.
 
 ## Milestones
 
