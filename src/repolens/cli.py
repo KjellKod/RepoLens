@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import math
 import re
 import shlex
@@ -12,7 +11,6 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from urllib.parse import urlparse
 
 from repolens.report import ReportGateOpen, render_main_report
 from repolens.security.redaction import redact_tokens
@@ -66,8 +64,8 @@ _STAGE_HELP = {
             "repolens discover --owner <OWNER>  (or: --owner <OWNER> "
             '--repos "sentinel-alpha, sentinel-beta")',
             "discovered.json (full tagged list) + repos.candidate.md (checkbox approval file).",
-            "review repos.candidate.md, untick any repos you want to exclude, then prepare "
-            "approved repo JSON for `repolens scan`.",
+            "review repos.candidate.md, untick any repos you want to exclude, then run "
+            "`repolens scan --work-root <WORK>`.",
         ),
     ),
     "scan": StageHelp(
@@ -76,9 +74,9 @@ _STAGE_HELP = {
             "Stage 2/6 — inventory each approved repo's dependencies, any language (read-only)."
         ),
         epilog=_stage_epilog(
-            "an approved repo JSON file derived from discover, plus a verified Syft "
-            "binary in the work root.",
-            "repolens scan --work-root work --repos approved-repos.json",
+            "reviewed discover artifacts at <WORK>/discovered.json and "
+            "<WORK>/repos.candidate.md, plus a verified Syft binary in the work root.",
+            "repolens scan --work-root <WORK>  (override: --repos approved-repos.json)",
             "<WORK>/work/<repo_ref>/sbom.syft.json + scan.status.json per repo "
             "(resumable — safe to re-run).",
             "`repolens resolve --work-root <WORK> --repo-ref <REPO_REF>`.",
@@ -153,8 +151,7 @@ _EPILOG = (
     "\n"
     "typical run:\n"
     "  1. repolens discover --owner <OWNER>                     find + approve the repos\n"
-    "  2. repolens scan --work-root work --repos approved-repos.json\n"
-    "                                                           inventory dependencies\n"
+    "  2. repolens scan --work-root work                        inventory approved dependencies\n"
     "  3. repolens resolve --work-root work --repo-ref <REPO_REF>\n"
     "                                                           resolve licenses\n"
     "  4. repolens flag --work-root work                        flag risk / unknowns\n"
@@ -268,9 +265,11 @@ def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--repos",
         type=Path,
-        required=True,
         metavar="PATH",
-        help='JSON file of approved repos: {"repos": [{"repo_ref", "clone_url"}, ...]}.',
+        help=(
+            'Override discover artifacts with an approved repo JSON file: {"repos": '
+            '[{"repo_ref", "clone_url"}, ...]}.'
+        ),
     )
     subparser.add_argument(
         "--timeout",
@@ -390,6 +389,12 @@ def _stage_stub(args: argparse.Namespace) -> CommandResult:
 
 def _discover_command(args: argparse.Namespace) -> CommandResult:
     repos = parse_repos_option(args.repos) if args.repos is not None else None
+    if args.force:
+        print(
+            "Warning: --force regenerates repos.candidate.md and discards prior "
+            "checkbox/tick edits.",
+            file=sys.stderr,
+        )
     result = run_discover(
         owner=args.owner,
         work_root=args.work_root,
@@ -399,13 +404,9 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
         force_candidate=args.force,
     )
     # Remember the chosen work-root so the next step is copy-pasteable after
-    # the approval JSON has been prepared from the candidate checklist.
+    # the candidate checklist has been reviewed.
     work_root = Path(args.work_root)
-    scan_command = (
-        "repolens scan "
-        f"--work-root {shlex.quote(str(work_root))} "
-        f"--repos {shlex.quote(str(work_root / 'approved-repos.json'))}"
-    )
+    scan_command = f"repolens scan --work-root {shlex.quote(str(work_root))}"
     return CommandResult(
         CommandStatus.SUCCESS,
         (
@@ -413,7 +414,7 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
             f"{result.candidate_count} candidates, {result.hard_exclusion_count} hard exclusions.\n"
             f"Created {result.discovered_path} and {result.candidate_path}.\n"
             f"Manual step: open {result.candidate_path}, untick any repos you want "
-            "to exclude, and prepare an approved repos JSON file.\n"
+            "to exclude, and leave checked repos ready for scan.\n"
             f"Next CLI stage: {scan_command}"
         ),
     )
@@ -423,8 +424,12 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     # Imported here so the rest of the CLI does not pull the scan/store stack
     # (and jsonschema) unless `scan` actually runs.
     from repolens.scan import runner as scan_runner
+    from repolens.scan.inputs import load_discover_approved_repo_specs, load_explicit_repo_specs
 
-    repos = _load_repo_specs(args.repos, scan_runner.RepoSpec)
+    if args.repos is not None:
+        repos = load_explicit_repo_specs(args.repos, scan_runner.RepoSpec)
+    else:
+        repos = load_discover_approved_repo_specs(args.work_root, scan_runner.RepoSpec)
     syft_path = scan_runner.resolve_syft_path(args.work_root)
     if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
         raise InputError("--timeout must be a positive number of seconds")
@@ -490,37 +495,6 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     if result.open_count > 0:
         return CommandResult(CommandStatus.FINDINGS_OPEN, summary)
     return CommandResult(CommandStatus.SUCCESS, summary)
-
-
-def _load_repo_specs(path: Path, repo_spec_cls: type) -> list:
-    try:
-        raw = json.loads(Path(path).read_text(encoding="utf-8"))
-    except FileNotFoundError as exc:
-        raise InputError(f"Repo list not found: {path.name}") from exc
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        raise InputError(f"Repo list is not valid JSON: {path.name}") from exc
-
-    records = raw.get("repos") if isinstance(raw, dict) else raw
-    if not isinstance(records, list) or not records:
-        raise InputError("Repo list must contain a non-empty 'repos' array")
-
-    specs = []
-    for index, record in enumerate(records):
-        if not isinstance(record, dict):
-            raise InputError(f"Repo list entry {index} must be an object")
-        repo_ref = record.get("repo_ref")
-        clone_url = record.get("clone_url")
-        if not isinstance(repo_ref, str) or not repo_ref:
-            raise InputError(f"Repo list entry {index} is missing a 'repo_ref'")
-        if not isinstance(clone_url, str):
-            raise InputError(f"Repo list entry {index} needs an https 'clone_url'")
-        parsed_clone_url = urlparse(clone_url)
-        if parsed_clone_url.scheme != "https" or not parsed_clone_url.hostname:
-            raise InputError(f"Repo list entry {index} needs an https 'clone_url'")
-        if parsed_clone_url.username or parsed_clone_url.password:
-            raise InputError(f"Repo list entry {index} 'clone_url' must not embed credentials")
-        specs.append(repo_spec_cls(repo_ref=repo_ref, clone_url=clone_url))
-    return specs
 
 
 def _report(args: argparse.Namespace) -> CommandResult:
