@@ -1,0 +1,19 @@
+tests/canaries/security/test_injection_canaries.py
+  s_80bf0aee96b635::t_9ba06cc49ca6c2 132-134,138-142
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "034b0897b4c56173ac2c6248ae6e659adcd113c9",
+  "prompts": {},
+  "sessions": {
+    "s_80bf0aee96b635": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "764e156b-145d-41e3-ab9b-cb21d2eea30d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
