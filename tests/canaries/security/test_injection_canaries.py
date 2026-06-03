@@ -129,9 +129,17 @@ def test_p5_injection_off_allowlist_evidence_blocked() -> None:
     assert outcome.reason == "verify:fetch_blocked_or_failed"
 
 
-def test_p5_shortlist_token_absent_from_artifacts_and_agent(tmp_path: Path) -> None:
+def test_p5_shortlist_token_absent_from_artifacts_and_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from repolens.data import store
     from repolens.shortlist.stage import run_shortlist
+
+    # The offline canary lane installs a minimal, hash-pinned dependency set that
+    # excludes jsonschema (see requirements/security-canaries.lock). Schema validation
+    # is exercised by offline-ci via tests/unit/shortlist; here we neutralize only the
+    # lazy validate hook so the real redaction + write path still runs token-free.
+    monkeypatch.setattr(store, "_validate_artifact", lambda *args, **kwargs: None)
 
     token = "ghp_" + "B" * 30
     store.write_shortlist(
