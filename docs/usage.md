@@ -200,64 +200,7 @@ Exit codes are:
 | `1` | Findings remain open, or a sanitized unexpected internal error occurred |
 | `2` | Usage, argument, or config input error |
 
-## `scan` — hardened clone + Syft → per-repo SBOM
-
-`repolens scan` consumes the checked repositories from discover's reviewed artifacts and
-produces one SBOM per repo. It does **not** re-run discovery and is independently
-rerunnable.
-
-```
-repolens scan --work-root work [--timeout SECONDS]
-repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS]
-```
-
-- `--work-root` — the pipeline work root. Per-repo artifacts land under
-  `work/work/<repo_ref>/` (`sbom.syft.json` + `scan.status.json`). The verified Syft binary
-  is read from `<work-root>/tools/syft`. By default, scan reads
-  `<work-root>/discovered.json` and `<work-root>/repos.candidate.md`.
-- `--repos` — optional override JSON for callers that already have approved repo specs. When
-  supplied, it wins over discover artifacts. The owner/repo are **runtime inputs**, never
-  committed:
-
-  ```json
-  { "repos": [ { "repo_ref": "<repo>", "clone_url": "https://<host>/<owner>/<repo>.git" } ] }
-  ```
-
-For the default bridge, checked rows in `repos.candidate.md` are joined back to
-`discovered.json`. Unticked rows and hard exclusions are skipped. Each checked repo's
-`repo_ref` is the discovered `name`, and the clone URL is derived as
-`https://github.com/<name_with_owner>.git`, then validated through the same HTTPS,
-no-credentials checks used by explicit `--repos` input.
-
-For each repo, `scan` clones through the hardened clone primitive (depth-1, no tags, single
-branch, no recursive submodules, hooks/symlinks/file-protocol disabled, prompts off, system
-git config off), runs the pinned Syft over the cloned path within a per-repo wall-clock
-budget, maps Syft's output onto the frozen `sbom.schema.json`, and persists it through the
-store (token-redacted, schema-validated). A completed SBOM lets a rerun **skip** that repo.
-Every successful SBOM is persisted even within a mixed run; if any repo fails the process
-exits `1` after the rest finish. Token redaction is applied to both the SBOM and
-`scan.status.json` before they are written.
-
-`scan` orchestrates external tools only — it never reimplements SBOM generation or license
-detection. Syft is acquired and integrity-verified by the bootstrap step (checksum →
-signature → provenance, all before the binary is made executable); `scan` consumes that
-already-verified binary and performs no acquisition itself.
-
-### `scan` sandbox — M1 scope and deferred non-goals
-
-M1 runs clone + Syft **in-process** with: the hardened git environment, an ephemeral
-per-repo workdir, a per-repo wall-clock timeout, guaranteed `finally` cleanup of that
-workdir, and no secrets (no GitHub token) in the child environment. No untrusted code from a
-scanned repository is executed (hooks are disabled at clone; Syft is a static inventory).
-
-The full container/VM **runner-layer** isolation controls are an explicit M1 **non-goal**:
-a read-only root filesystem, dropped Linux capabilities, a non-root UID, CPU/memory/disk
-quotas, and a network egress allowlist. Mobile/native license enrichment is also outside P2
-scan scope and remains deferred to P3b/R2. No P2 canary asserts filesystem/capability/egress
-isolation or mobile/native behavior; the roadmap tick for P2 reflects only the in-process
-hardening actually delivered above, not full sandboxing.
-
-## The pipeline
+## The pipeline at a glance
 
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
@@ -273,53 +216,9 @@ repolens report --work-root <WORK> --out-dir reports
 
 Discovery (you approve the repo list), the `shortlist` approval gate, and the final report
 are the shipped human checkpoints. The shipped scanner and resolver are read-only against
-your code and resumable after an interruption.
+your code and resumable after an interruption. The per-stage sections below follow this order.
 
-## `shortlist` — capability-minimized agent + human approval
-
-`repolens shortlist --work-root work [--identity <REVIEWER>]` reads the `shortlist.json` and
-`shortlist.md` that `flag` produced and settles each `open` item:
-
-1. **Ingest human decisions.** Any item whose checkbox you ticked in `shortlist.md`
-   (`[x]` approve, `[r]` reject) is recorded with `status`, `decided_by` (from `--identity`,
-   a runtime input — never an owner/repo literal), and a UTC `decided_at`. Do not edit the
-   `rpl:ref` markers; they key each decision back to its component.
-2. **Pre-screen → route.** Each still-open item's untrusted text (LICENSE / README /
-   description / evidence) is capped, NFC-normalized, and screened for injection markers
-   (role-play, output-override, container-escape, imperative, directional Unicode). A
-   flagged item routes to the human queue and the resolution agent is **never invoked** for
-   it.
-3. **Capability-minimized agent.** Clean content is wrapped in `<untrusted_content>` (output
-   instruction appended after the block) and handed to the agent, which may only propose a
-   schema-validated `{spdx_id, evidence_url, evidence_anchor}` or abstain. The agent has no
-   shell, no file-write, no token, and no arbitrary network.
-4. **Verify, don't trust.** Any proposal is confirmed by re-fetching the cited evidence URL
-   through the SSRF-guarded, allowlisted HTTP client and checking it exactly anchors the
-   claimed SPDX id. A verified proposal records the candidate and `evidence.source_layer =
-   "agent"` but the item **stays open until you tick it** — the agent proposes, you dispose.
-
-`shortlist` exits `0` only when no item remains open and `1` (findings open) otherwise, so
-it gates the downstream report.
-
-### Offline fixture acceptance harness
-
-The X1 synthetic fixtures can exercise the shipped M1 stage contracts without live
-network or external tools. This harness injects fixture `gh`, clone, Syft, and API
-boundaries, then writes the normal artifacts under the supplied work root:
-
-```bash
-python scripts/m1_fixture_e2e.py --work-root /tmp/repolens-m1-fixture
-```
-
-Expected output is a one-line JSON summary with discovered, SBOM, resolved, main report,
-appendix, and docx counts. The work root contains `discovered.json`,
-`repos.candidate.md`, per-fixture `sbom.syft.json` and
-`resolved.ndjson`, a clear `shortlist.json`, `reports/report.main.{md,csv,docx}`, and
-`reports/report.appendix.<category>.{md,csv}`. This is a fixture harness only; live owner
-dogfood still uses the normal `repolens discover -> scan -> resolve -> flag -> report`
-commands above.
-
-### Discover
+## `discover` — enumerate + categorize repos → approval checklist
 
 `discover` is the first shipped pipeline stage. It invokes `gh repo list` for the
 runtime owner you provide, or `gh repo view` for an explicit comma-separated repo-name
@@ -395,7 +294,64 @@ command using the same `--work-root`.
 }
 ```
 
-### Resolve
+## `scan` — hardened clone + Syft → per-repo SBOM
+
+`repolens scan` consumes the checked repositories from discover's reviewed artifacts and
+produces one SBOM per repo. It does **not** re-run discovery and is independently
+rerunnable.
+
+```
+repolens scan --work-root work [--timeout SECONDS]
+repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS]
+```
+
+- `--work-root` — the pipeline work root. Per-repo artifacts land under
+  `work/work/<repo_ref>/` (`sbom.syft.json` + `scan.status.json`). The verified Syft binary
+  is read from `<work-root>/tools/syft`. By default, scan reads
+  `<work-root>/discovered.json` and `<work-root>/repos.candidate.md`.
+- `--repos` — optional override JSON for callers that already have approved repo specs. When
+  supplied, it wins over discover artifacts. The owner/repo are **runtime inputs**, never
+  committed:
+
+  ```json
+  { "repos": [ { "repo_ref": "<repo>", "clone_url": "https://<host>/<owner>/<repo>.git" } ] }
+  ```
+
+For the default bridge, checked rows in `repos.candidate.md` are joined back to
+`discovered.json`. Unticked rows and hard exclusions are skipped. Each checked repo's
+`repo_ref` is the discovered `name`, and the clone URL is derived as
+`https://github.com/<name_with_owner>.git`, then validated through the same HTTPS,
+no-credentials checks used by explicit `--repos` input.
+
+For each repo, `scan` clones through the hardened clone primitive (depth-1, no tags, single
+branch, no recursive submodules, hooks/symlinks/file-protocol disabled, prompts off, system
+git config off), runs the pinned Syft over the cloned path within a per-repo wall-clock
+budget, maps Syft's output onto the frozen `sbom.schema.json`, and persists it through the
+store (token-redacted, schema-validated). A completed SBOM lets a rerun **skip** that repo.
+Every successful SBOM is persisted even within a mixed run; if any repo fails the process
+exits `1` after the rest finish. Token redaction is applied to both the SBOM and
+`scan.status.json` before they are written.
+
+`scan` orchestrates external tools only — it never reimplements SBOM generation or license
+detection. Syft is acquired and integrity-verified by the bootstrap step (checksum →
+signature → provenance, all before the binary is made executable); `scan` consumes that
+already-verified binary and performs no acquisition itself.
+
+### `scan` sandbox — M1 scope and deferred non-goals
+
+M1 runs clone + Syft **in-process** with: the hardened git environment, an ephemeral
+per-repo workdir, a per-repo wall-clock timeout, guaranteed `finally` cleanup of that
+workdir, and no secrets (no GitHub token) in the child environment. No untrusted code from a
+scanned repository is executed (hooks are disabled at clone; Syft is a static inventory).
+
+The full container/VM **runner-layer** isolation controls are an explicit M1 **non-goal**:
+a read-only root filesystem, dropped Linux capabilities, a non-root UID, CPU/memory/disk
+quotas, and a network egress allowlist. Mobile/native license enrichment is also outside P2
+scan scope and remains deferred to P3b/R2. No P2 canary asserts filesystem/capability/egress
+isolation or mobile/native behavior; the roadmap tick for P2 reflects only the in-process
+hardening actually delivered above, not full sandboxing.
+
+## `resolve` — license ladder → `resolved.ndjson`
 
 For the resolution stage, `<WORK>/work/<REPO_REF>/sbom.syft.json` must already exist:
 
@@ -443,7 +399,61 @@ stage.
 The command writes `<WORK>/work/<REPO_REF>/resolved.ndjson` with SPDX-normalized
 license records or schema-valid unresolved records when evidence cannot be verified.
 
-### Report
+## `flag` — tag, apply policy, dedup → inventory + shortlist
+
+`repolens flag --work-root work` reads every `work/<repo>/resolved.ndjson` from `resolve`,
+tags each component (`origin` / `scope` / `distribution`), applies the license policy
+tiers, deduplicates components across repositories, and writes the inventory plus the
+review queue:
+
+```
+repolens flag --work-root work
+```
+
+- `flag` owns its own resolved-record collector. A missing or empty `work/` is treated as
+  "no records → empty artifacts → exit `0`", so the stage is safe to run early.
+- Each deduplicated component is assigned a `policy_tier`: `ALLOW`, `REVIEW`, `BLOCK`, or
+  `UNKNOWN`. `ALLOW` components produce no review item; `REVIEW`, `BLOCK`, and `UNKNOWN`
+  components become **open** items in the shortlist, each with a stated reason — e.g. a
+  planted AGPL dependency lands in the `BLOCK` queue and a dependency with no detectable
+  license lands in `UNKNOWN`.
+
+Outputs land under `--work-root`:
+
+- `inventory.json` — the complete, deduplicated, tagged component dataset.
+- `shortlist.json` + `shortlist.md` — the review queue `shortlist` consumes; its
+  `open_count` is what gates the final report.
+
+The default policy tiers live in [license-policy.md](roadmap/rpl_license-policy.md) and are
+overridable through untracked local config.
+
+## `shortlist` — capability-minimized agent + human approval
+
+`repolens shortlist --work-root work [--identity <REVIEWER>]` reads the `shortlist.json` and
+`shortlist.md` that `flag` produced and settles each `open` item:
+
+1. **Ingest human decisions.** Any item whose checkbox you ticked in `shortlist.md`
+   (`[x]` approve, `[r]` reject) is recorded with `status`, `decided_by` (from `--identity`,
+   a runtime input — never an owner/repo literal), and a UTC `decided_at`. Do not edit the
+   `rpl:ref` markers; they key each decision back to its component.
+2. **Pre-screen → route.** Each still-open item's untrusted text (LICENSE / README /
+   description / evidence) is capped, NFC-normalized, and screened for injection markers
+   (role-play, output-override, container-escape, imperative, directional Unicode). A
+   flagged item routes to the human queue and the resolution agent is **never invoked** for
+   it.
+3. **Capability-minimized agent.** Clean content is wrapped in `<untrusted_content>` (output
+   instruction appended after the block) and handed to the agent, which may only propose a
+   schema-validated `{spdx_id, evidence_url, evidence_anchor}` or abstain. The agent has no
+   shell, no file-write, no token, and no arbitrary network.
+4. **Verify, don't trust.** Any proposal is confirmed by re-fetching the cited evidence URL
+   through the SSRF-guarded, allowlisted HTTP client and checking it exactly anchors the
+   claimed SPDX id. A verified proposal records the candidate and `evidence.source_layer =
+   "agent"` but the item **stays open until you tick it** — the agent proposes, you dispose.
+
+`shortlist` exits `0` only when no item remains open and `1` (findings open) otherwise, so
+it gates the downstream report.
+
+## `report` — gated main disclosure + appendices
 
 `report` reads resolved occurrences, discovered repository categories when available, and
 local runtime report config. If `<WORK>/shortlist.json` exists with `open_count > 0` or
@@ -477,6 +487,24 @@ appendix filenames, and appendix headings. If a resolved repo cannot be joined t
 `discovered.json` by exact trimmed `name` or `name_with_owner`, it uses
 `discover.taxonomy.default_category` or `uncategorized` and the row records a
 `missing_category` coverage gap.
+
+## Offline fixture acceptance harness
+
+The X1 synthetic fixtures can exercise the shipped M1 stage contracts without live
+network or external tools. This harness injects fixture `gh`, clone, Syft, and API
+boundaries, then writes the normal artifacts under the supplied work root:
+
+```bash
+python scripts/m1_fixture_e2e.py --work-root /tmp/repolens-m1-fixture
+```
+
+Expected output is a one-line JSON summary with discovered, SBOM, resolved, main report,
+appendix, and docx counts. The work root contains `discovered.json`,
+`repos.candidate.md`, per-fixture `sbom.syft.json` and
+`resolved.ndjson`, a clear `shortlist.json`, `reports/report.main.{md,csv,docx}`, and
+`reports/report.appendix.<category>.{md,csv}`. This is a fixture harness only; live owner
+dogfood still uses the normal `repolens discover -> scan -> resolve -> flag -> report`
+commands above.
 
 ## Outputs
 
