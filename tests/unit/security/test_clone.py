@@ -196,6 +196,8 @@ def test_classify_git_failure_maps_auth_403_429_transient() -> None:
     assert classify_git_failure(128, "terminal prompts disabled") is CloneAuthRequired
     assert classify_git_failure(128, "remote: HTTP 403 Forbidden") is CloneAccessDenied
     assert classify_git_failure(128, "The requested URL returned error: 403") is (CloneAccessDenied)
+    assert classify_git_failure(128, "remote: Repository not found.") is CloneAccessDenied
+    assert classify_git_failure(128, "The requested URL returned error: 404") is (CloneAccessDenied)
     assert classify_git_failure(128, "Permission denied") is CloneAccessDenied
     assert classify_git_failure(128, "HTTP 429 too many requests") is CloneRateLimited
     assert classify_git_failure(128, "The requested URL returned error: 429") is (CloneRateLimited)
@@ -217,6 +219,7 @@ def test_classify_git_failure_maps_auth_403_429_transient() -> None:
 
 def test_classify_git_failure_ignores_incidental_numeric_substrings() -> None:
     assert classify_git_failure(128, "processed 403 objects before failing") is (CloneSecurityError)
+    assert classify_git_failure(128, "processed 404 objects before failing") is CloneSecurityError
     assert classify_git_failure(128, "wrote 429 bytes before failing") is CloneSecurityError
     assert classify_git_failure(128, "processed 503 objects before failing") is (CloneSecurityError)
 

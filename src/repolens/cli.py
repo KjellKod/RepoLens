@@ -93,6 +93,7 @@ _STAGE_HELP = {
             "repolens scan --work-root <WORK>  (automation: --yes; offline: --offline)",
             "<WORK>/work/<repo_ref>/sbom.syft.json + scan.status.json per repo "
             "(resumable — safe to re-run).",
+            "choose a repo directory from `<WORK>/work/`, then run "
             "`repolens resolve --work-root <WORK> --repo-ref <REPO_REF>`.",
         ),
     ),
@@ -103,9 +104,10 @@ _STAGE_HELP = {
         ),
         epilog=_stage_epilog(
             "a Syft SBOM from scan at <WORK>/work/<REPO_REF>/sbom.syft.json; "
+            "<REPO_REF> is the repo artifact directory created by scan under <WORK>/work/; "
             "--source-root may point at a read-only checkout for mobile markers and "
             "package-local ScanCode fallback.",
-            "repolens resolve --work-root <WORK> --repo-ref <REPO_REF> "
+            "repolens resolve --work-root <WORK> --repo-ref sentinel-alpha "
             "--source-root <CHECKOUT> [--enable-mobile-native]",
             "<WORK>/work/<REPO_REF>/resolved.ndjson (license + evidence + tags per "
             "dependency; unresolved records stay schema-valid).",
@@ -166,8 +168,9 @@ _EPILOG = (
     "typical run:\n"
     "  1. repolens discover --owner <OWNER>                     find + approve the repos\n"
     "  2. repolens scan --work-root work                        inventory approved dependencies\n"
-    "  3. repolens resolve --work-root work --repo-ref <REPO_REF>\n"
-    "                                                           resolve licenses\n"
+    "     ls work/work                                      choose a repo_ref from scan output\n"
+    "  3. repolens resolve --work-root work --repo-ref sentinel-alpha\n"
+    "                                                           resolve one repo's licenses\n"
     "  4. repolens flag --work-root work                        flag risk / unknowns\n"
     "  5. repolens shortlist --work-root work                   settle the flags + approve\n"
     "  6. repolens report --work-root work --out-dir reports    build the main disclosure\n"
@@ -336,6 +339,7 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--repo-ref",
         required=True,
+        metavar="REPO_REF",
         help="Runtime repository reference used for the work/<repo-ref>/ artifact dir.",
     )
     subparser.add_argument(
@@ -403,6 +407,17 @@ def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     try:
+        provided_args = list(sys.argv[1:] if argv is None else argv)
+        work_root_for_missing_repo_ref = _resolve_work_root_when_repo_ref_missing(provided_args)
+        if work_root_for_missing_repo_ref is not None:
+            print(
+                _sanitize(
+                    _missing_repo_ref_message(work_root_for_missing_repo_ref),
+                    redact_paths=False,
+                ),
+                file=sys.stderr,
+            )
+            return int(ExitCode.USAGE_OR_INPUT_ERROR)
         args = parser.parse_args(argv)
         if args.command is None:
             parser.print_help()
@@ -424,6 +439,32 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception as exc:
         print(_sanitize(f"Internal error: {exc}", redact_paths=True), file=sys.stderr)
         return int(ExitCode.FINDINGS_OPEN)
+
+
+def _resolve_work_root_when_repo_ref_missing(args: Sequence[str]) -> Path | None:
+    """Return resolve's work root when only --repo-ref is missing.
+
+    Argparse's generic required-argument error is correct but not helpful enough
+    for this stage: users need to know that ``--repo-ref`` comes from scan's
+    ``<WORK>/work/`` directories. Keep argparse authoritative for every other
+    usage error.
+    """
+
+    try:
+        command_index = list(args).index("resolve")
+    except ValueError:
+        return None
+    stage_args = list(args[command_index + 1 :])
+    if "-h" in stage_args or "--help" in stage_args:
+        return None
+    if "--repo-ref" in stage_args or any(arg.startswith("--repo-ref=") for arg in stage_args):
+        return None
+    for index, arg in enumerate(stage_args):
+        if arg == "--work-root" and index + 1 < len(stage_args):
+            return Path(stage_args[index + 1])
+        if arg.startswith("--work-root="):
+            return Path(arg.split("=", 1)[1])
+    return None
 
 
 def _stage_stub(args: argparse.Namespace) -> CommandResult:
@@ -669,6 +710,8 @@ def _syft_declined_message(pin: SyftPinSummary, *, interactive: bool) -> str:
 def _resolve_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.resolve import run_resolve
 
+    if not args.repo_ref:
+        raise InputError(_missing_repo_ref_message(args.work_root))
     path = run_resolve(
         args.work_root,
         args.repo_ref,
@@ -676,6 +719,24 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
         enable_mobile_native=args.enable_mobile_native,
     )
     return CommandResult(CommandStatus.SUCCESS, f"wrote {path.name}")
+
+
+def _missing_repo_ref_message(work_root: Path) -> str:
+    repo_root = work_root / "work"
+    if repo_root.is_dir():
+        repo_refs = sorted(path.name for path in repo_root.iterdir() if path.is_dir())
+        if repo_refs:
+            preview = ", ".join(repo_refs[:5])
+            suffix = "" if len(repo_refs) <= 5 else ", ..."
+            return (
+                "resolve requires --repo-ref. It is the repo artifact directory created "
+                f"by scan under {repo_root}; available repo refs: {preview}{suffix}."
+            )
+    return (
+        "resolve requires --repo-ref. It is the repo artifact directory created by "
+        f"scan under {repo_root}; run `ls {repo_root}` after scan and pass one name, "
+        "for example `repolens resolve --work-root <WORK> --repo-ref sentinel-alpha`."
+    )
 
 
 def _flag_stage(args: argparse.Namespace) -> CommandResult:

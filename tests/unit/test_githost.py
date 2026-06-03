@@ -4,6 +4,7 @@ from repolens.githost import (
     GH_NOT_AUTHENTICATED_MESSAGE,
     GH_NOT_INSTALLED_MESSAGE,
     access_denied_message,
+    is_gh_not_authenticated,
     is_gh_transient,
     private_repo_needs_auth_message,
     rate_limited_message,
@@ -47,6 +48,19 @@ def test_falls_back_to_github_token_env() -> None:
 
     cred = resolve_clone_credential(
         gh_runner=runner, env={"GITHUB_TOKEN": GITHUB_ENV_TOKEN}, sleep=_no_sleep
+    )
+
+    assert cred is not None and cred.secret == GITHUB_ENV_TOKEN
+
+
+def test_blank_gh_token_env_falls_back_to_github_token_env() -> None:
+    def runner() -> tuple[int, str, str]:
+        return (1, "", "not logged in")
+
+    cred = resolve_clone_credential(
+        gh_runner=runner,
+        env={"GH_TOKEN": "   ", "GITHUB_TOKEN": GITHUB_ENV_TOKEN},
+        sleep=_no_sleep,
     )
 
     assert cred is not None and cred.secret == GITHUB_ENV_TOKEN
@@ -133,6 +147,14 @@ def test_is_gh_transient_classifies_on_raw_result() -> None:
     assert is_gh_transient(1, "processed 503 objects before a terminal auth failure") is False
     # A success is never transient.
     assert is_gh_transient(0, "rate limit") is False
+
+
+def test_is_gh_not_authenticated_covers_common_gh_401_messages() -> None:
+    assert is_gh_not_authenticated("Bad credentials") is True
+    assert is_gh_not_authenticated("This endpoint requires you to be authenticated") is True
+    assert is_gh_not_authenticated("HTTP 401: requires authentication") is True
+    assert is_gh_not_authenticated("gh: not logged into any GitHub hosts") is True
+    assert is_gh_not_authenticated("HTTP 429: rate limit exceeded") is False
 
 
 def test_message_builders_match_brief_wording() -> None:

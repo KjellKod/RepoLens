@@ -20,7 +20,7 @@ import os
 import re
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 
 from repolens.security.clone import CloneCredential
@@ -52,6 +52,18 @@ GH_NOT_INSTALLED_MESSAGE = (
 GH_NOT_AUTHENTICATED_MESSAGE = (
     "GitHub CLI is not authenticated. Run `gh auth login` (or set GH_TOKEN)."
 )
+GH_NOT_AUTHENTICATED_MARKERS = (
+    "not logged in",
+    "not logged into",
+    "not logged into any github hosts",
+    "gh auth login",
+    "authentication required",
+    "requires authentication",
+    "bad credentials",
+    "this endpoint requires you to be authenticated",
+    "not authenticated",
+    "you are not logged",
+)
 
 
 def private_repo_needs_auth_message(name: str) -> str:
@@ -64,6 +76,11 @@ def access_denied_message(name: str) -> str:
 
 def rate_limited_message(retries: int) -> str:
     return f"rate-limited after {retries} retries - try again later"
+
+
+def is_gh_not_authenticated(stderr: str) -> bool:
+    text = (stderr or "").casefold()
+    return any(marker in text for marker in GH_NOT_AUTHENTICATED_MARKERS)
 
 
 # --- transient classification (shared by discover + credential resolve) ---
@@ -172,12 +189,18 @@ def resolve_clone_credential_result(
 
     gh_resolution = _resolve_gh_token(runner, sleep=sleep, max_attempts=max_attempts)
     token = gh_resolution.token
-    if not token:
-        token = environ.get("GH_TOKEN") or environ.get("GITHUB_TOKEN") or ""
-    token = token.strip()
+    token = _env_clone_token(environ) if not token else token.strip()
     if token:
         return CloneCredentialResolution(CloneCredential(token))
     return CloneCredentialResolution(None, gh_resolution.unavailable_message)
+
+
+def _env_clone_token(environ: Mapping[str, str]) -> str:
+    for key in ("GH_TOKEN", "GITHUB_TOKEN"):
+        token = (environ.get(key) or "").strip()
+        if token:
+            return token
+    return ""
 
 
 @dataclass(frozen=True)
@@ -203,7 +226,7 @@ def _resolve_gh_token(
         text = (stderr or "").casefold()
         if returncode == 127 or "gh not found" in text:
             return _GhTokenResolution(unavailable_message=GH_NOT_INSTALLED_MESSAGE)
-        if _is_gh_not_authenticated(stderr):
+        if is_gh_not_authenticated(stderr):
             return _GhTokenResolution(unavailable_message=GH_NOT_AUTHENTICATED_MESSAGE)
         return _GhTokenResolution()
 
@@ -218,16 +241,3 @@ def _resolve_gh_token(
     except GhTransientError:
         # Exhausted retries on a transient gh failure: still try env tokens.
         return _GhTokenResolution(unavailable_message=rate_limited_message(max_attempts))
-
-
-def _is_gh_not_authenticated(stderr: str) -> bool:
-    text = (stderr or "").casefold()
-    return any(
-        marker in text
-        for marker in (
-            "not logged into",
-            "not authenticated",
-            "authentication required",
-            "gh auth login",
-        )
-    )

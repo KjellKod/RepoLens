@@ -80,7 +80,8 @@ is just the stages in order:
 ```
 repolens discover --owner <OWNER> --work-root work   # find + categorize repos -> approval checklist
 repolens scan      --work-root work                  # verify/cache pinned Syft, then inventory checked repos
-repolens resolve   --work-root work --repo-ref <REPO_REF>   # resolve licenses cheapest-source-first
+ls work/work                                        # choose a repo_ref directory created by scan
+repolens resolve   --work-root work --repo-ref sentinel-alpha # resolve one repo cheapest-source-first
 repolens flag      --work-root work                  # apply policy, flag risk/unknowns -> shortlist queue
 repolens shortlist --work-root work                  # settle flagged items with evidence + your approval
 repolens report    --work-root work --out-dir reports # assemble the gated disclosure (md/csv/docx)
@@ -94,6 +95,7 @@ Concrete example — scan a few specific repos under an owner and build the repo
 repolens discover --owner <OWNER> --repos "sentinel-alpha, sentinel-beta" --work-root work
 #  edit work/repos.candidate.md — untick anything you don't want scanned
 repolens scan    --work-root work
+ls work/work      # repo_ref values for resolve, for example sentinel-alpha
 repolens resolve --work-root work --repo-ref sentinel-alpha
 repolens flag    --work-root work
 repolens report  --work-root work --out-dir reports

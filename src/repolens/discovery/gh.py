@@ -16,6 +16,7 @@ from repolens.githost import (
     GH_NOT_AUTHENTICATED_MESSAGE,
     GH_NOT_INSTALLED_MESSAGE,
     GhTransientError,
+    is_gh_not_authenticated,
     is_gh_transient,
     is_gh_transient_error,
     rate_limited_message,
@@ -55,20 +56,6 @@ GhRunner = Callable[[Sequence[str], float], GhRunResult]
 
 #: Retry budget for transient (429 / secondary-rate-limit / network) gh failures.
 GH_RETRY_MAX_ATTEMPTS = DEFAULT_MAX_ATTEMPTS
-
-# Substrings marking a gh "not authenticated" failure (terminal, never retried).
-_GH_NOT_AUTHENTICATED_MARKERS = (
-    "not logged in",
-    "not logged into any github hosts",
-    "gh auth login",
-    "authentication required",
-    "you are not logged",
-)
-
-
-def _is_gh_not_authenticated(stderr: str) -> bool:
-    text = (stderr or "").casefold()
-    return any(marker in text for marker in _GH_NOT_AUTHENTICATED_MARKERS)
 
 
 def _run_gh_with_retry(
@@ -141,7 +128,7 @@ def list_repositories(
     if len(stdout) > stdout_max_bytes:
         raise LimitExceeded(f"gh repo list output exceeds {stdout_max_bytes} bytes")
     if result.returncode != 0:
-        if _is_gh_not_authenticated(result.stderr):
+        if is_gh_not_authenticated(result.stderr):
             raise InputError(GH_NOT_AUTHENTICATED_MESSAGE)
         message = redact_tokens(result.stderr.strip() or "gh repo list failed")
         raise InputError(message)
@@ -297,7 +284,7 @@ def fetch_repositories(
         if len(stdout) > stdout_max_bytes:
             raise LimitExceeded(f"gh repo view output exceeds {stdout_max_bytes} bytes")
         if result.returncode != 0:
-            if _is_gh_not_authenticated(result.stderr):
+            if is_gh_not_authenticated(result.stderr):
                 raise InputError(GH_NOT_AUTHENTICATED_MESSAGE)
             # A token-shaped name passes REPO_NAME_PATTERN, so redact the whole
             # message before it reaches the user. Do not relay gh's raw owner/repo

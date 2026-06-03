@@ -216,6 +216,7 @@ _AUTH_REQUIRED_MARKERS = (
 _ACCESS_DENIED_MARKERS = (
     "permission denied",
     "access denied",
+    "repository not found",
 )
 _RATE_LIMITED_MARKERS = (
     "rate limit",
@@ -256,7 +257,7 @@ def classify_git_failure(returncode: int, stderr: str) -> type[CloneSecurityErro
     text = (stderr or "").casefold()
     if any(marker in text for marker in _AUTH_REQUIRED_MARKERS):
         return CloneAuthRequired
-    if _has_http_status(text, 403) or any(marker in text for marker in _ACCESS_DENIED_MARKERS):
+    if _has_http_status(text, 403, 404) or any(marker in text for marker in _ACCESS_DENIED_MARKERS):
         return CloneAccessDenied
     if _has_http_status(text, 429) or any(marker in text for marker in _RATE_LIMITED_MARKERS):
         return CloneRateLimited

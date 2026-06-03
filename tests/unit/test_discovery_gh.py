@@ -301,6 +301,16 @@ def test_list_repositories_gh_not_authenticated_message() -> None:
     assert str(excinfo.value) == GH_NOT_AUTHENTICATED_MESSAGE
 
 
+def test_list_repositories_gh_bad_credentials_message() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        return GhRunResult(1, "", "GraphQL: Bad credentials")
+
+    with pytest.raises(InputError) as excinfo:
+        list_repositories("sentinel-owner", runner=runner)
+
+    assert str(excinfo.value) == GH_NOT_AUTHENTICATED_MESSAGE
+
+
 def test_list_repositories_transient_retried_then_surfaced() -> None:
     calls = {"n": 0}
 
@@ -342,6 +352,16 @@ def test_fetch_repositories_transient_detected_before_generic_rewrite() -> None:
 def test_fetch_repositories_gh_not_authenticated_message() -> None:
     def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
         return GhRunResult(1, "", "gh: not logged into any GitHub hosts")
+
+    with pytest.raises(InputError) as excinfo:
+        fetch_repositories("sentinel-owner", ("sentinel-alpha",), runner=runner)
+
+    assert str(excinfo.value) == GH_NOT_AUTHENTICATED_MESSAGE
+
+
+def test_fetch_repositories_gh_requires_authentication_message() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        return GhRunResult(1, "", "This endpoint requires you to be authenticated")
 
     with pytest.raises(InputError) as excinfo:
         fetch_repositories("sentinel-owner", ("sentinel-alpha",), runner=runner)

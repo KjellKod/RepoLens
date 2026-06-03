@@ -263,8 +263,9 @@ Exit codes are:
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
 repolens scan      --work-root work  # first use verifies Syft cache, then writes SBOMs
-repolens resolve --work-root <WORK> --repo-ref <REPO_REF>
-                                      # API-only license resolution for an existing SBOM
+ls work/work                         # choose a repo_ref directory created by scan
+repolens resolve --work-root work --repo-ref sentinel-alpha
+                                      # license resolution for one existing repo SBOM
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
 repolens shortlist --work-root work [--identity <REVIEWER>]
                                       # settle flagged items + human approval
@@ -418,8 +419,14 @@ layered at the runner — see
 For the resolution stage, `<WORK>/work/<REPO_REF>/sbom.syft.json` must already exist:
 
 ```bash
-repolens resolve --work-root <WORK> --repo-ref <REPO_REF>
+ls <WORK>/work
+repolens resolve --work-root <WORK> --repo-ref sentinel-alpha
 ```
+
+`<REPO_REF>` is the directory name created by `scan` under `<WORK>/work/`, not the
+`--work-root` path itself. For example, after `scan` writes
+`work/work/sentinel-alpha/sbom.syft.json`, run `repolens resolve --work-root work
+--repo-ref sentinel-alpha`.
 
 That no-flag form preserves the API-layer behavior: Syft-declared licenses and
 verified metadata API evidence are written to `resolved.ndjson`; unresolved records

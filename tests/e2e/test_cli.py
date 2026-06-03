@@ -32,6 +32,8 @@ class CliTests(unittest.TestCase):
         self.assertIn("repolens --config ./repolens.local.toml discover --owner <OWNER>", help_text)
         self.assertIn("Config files hold local taxonomy, policy, and report settings", help_text)
         self.assertIn("Use stage options such as --work-root for output directories", help_text)
+        self.assertIn("ls work/work", help_text)
+        self.assertIn("repolens resolve --work-root work --repo-ref sentinel-alpha", help_text)
 
     def test_each_stage_help_is_actionable(self) -> None:
         expected_stages = {
@@ -56,6 +58,33 @@ class CliTests(unittest.TestCase):
                 self.assertIn("Example:", help_text)
                 self.assertIn("Output:", help_text)
                 self.assertIn("Next:", help_text)
+
+    def test_resolve_help_explains_repo_ref_source(self) -> None:
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = cli.main(["resolve", "--help"])
+
+        self.assertEqual(code, 0)
+        help_text = stdout.getvalue()
+        self.assertIn("<REPO_REF> is the repo artifact directory created by scan", help_text)
+        self.assertIn("repolens resolve --work-root <WORK> --repo-ref sentinel-alpha", help_text)
+
+    def test_resolve_without_repo_ref_explains_how_to_find_it(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            work_root = Path(temp_dir)
+            (work_root / "work" / "sentinel-alpha").mkdir(parents=True)
+            stderr = io.StringIO()
+            with (
+                redirect_stderr(stderr),
+                mock.patch("repolens.resolve.run_resolve") as run_resolve,
+            ):
+                code = cli.main(["resolve", "--work-root", str(work_root)])
+
+        self.assertEqual(code, 2)
+        run_resolve.assert_not_called()
+        message = stderr.getvalue()
+        self.assertIn("resolve requires --repo-ref", message)
+        self.assertIn("available repo refs: sentinel-alpha", message)
 
     def test_console_help_returns_success(self) -> None:
         result = subprocess.run(
