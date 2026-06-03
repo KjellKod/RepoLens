@@ -8,10 +8,16 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from unittest import mock
 
 from repolens import cli
 from repolens.data import store
+
+
+class _TtyStringIO(io.StringIO):
+    def isatty(self) -> bool:
+        return True
 
 
 class CliTests(unittest.TestCase):
@@ -282,6 +288,24 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("ghp_abc123", output)
         self.assertNotIn("/tmp/acme/private", output)
 
+    def test_usage_error_keeps_operator_paths_but_redacts_tokens(self) -> None:
+        token = "ghp_" + "Z" * 12
+        stderr = io.StringIO()
+        with (
+            mock.patch(
+                "repolens.cli.load_config",
+                side_effect=cli.InputError(f"missing /tools/syft with {token}"),
+            ),
+            redirect_stderr(stderr),
+        ):
+            code = cli.main(["shortlist", "--work-root", "work"])
+
+        self.assertEqual(code, 2)
+        output = stderr.getvalue()
+        self.assertIn("/tools/syft", output)
+        self.assertIn("[REDACTED_TOKEN]", output)
+        self.assertNotIn(token, output)
+
     def test_report_command_writes_main_artifacts(self) -> None:
         with TemporaryDirectory() as tmp:
             work_root = Path(tmp)
@@ -462,6 +486,22 @@ def _syft_document() -> dict:
 
 
 class ScanCliTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._ensure_patch = mock.patch(
+            "repolens.cli._ensure_syft_for_scan",
+            lambda args: Path(args.work_root) / "tools" / "syft",
+        )
+        self._ensure_patch.start()
+
+    def tearDown(self) -> None:
+        if self._ensure_patch is not None:
+            self._ensure_patch.stop()
+
+    def _use_real_syft_ensure(self) -> None:
+        if self._ensure_patch is not None:
+            self._ensure_patch.stop()
+            self._ensure_patch = None
+
     def _scaffold(self, work_root: Path, repos: list[dict]) -> Path:
         (work_root / "tools").mkdir(parents=True, exist_ok=True)
         (work_root / "tools" / "syft").write_text("#!/bin/sh\n", encoding="utf-8")
@@ -642,6 +682,7 @@ class ScanCliTests(unittest.TestCase):
             self.assertFalse(store.is_repo_scanned(work_root, "acme-bad"))
 
     def test_scan_missing_syft_binary_exits_two(self) -> None:
+        self._use_real_syft_ensure()
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work-root"
             work_root.mkdir(parents=True)
@@ -656,8 +697,168 @@ class ScanCliTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
-            code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+            stderr = io.StringIO()
+            with (
+                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch("repolens.cli.ensure_syft_cached") as ensure,
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
             self.assertEqual(code, 2)
+            ensure.assert_not_called()
+            self.assertIn("--yes", stderr.getvalue())
+            self.assertNotIn("Download and install", stderr.getvalue())
+
+    def test_scan_interactive_yes_fetches_and_proceeds(self) -> None:
+        self._use_real_syft_ensure()
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            pin = cli.load_syft_pin()
+            syft_path = work_root / "tools" / "syft"
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            stderr = _TtyStringIO()
+            with (
+                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch(
+                    "repolens.cli.ensure_syft_cached",
+                    return_value=SimpleNamespace(path=syft_path, pin=pin, acquired=True),
+                ) as ensure,
+                mock.patch("sys.stdin", _TtyStringIO("y\n")),
+                mock.patch("sys.stderr", stderr),
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+
+            self.assertEqual(code, 0)
+            ensure.assert_called_once()
+            prompt = stderr.getvalue()
+            self.assertIn(f"Syft {pin.version}", prompt)
+            self.assertIn(pin.short_sha256, prompt)
+            self.assertIn("docs/usage.md#tool-bootstrap", prompt)
+            self.assertIn("Download and install RepoLens's validated Syft now? [y/N]", prompt)
+            self.assertIn("ok", prompt)
+
+    def test_scan_interactive_no_exits_without_fetch(self) -> None:
+        self._use_real_syft_ensure()
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            stderr = _TtyStringIO()
+            with (
+                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch("repolens.cli.ensure_syft_cached") as ensure,
+                mock.patch("sys.stdin", _TtyStringIO("\n")),
+                mock.patch("sys.stderr", stderr),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+
+            self.assertEqual(code, 2)
+            ensure.assert_not_called()
+            self.assertIn("Nothing was downloaded", stderr.getvalue())
+
+    def test_scan_noninteractive_yes_fetches(self) -> None:
+        self._use_real_syft_ensure()
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            pin = cli.load_syft_pin()
+            syft_path = work_root / "tools" / "syft"
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            stderr = io.StringIO()
+            with (
+                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch(
+                    "repolens.cli.ensure_syft_cached",
+                    return_value=SimpleNamespace(path=syft_path, pin=pin, acquired=True),
+                ) as ensure,
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(
+                    ["scan", "--work-root", str(work_root), "--repos", str(repos_path), "--yes"]
+                )
+
+            self.assertEqual(code, 0)
+            ensure.assert_called_once()
+            self.assertIn("ok", stderr.getvalue())
+            self.assertNotIn("Download and install", stderr.getvalue())
+
+    def test_scan_offline_empty_cache_exits_without_fetch(self) -> None:
+        self._use_real_syft_ensure()
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            stderr = io.StringIO()
+            with (
+                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch(
+                    "repolens.cli.ensure_syft_cached",
+                    side_effect=cli.UsageError("cache required /tools/syft"),
+                ) as ensure,
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(
+                    ["scan", "--work-root", str(work_root), "--repos", str(repos_path), "--offline"]
+                )
+
+            self.assertEqual(code, 2)
+            ensure.assert_called_once()
+            self.assertIn("/tools/syft", stderr.getvalue())
+
+    def test_scan_cache_hit_does_not_prompt_or_fetch(self) -> None:
+        self._use_real_syft_ensure()
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            syft_path = work_root / "tools" / "syft"
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            stderr = _TtyStringIO()
+            with (
+                mock.patch("repolens.cli.cached_syft_path", return_value=syft_path),
+                mock.patch("repolens.cli.ensure_syft_cached") as ensure,
+                mock.patch("sys.stdin", _TtyStringIO("")),
+                mock.patch("sys.stderr", stderr),
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+
+            self.assertEqual(code, 0)
+            ensure.assert_not_called()
+            self.assertNotIn("Download and install", stderr.getvalue())
 
     def test_scan_bad_repo_list_exits_two(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

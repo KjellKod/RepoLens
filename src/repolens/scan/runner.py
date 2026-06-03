@@ -86,20 +86,22 @@ class SyftScanError(RepoLensError):
 
 
 def resolve_syft_path(work_root: str | Path) -> Path:
-    """Return the verified Syft binary path produced by the bootstrap step.
+    """Return RepoLens's verified shared-cache Syft path.
 
-    M1 consumes an already-bootstrapped binary: ``repolens.bootstrap.run`` runs
-    ``bootstrap_syft`` (checksum -> signature -> provenance, all *before* the
-    binary is made executable; the supply-chain canary asserts that ordering) and
-    writes it under ``<dest>/syft`` with ``tool_versions.json`` recorded. The scan
-    runner is acquisition-free and only consumes that verified path.
+    The CLI performs consent-gated acquisition before calling :func:`scan_repos`.
+    This resolver is cache-only and intentionally ignores ``work_root`` so a
+    caller cannot supply a local Syft binary.
     """
 
-    path = Path(work_root) / "tools" / "syft"
-    if not path.exists():
+    del work_root
+    from repolens.bootstrap.cache import cached_syft_path, load_syft_pin
+
+    path = cached_syft_path(load_syft_pin())
+    if path is None:
         raise InputError(
-            "Syft binary not found under <work-root>/tools/syft; run the bootstrap "
-            "step first (it acquires and integrity-verifies Syft)."
+            "RepoLens's validated Syft is not in the shared cache; run "
+            "`repolens scan --yes` to acquire and verify it, or run "
+            "`repolens bootstrap` before offline use. See docs/usage.md#tool-bootstrap."
         )
     return path
 
