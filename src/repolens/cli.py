@@ -125,9 +125,7 @@ _STAGE_HELP = {
     ),
     "report": StageHelp(
         help="Assemble gated main, appendix, and docx disclosure reports.",
-        description=(
-            "Stage 6/6 — assemble gated disclosure reports from resolved artifacts."
-        ),
+        description=("Stage 6/6 — assemble gated disclosure reports from resolved artifacts."),
         epilog=_stage_epilog(
             "resolved.ndjson files from resolve, discovered.json categories when present, "
             "a clear shortlist.json when present, and report.header config for docx.",

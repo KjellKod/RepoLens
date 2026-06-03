@@ -64,10 +64,7 @@ def _document_xml(
 
 def _table_grid(column_count: int) -> str:
     grid_cols = "<w:gridCol/>" * column_count
-    return (
-        '<w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>'
-        f"<w:tblGrid>{grid_cols}</w:tblGrid>"
-    )
+    return f'<w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid>{grid_cols}</w:tblGrid>'
 
 
 def _paragraph(value: object) -> str:
