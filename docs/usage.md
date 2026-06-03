@@ -9,8 +9,9 @@
 - `gh` (authenticated), `git`, `python3`.
 - `pip install -e .` (or `pip install -e '.[test]'` for the test suite) — provides the
   `repolens` command and the importable package the `python -m repolens.*` commands use.
-- `syft` + `scancode` — installed and version-pinned by a future bootstrap step
-  (checksum/signature-verified).
+- `syft` — acquired by `scan` on first use into RepoLens's shared verified cache, or
+  pre-seeded with `repolens bootstrap` for offline runs.
+- `scancode` — version-pinned by bootstrap requirements for scoped fallback use.
 - For mobile license enrichment (optional, auto-detected): a build toolchain
   (JDK + Gradle for Android, Xcode/SPM or a `GITHUB_TOKEN` for iOS).
 
@@ -21,21 +22,33 @@ The pins are the single source of truth in `src/repolens/bootstrap/pins.toml`: e
 versions plus sha256 digests for Syft, ScanCode, cosign, `git`, `gh`, and the
 base image (by digest) — never `latest`.
 
+Normally no manual bootstrap is needed: `repolens scan` auto-acquires RepoLens's
+pinned Syft on first use, verifies it, and stores it in the shared cache:
+
+```
+${XDG_CACHE_HOME:-~/.cache}/repolens/tools/<version>-<sha256>/syft
+```
+
+The cache key is the RepoLens-owned Syft version plus the pinned release-artifact
+sha256, so a pin bump naturally uses a new directory and stale versions are unused.
+For automation, pass `--yes`; for offline runs, pre-seed the cache:
+
+```
+repolens bootstrap
+repolens scan --work-root work --offline
+```
+
 Validate the manifest offline (no downloads):
 
 ```
 python3 -m repolens.bootstrap --dry-run
 ```
 
-Live bootstrap is available as an injected-runner library call:
-`repolens.bootstrap.run(...)`. The `python3 -m repolens.bootstrap` command is currently
-validate-only; without injected fetch/cosign/pip runners it exits with a usage error for
-live acquisition. The library flow verifies Syft **fail-closed**: it checks the binary's
-sha256, then verifies the cosign-signed checksums file, then cross-checks that the pinned
-digest matches the signed entry — all **before** the binary is ever made executable or
-run. ScanCode installs via a hash-pinned `--require-hashes` requirements file. Resolved
-versions/digests are written to `tool_versions.json` (default under `work/`, which is
-gitignored).
+`repolens bootstrap` and `scan --yes` verify Syft **fail-closed**: they check the
+release artifact's sha256, verify the cosign-signed checksums file, then cross-check that
+the pinned digest matches the signed entry — all **before** the Syft executable is exposed
+from the cache. ScanCode installs via a hash-pinned `--require-hashes` requirements file
+when the full injected-runner library flow (`repolens.bootstrap.run(...)`) is used.
 
 ### Name-hygiene gate
 
@@ -210,14 +223,14 @@ produces one SBOM per repo. It does **not** re-run discovery and is independentl
 rerunnable.
 
 ```
-repolens scan --work-root work [--timeout SECONDS]
-repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS]
+repolens scan --work-root work [--timeout SECONDS] [--yes] [--offline]
+repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [--yes]
 ```
 
 - `--work-root` — the pipeline work root. Per-repo artifacts land under
-  `work/work/<repo_ref>/` (`sbom.syft.json` + `scan.status.json`). The verified Syft binary
-  is read from `<work-root>/tools/syft`. By default, scan reads
-  `<work-root>/discovered.json` and `<work-root>/repos.candidate.md`.
+  `work/work/<repo_ref>/` (`sbom.syft.json` + `scan.status.json`). By default, scan reads
+  `<work-root>/discovered.json` and `<work-root>/repos.candidate.md`. The verified Syft
+  binary comes from RepoLens's shared cache, not from the work root.
 - `--repos` — optional override JSON for callers that already have approved repo specs. When
   supplied, it wins over discover artifacts. The owner/repo are **runtime inputs**, never
   committed:
@@ -225,6 +238,11 @@ repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS]
   ```json
   { "repos": [ { "repo_ref": "<repo>", "clone_url": "https://<host>/<owner>/<repo>.git" } ] }
   ```
+- `--yes` / `-y` — pre-consent for automation. If the verified cache is empty, scan
+  downloads RepoLens's pinned Syft, verifies it, caches it, and continues.
+- `--offline` — require the verified shared cache. Scan never downloads or prompts; if the
+  cache is absent or stale, it exits with a usage error and tells you to run
+  `repolens bootstrap`.
 
 For the default bridge, checked rows in `repos.candidate.md` are joined back to
 `discovered.json`. Unticked rows and hard exclusions are skipped. Each checked repo's
@@ -242,9 +260,9 @@ exits `1` after the rest finish. Token redaction is applied to both the SBOM and
 `scan.status.json` before they are written.
 
 `scan` orchestrates external tools only — it never reimplements SBOM generation or license
-detection. Syft is acquired and integrity-verified by the bootstrap step (checksum →
-signature → provenance, all before the binary is made executable); `scan` consumes that
-already-verified binary and performs no acquisition itself.
+detection. On a cache miss it acquires only RepoLens's pinned Syft and verifies it through
+the existing bootstrap gates (checksum → signature → provenance, all before the binary is
+exposed); the scanner then consumes that already-verified binary.
 
 ### `scan` sandbox — M1 scope and deferred non-goals
 
@@ -264,7 +282,7 @@ hardening actually delivered above, not full sandboxing.
 
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
-repolens scan      --work-root work  # checked candidates -> hardened clone + Syft SBOMs
+repolens scan      --work-root work  # first use verifies Syft cache, then writes SBOMs
 repolens resolve --work-root <WORK> --repo-ref <REPO_REF>
                                       # API-only license resolution for an existing SBOM
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue

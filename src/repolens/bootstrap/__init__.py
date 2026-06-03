@@ -10,6 +10,15 @@ constructed/verified here, never reimplemented; their execution is injected.
 
 from __future__ import annotations
 
+from .cache import (
+    DOC_LINK,
+    SyftCacheResult,
+    SyftPinSummary,
+    cached_syft_path,
+    ensure_syft_cached,
+    load_syft_pin,
+    syft_cache_path,
+)
 from .errors import (
     BootstrapError,
     ChecksumMismatch,
@@ -33,11 +42,14 @@ from .verify import (
 
 __all__ = [
     "BootstrapError",
+    "DOC_LINK",
     "ChecksumMismatch",
     "ChecksumProvenanceError",
     "IntegrityError",
     "InvalidPin",
     "SignatureVerificationError",
+    "SyftCacheResult",
+    "SyftPinSummary",
     "UnhashedRequirement",
     "UsageError",
     "EXIT_OK",
@@ -57,6 +69,10 @@ __all__ = [
     "bootstrap_cosign",
     "bootstrap_syft",
     "build_cosign_argv",
+    "cached_syft_path",
     "compute_sha256",
+    "ensure_syft_cached",
     "verify_checksum",
+    "load_syft_pin",
+    "syft_cache_path",
 ]

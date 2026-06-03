@@ -12,6 +12,14 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+from repolens.bootstrap.cache import (
+    DOC_LINK,
+    SyftPinSummary,
+    cached_syft_path,
+    ensure_syft_cached,
+    load_syft_pin,
+)
+from repolens.bootstrap.errors import IntegrityError, UsageError
 from repolens.report import ReportGateOpen, render_main_report
 from repolens.security.redaction import redact_tokens
 
@@ -75,8 +83,9 @@ _STAGE_HELP = {
         ),
         epilog=_stage_epilog(
             "reviewed discover artifacts at <WORK>/discovered.json and "
-            "<WORK>/repos.candidate.md, plus a verified Syft binary in the work root.",
-            "repolens scan --work-root <WORK>  (override: --repos approved-repos.json)",
+            "<WORK>/repos.candidate.md. On first use, scan can acquire RepoLens's "
+            "pinned Syft into the shared verified cache.",
+            "repolens scan --work-root <WORK>  (automation: --yes; offline: --offline)",
             "<WORK>/work/<repo_ref>/sbom.syft.json + scan.status.json per repo "
             "(resumable — safe to re-run).",
             "`repolens resolve --work-root <WORK> --repo-ref <REPO_REF>`.",
@@ -158,8 +167,9 @@ _EPILOG = (
     "  5. repolens shortlist --work-root work                   settle the flags + approve\n"
     "  6. repolens report --work-root work --out-dir reports    build the main disclosure\n"
     "\n"
-    "Discovery, flag, shortlist, and report are shipped checkpoints where you stay in\n"
-    "control. Run `repolens <stage> --help` for one stage. Full guide: docs/usage.md."
+    "Scan auto-acquires and verifies RepoLens's pinned Syft into a shared cache on\n"
+    "first use; `repolens bootstrap` pre-seeds it for offline runs. Run\n"
+    "`repolens <stage> --help` for one stage. Full guide: docs/usage.md."
 )
 
 
@@ -184,6 +194,20 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="<stage>",
         title="stages (run in order)",
     )
+
+    bootstrap_parser = subparsers.add_parser(
+        "bootstrap",
+        help="Pre-seed RepoLens's verified shared tool cache for offline scans.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Pre-seed RepoLens's verified shared Syft cache for offline scans.",
+        epilog=(
+            "Before: nothing, or an empty shared cache.\n"
+            "Example: repolens bootstrap\n"
+            "Output: ~/.cache/repolens/tools/<version>-<sha256>/syft (or XDG_CACHE_HOME).\n"
+            "Next: `repolens scan --work-root <WORK> --offline`."
+        ),
+    )
+    bootstrap_parser.set_defaults(handler=_bootstrap_command)
 
     for command_name in STAGE_COMMANDS:
         stage_help = _STAGE_HELP[command_name]
@@ -260,7 +284,7 @@ def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
         type=Path,
         required=True,
         metavar="PATH",
-        help="Pipeline work root holding per-repo artifacts and the bootstrapped toolchain.",
+        help="Pipeline work root holding discover and per-repo scan artifacts.",
     )
     subparser.add_argument(
         "--repos",
@@ -277,6 +301,17 @@ def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
         default=None,
         metavar="SECONDS",
         help="Per-repo wall-clock budget for the Syft scan (default: clone timeout).",
+    )
+    subparser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help="Pre-consent to download and verify RepoLens's pinned Syft when the cache is empty.",
+    )
+    subparser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Require the verified shared Syft cache; never download or prompt.",
     )
     subparser.set_defaults(handler=_handle_scan)
 
@@ -371,13 +406,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except SystemExit as exc:
         return int(exc.code) if isinstance(exc.code, int) else int(ExitCode.USAGE_OR_INPUT_ERROR)
     except (ArtifactError, InputError) as exc:
-        print(_sanitize(str(exc)), file=sys.stderr)
+        print(_sanitize(str(exc), redact_paths=False), file=sys.stderr)
         return int(ExitCode.USAGE_OR_INPUT_ERROR)
     except InternalError as exc:
-        print(_sanitize(f"Internal error: {exc}"), file=sys.stderr)
+        print(_sanitize(f"Internal error: {exc}", redact_paths=True), file=sys.stderr)
         return int(ExitCode.FINDINGS_OPEN)
     except Exception as exc:
-        print(_sanitize(f"Internal error: {exc}"), file=sys.stderr)
+        print(_sanitize(f"Internal error: {exc}", redact_paths=True), file=sys.stderr)
         return int(ExitCode.FINDINGS_OPEN)
 
 
@@ -385,6 +420,22 @@ def _stage_stub(args: argparse.Namespace) -> CommandResult:
     if args.findings_open:
         return CommandResult(CommandStatus.FINDINGS_OPEN, "findings remain open")
     return CommandResult(CommandStatus.SUCCESS, "skeleton command completed")
+
+
+def _bootstrap_command(args: argparse.Namespace) -> CommandResult:
+    del args
+    try:
+        result = ensure_syft_cached()
+    except UsageError as exc:
+        raise InputError(str(exc)) from exc
+    except IntegrityError as exc:
+        raise InternalError(f"Syft bootstrap integrity failure: {exc}") from exc
+
+    status = "acquired and verified" if result.acquired else "already verified"
+    return CommandResult(
+        CommandStatus.SUCCESS,
+        f"Syft {result.pin.version} ({result.pin.short_sha256}...) {status}: {result.path}",
+    )
 
 
 def _discover_command(args: argparse.Namespace) -> CommandResult:
@@ -426,13 +477,15 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     from repolens.scan import runner as scan_runner
     from repolens.scan.inputs import load_discover_approved_repo_specs, load_explicit_repo_specs
 
+    if args.offline and args.yes:
+        raise InputError("--offline cannot be combined with --yes")
+    if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
+        raise InputError("--timeout must be a positive number of seconds")
     if args.repos is not None:
         repos = load_explicit_repo_specs(args.repos, scan_runner.RepoSpec)
     else:
         repos = load_discover_approved_repo_specs(args.work_root, scan_runner.RepoSpec)
-    syft_path = scan_runner.resolve_syft_path(args.work_root)
-    if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
-        raise InputError("--timeout must be a positive number of seconds")
+    syft_path = _ensure_syft_for_scan(args)
     # scan_repos persists every successful SBOM and raises InternalError (exit 1)
     # if any repository fails; a clean run returns a report (exit 0). A None
     # timeout lets the runner apply its default per-repo budget.
@@ -440,6 +493,72 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     report = scan_runner.scan_repos(args.work_root, repos, syft_path=syft_path, **extra)
     summary = f"scanned {len(report.scanned)} repositories ({len(report.skipped)} already complete)"
     return CommandResult(CommandStatus.SUCCESS, summary)
+
+
+def _ensure_syft_for_scan(args: argparse.Namespace) -> Path:
+    pin = load_syft_pin()
+    cached = cached_syft_path(pin)
+    if cached is not None:
+        return cached
+
+    if args.offline:
+        try:
+            result = ensure_syft_cached(offline=True)
+        except UsageError as exc:
+            raise InputError(str(exc)) from exc
+        return result.path
+
+    interactive = sys.stdin.isatty() and sys.stderr.isatty()
+    if not args.yes:
+        if interactive:
+            print(_syft_not_installed_message(pin), file=sys.stderr)
+            print(
+                "Download and install RepoLens's validated Syft now? [y/N] ",
+                end="",
+                file=sys.stderr,
+                flush=True,
+            )
+            answer = sys.stdin.readline().strip().lower()
+            if answer not in {"y", "yes"}:
+                raise InputError(_syft_declined_message(pin, interactive=True))
+        else:
+            raise InputError(_syft_declined_message(pin, interactive=False))
+
+    print(
+        f"Acquiring and verifying RepoLens Syft {pin.version} (sha256 {pin.short_sha256}...) ... ",
+        end="",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        result = ensure_syft_cached()
+    except UsageError as exc:
+        raise InputError(str(exc)) from exc
+    except IntegrityError as exc:
+        raise InternalError(f"Syft bootstrap integrity failure: {exc}") from exc
+    print("ok", file=sys.stderr)
+    return result.path
+
+
+def _syft_not_installed_message(pin: SyftPinSummary) -> str:
+    return (
+        f"RepoLens's validated Syft is not installed in the shared cache.\n"
+        f"Tool: Syft {pin.version} (sha256 {pin.short_sha256}...)\n"
+        f"Verification: {pin.cosign_note}\n"
+        f"Docs: {DOC_LINK}"
+    )
+
+
+def _syft_declined_message(pin: SyftPinSummary, *, interactive: bool) -> str:
+    mode_hint = (
+        "Rerun and answer yes, pass --yes, or run `repolens bootstrap`."
+        if interactive
+        else "Pass --yes for automation or run `repolens bootstrap` before scanning."
+    )
+    return (
+        f"RepoLens's validated Syft {pin.version} (sha256 {pin.short_sha256}...) is required. "
+        f"Nothing was downloaded. See {DOC_LINK}. {mode_hint}"
+    )
 
 
 def _resolve_stage(args: argparse.Namespace) -> CommandResult:
@@ -517,6 +636,8 @@ def _exit_code_for_result(result: CommandResult) -> int:
     raise InputError("Unknown command result")
 
 
-def _sanitize(message: str) -> str:
+def _sanitize(message: str, *, redact_paths: bool = True) -> str:
     redacted = redact_tokens(message)
+    if not redact_paths:
+        return redacted
     return PATH_PATTERN.sub("[REDACTED_PATH]", redacted)
