@@ -86,6 +86,19 @@ class CliTests(unittest.TestCase):
         self.assertIn("resolve requires --repo-ref", message)
         self.assertIn("available repo refs: sentinel-alpha", message)
 
+    def test_missing_repo_ref_intercept_uses_actual_subcommand(self) -> None:
+        self.assertIsNone(
+            cli._resolve_work_root_when_repo_ref_missing(
+                ["--config", "resolve", "scan", "--work-root", "work"]
+            )
+        )
+        self.assertEqual(
+            cli._resolve_work_root_when_repo_ref_missing(
+                ["--config", "local.toml", "resolve", "--work-root", "work"]
+            ),
+            Path("work"),
+        )
+
     def test_console_help_returns_success(self) -> None:
         result = subprocess.run(
             ["repolens", "--help"],

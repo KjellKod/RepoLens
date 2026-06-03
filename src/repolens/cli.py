@@ -450,9 +450,8 @@ def _resolve_work_root_when_repo_ref_missing(args: Sequence[str]) -> Path | None
     usage error.
     """
 
-    try:
-        command_index = list(args).index("resolve")
-    except ValueError:
+    command_index = _command_index(args)
+    if command_index is None or args[command_index] != "resolve":
         return None
     stage_args = list(args[command_index + 1 :])
     if "-h" in stage_args or "--help" in stage_args:
@@ -464,6 +463,25 @@ def _resolve_work_root_when_repo_ref_missing(args: Sequence[str]) -> Path | None
             return Path(stage_args[index + 1])
         if arg.startswith("--work-root="):
             return Path(arg.split("=", 1)[1])
+    return None
+
+
+def _command_index(args: Sequence[str]) -> int | None:
+    commands = {"bootstrap", *STAGE_COMMANDS}
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--config":
+            index += 2
+            continue
+        if arg.startswith("--config="):
+            index += 1
+            continue
+        if arg in commands:
+            return index
+        if arg.startswith("-"):
+            return None
+        return None
     return None
 
 
