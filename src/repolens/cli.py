@@ -114,16 +114,13 @@ _STAGE_HELP = {
     ),
     "shortlist": StageHelp(
         help="Resolve the flagged items with anchored evidence and your approval.",
-        description=(
-            "Stage 5/6 — settle flagged items with anchored evidence and your approval "
-            "(planned — not yet available)."
-        ),
+        description=("Stage 5/6 — settle flagged items with anchored evidence and your approval."),
         epilog=_stage_epilog(
-            "shortlist.md from flag; shortlist resolution is planned but not wired at HEAD.",
-            "repolens shortlist",
-            "planned — a resolved shortlist.md plus per-item evidence/audit log; "
-            "no such artifacts are produced at HEAD.",
-            "once the shortlist stage lands and nothing is open, `repolens report`.",
+            "shortlist.json + shortlist.md from flag under <WORK>.",
+            "repolens shortlist --work-root work [--identity <REVIEWER>]",
+            "shortlist.json + shortlist.md rewritten with settled statuses, candidate "
+            "evidence, and your recorded approvals; exits 1 while any item is still open.",
+            "once nothing is open, `repolens report`.",
         ),
     ),
     "report": StageHelp(
@@ -163,12 +160,11 @@ _EPILOG = (
     "  3. repolens resolve --work-root work --repo-ref <REPO_REF>\n"
     "                                                           resolve licenses\n"
     "  4. repolens flag --work-root work                        flag risk / unknowns\n"
-    "  5. repolens shortlist                                    resolve the flags (planned)\n"
+    "  5. repolens shortlist --work-root work                   settle the flags + approve\n"
     "  6. repolens report --work-root work --out-dir reports    build the main disclosure\n"
     "\n"
-    "Discovery, flag, and report are shipped checkpoints where you stay in control;\n"
-    "shortlist is registered but planned. Run `repolens <stage> --help`\n"
-    "for one stage. Full guide: docs/usage.md."
+    "Discovery, flag, shortlist, and report are shipped checkpoints where you stay in\n"
+    "control. Run `repolens <stage> --help` for one stage. Full guide: docs/usage.md."
 )
 
 
@@ -248,6 +244,8 @@ def build_parser() -> argparse.ArgumentParser:
             _configure_resolve_parser(subparser)
         elif command_name == "flag":
             _configure_flag_parser(subparser)
+        elif command_name == "shortlist":
+            _configure_shortlist_parser(subparser)
         elif command_name == "report":
             _configure_report_parser(subparser)
         else:
@@ -324,6 +322,25 @@ def _configure_flag_parser(subparser: argparse.ArgumentParser) -> None:
         help="Root containing work/<repo>/resolved.ndjson; receives inventory + shortlist.",
     )
     subparser.set_defaults(handler=_flag_stage)
+
+
+def _configure_shortlist_parser(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument(
+        "--work-root",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Root containing the shortlist.json + shortlist.md that flag wrote.",
+    )
+    subparser.add_argument(
+        "--identity",
+        metavar="REVIEWER",
+        help=(
+            "Runtime reviewer identity recorded as decided_by on approved/rejected items; "
+            "never an owner/repo literal."
+        ),
+    )
+    subparser.set_defaults(handler=_shortlist_stage)
 
 
 def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
@@ -442,6 +459,35 @@ def _flag_stage(args: argparse.Namespace) -> CommandResult:
         f"flagged {result.open_count} open item(s) across {result.component_count} "
         f"component(s); wrote {result.inventory_path.name}, "
         f"{result.shortlist_json_path.name}, {result.shortlist_md_path.name}"
+    )
+    if result.open_count > 0:
+        return CommandResult(CommandStatus.FINDINGS_OPEN, summary)
+    return CommandResult(CommandStatus.SUCCESS, summary)
+
+
+def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
+    from repolens.shortlist import run_shortlist
+    from repolens.shortlist.agent import AgentRequest, AgentResponse
+
+    # The default offline agent abstains: the production model is wired behind the
+    # AgentClient boundary and exercised only by the scheduled live-smoke lane (plan A1).
+    # Abstaining keeps the offline CLI from reaching any model while still exercising the
+    # pre-screen / decision-ingest / write-back paths.
+    class _AbstainingAgent:
+        def resolve(self, request: AgentRequest) -> AgentResponse:
+            from repolens.shortlist.agent import Abstain
+
+            del request
+            return Abstain(reason="no_offline_agent")
+
+    result = run_shortlist(
+        args.work_root,
+        agent_client=_AbstainingAgent(),
+        identity=args.identity,
+    )
+    summary = (
+        f"settled shortlist: {result.open_count} open item(s) of {result.item_count}; "
+        f"wrote {result.shortlist_json_path.name}, {result.shortlist_md_path.name}"
     )
     if result.open_count > 0:
         return CommandResult(CommandStatus.FINDINGS_OPEN, summary)

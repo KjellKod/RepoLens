@@ -160,7 +160,7 @@ agent + the human checkboxes + evidence re-verification). P6b owns the *assembly
 resolved shortlist; it never resolves items itself.
 
 **Delivery** (each Quest ticks its ID on merge)
-- [ ] P5 — shortlist: capability-minimized resolution agent (**no shell, no secrets,
+- [x] P5 — shortlist: capability-minimized resolution agent (**no shell, no secrets,
       no arbitrary network** — fetch/sanitize only via the F2 primitives) + the
       two-queue `shortlist.md` with human checkboxes; every cited evidence URL is
       **re-fetched and verified** before an item can close. **Security-critical: full
@@ -169,14 +169,14 @@ resolved shortlist; it never resolves items itself.
       `report.main.{md,csv,docx}` + `report.appendix.<category>.*`; docx from the
       generic template with org/legal text injected at runtime; **refuses to assemble
       while any flagged item is open**.
-- [ ] X1 — fixtures grown for R3: injection-bearing fixtures (prompt-injection content
+- [x] X1 — fixtures grown for R3: injection-bearing fixtures (prompt-injection content
       in package metadata / LICENSE files) — shipped inside the P5 quest
-- [ ] X2 — canaries grown for R3: injection canaries — shipped inside the P5 quest
-- [ ] X3 — CI grown for R3: + the scheduled **dogfood-on-self** job — shipped inside
+- [x] X2 — canaries grown for R3: injection canaries — shipped inside the P5 quest
+- [x] X3 — CI grown for R3: + the scheduled **dogfood-on-self** job — shipped inside
       the P5/P6b quests
 
 **Acceptance** (owner in bold)
-- [ ] **P5** — **injection canaries green**: suspicious content routed to human, never
+- [x] **P5** — **injection canaries green**: suspicious content routed to human, never
       auto-resolved; every cited evidence URL re-fetched and verified.
 - [ ] **P6b** — `report` **refuses to assemble** while any flagged item is open.
 - [ ] **P6b** — excluded categories + first-party appear in appendices (nothing deleted).

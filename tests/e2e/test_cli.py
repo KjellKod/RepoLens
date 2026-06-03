@@ -51,11 +51,6 @@ class CliTests(unittest.TestCase):
                 self.assertIn("Output:", help_text)
                 self.assertIn("Next:", help_text)
 
-        stdout = io.StringIO()
-        with redirect_stdout(stdout):
-            cli.main(["shortlist", "--help"])
-        self.assertIn("(planned — not yet available)", stdout.getvalue())
-
     def test_console_help_returns_success(self) -> None:
         result = subprocess.run(
             ["repolens", "--help"],
@@ -66,11 +61,42 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("discover", result.stdout)
 
-    def test_stage_command_routes_to_success(self) -> None:
-        self.assertEqual(cli.main(["shortlist"]), 0)
+    def test_shortlist_requires_work_root(self) -> None:
+        self.assertEqual(cli.main(["shortlist"]), 2)
 
-    def test_stage_command_routes_findings_open_to_one(self) -> None:
-        self.assertEqual(cli.main(["shortlist", "--findings-open"]), 1)
+    def test_shortlist_command_clean_exit_zero(self) -> None:
+        config = cli.load_config(".", None)
+        with (
+            mock.patch("repolens.cli.load_config", return_value=config),
+            mock.patch("repolens.shortlist.run_shortlist") as run_shortlist,
+        ):
+            run_shortlist.return_value = mock.Mock(
+                open_count=0,
+                item_count=2,
+                shortlist_json_path=Path("work/shortlist.json"),
+                shortlist_md_path=Path("work/shortlist.md"),
+            )
+            code = cli.main(["shortlist", "--work-root", "work"])
+
+        self.assertEqual(code, 0)
+
+    def test_shortlist_command_findings_open_exit(self) -> None:
+        # ExitCode.FINDINGS_OPEN == 1 (not 2); mirrors flag's _exit_code_for_result.
+        config = cli.load_config(".", None)
+        with (
+            mock.patch("repolens.cli.load_config", return_value=config),
+            mock.patch("repolens.shortlist.run_shortlist") as run_shortlist,
+        ):
+            run_shortlist.return_value = mock.Mock(
+                open_count=1,
+                item_count=2,
+                shortlist_json_path=Path("work/shortlist.json"),
+                shortlist_md_path=Path("work/shortlist.md"),
+            )
+            code = cli.main(["shortlist", "--work-root", "work", "--identity", "reviewer-sentinel"])
+
+        self.assertEqual(code, 1)
+        self.assertEqual(run_shortlist.call_args.kwargs["identity"], "reviewer-sentinel")
 
     def test_discover_requires_owner(self) -> None:
         self.assertEqual(cli.main(["discover"]), 2)
@@ -247,7 +273,7 @@ class CliTests(unittest.TestCase):
             ),
             redirect_stderr(stderr),
         ):
-            code = cli.main(["shortlist"])
+            code = cli.main(["shortlist", "--work-root", "work"])
 
         self.assertEqual(code, 1)
         output = stderr.getvalue()

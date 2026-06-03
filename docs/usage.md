@@ -192,9 +192,8 @@ denylist.
 ## CLI stages
 
 `repolens --help` is the primary health check for the shipped CLI entry point. The
-pipeline subcommands are registered as stage routes; `discover`, `scan`, `resolve`, and
-`report` run real orchestration. `flag` and `shortlist` are registered placeholders until
-those stages land.
+pipeline subcommands are registered as stage routes; `discover`, `scan`, `resolve`,
+`flag`, `shortlist`, and `report` all run real orchestration.
 
 Exit codes are:
 
@@ -258,16 +257,42 @@ repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval 
 repolens scan      --work-root work --repos approved-repos.json   # hardened clone + Syft → per-repo SBOM (resumable)
 repolens resolve --work-root <WORK> --repo-ref <REPO_REF>
                                       # API-only license resolution for an existing SBOM
-repolens flag                        # planned: policy + shortlist
-repolens shortlist                   # planned: evidence + human approval
+repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
+repolens shortlist --work-root work [--identity <REVIEWER>]
+                                      # settle flagged items + human approval
 repolens report --work-root <WORK> --out-dir reports
                                       # assemble report.main.md + report.main.csv
 ```
 
-Discovery (you approve the repo list) and the final report are the shipped human
-checkpoints. The planned `flag` and `shortlist` stages will add the policy and approval
-gate once they land. The shipped scanner and resolver are read-only against your code and
-resumable after an interruption.
+Discovery (you approve the repo list), the `shortlist` approval gate, and the final report
+are the shipped human checkpoints. The shipped scanner and resolver are read-only against
+your code and resumable after an interruption.
+
+## `shortlist` — capability-minimized agent + human approval
+
+`repolens shortlist --work-root work [--identity <REVIEWER>]` reads the `shortlist.json` and
+`shortlist.md` that `flag` produced and settles each `open` item:
+
+1. **Ingest human decisions.** Any item whose checkbox you ticked in `shortlist.md`
+   (`[x]` approve, `[r]` reject) is recorded with `status`, `decided_by` (from `--identity`,
+   a runtime input — never an owner/repo literal), and a UTC `decided_at`. Do not edit the
+   `rpl:ref` markers; they key each decision back to its component.
+2. **Pre-screen → route.** Each still-open item's untrusted text (LICENSE / README /
+   description / evidence) is capped, NFC-normalized, and screened for injection markers
+   (role-play, output-override, container-escape, imperative, directional Unicode). A
+   flagged item routes to the human queue and the resolution agent is **never invoked** for
+   it.
+3. **Capability-minimized agent.** Clean content is wrapped in `<untrusted_content>` (output
+   instruction appended after the block) and handed to the agent, which may only propose a
+   schema-validated `{spdx_id, evidence_url, evidence_anchor}` or abstain. The agent has no
+   shell, no file-write, no token, and no arbitrary network.
+4. **Verify, don't trust.** Any proposal is confirmed by re-fetching the cited evidence URL
+   through the SSRF-guarded, allowlisted HTTP client and checking it exactly anchors the
+   claimed SPDX id. A verified proposal records the candidate and `evidence.source_layer =
+   "agent"` but the item **stays open until you tick it** — the agent proposes, you dispose.
+
+`shortlist` exits `0` only when no item remains open and `1` (findings open) otherwise, so
+it gates the downstream report.
 
 ### Offline fixture acceptance harness
 
