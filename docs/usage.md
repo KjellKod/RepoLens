@@ -16,26 +16,17 @@
 
 ## Tool bootstrap
 
-Before any scan runs, RepoLens pins and integrity-verifies its own toolchain.
-The pins are the single source of truth in `src/repolens/bootstrap/pins.toml`: exact
-versions plus sha256 digests for Syft, ScanCode, cosign, `git`, `gh`, and the
-base image (by digest) — never `latest`.
-
-Validate the manifest offline (no downloads):
+Before any scan runs, RepoLens acquires and integrity-verifies its **own pinned** Syft and
+ScanCode (sha256 + cosign signature, fail-closed) — it never trusts a tool already on the
+machine. Validate the manifest offline, no downloads:
 
 ```
 python3 -m repolens.bootstrap --dry-run
 ```
 
-Live bootstrap is available as an injected-runner library call:
-`repolens.bootstrap.run(...)`. The `python3 -m repolens.bootstrap` command is currently
-validate-only; without injected fetch/cosign/pip runners it exits with a usage error for
-live acquisition. The library flow verifies Syft **fail-closed**: it checks the binary's
-sha256, then verifies the cosign-signed checksums file, then cross-checks that the pinned
-digest matches the signed entry — all **before** the binary is ever made executable or
-run. ScanCode installs via a hash-pinned `--require-hashes` requirements file. Resolved
-versions/digests are written to `tool_versions.json` (default under `work/`, which is
-gitignored).
+How the verification works (pins, the fail-closed gate order, ScanCode `--require-hashes`,
+`tool_versions.json`) is described in
+[architecture → Tool bootstrap & integrity](roadmap/rpl_architecture.md#tool-bootstrap--integrity).
 
 ### Name-hygiene gate
 
@@ -337,19 +328,12 @@ detection. Syft is acquired and integrity-verified by the bootstrap step (checks
 signature → provenance, all before the binary is made executable); `scan` consumes that
 already-verified binary and performs no acquisition itself.
 
-### `scan` sandbox — M1 scope and deferred non-goals
-
-M1 runs clone + Syft **in-process** with: the hardened git environment, an ephemeral
-per-repo workdir, a per-repo wall-clock timeout, guaranteed `finally` cleanup of that
-workdir, and no secrets (no GitHub token) in the child environment. No untrusted code from a
-scanned repository is executed (hooks are disabled at clone; Syft is a static inventory).
-
-The full container/VM **runner-layer** isolation controls are an explicit M1 **non-goal**:
-a read-only root filesystem, dropped Linux capabilities, a non-root UID, CPU/memory/disk
-quotas, and a network egress allowlist. Mobile/native license enrichment is also outside P2
-scan scope and remains deferred to P3b/R2. No P2 canary asserts filesystem/capability/egress
-isolation or mobile/native behavior; the roadmap tick for P2 reflects only the in-process
-hardening actually delivered above, not full sandboxing.
+`scan` runs clone + Syft **in-process** with a hardened git environment, an ephemeral
+per-repo workdir, a per-repo wall-clock timeout, and no secrets in the child environment;
+no untrusted repo code executes (clone hooks/symlinks/file-protocol disabled, Syft is a
+static inventory). Full container/VM runner-layer isolation is a deliberate scope boundary
+layered at the runner — see
+[architecture → Scan execution model & sandbox scope](roadmap/rpl_architecture.md#scan-execution-model--sandbox-scope).
 
 ## `resolve` — license ladder → `resolved.ndjson`
 
