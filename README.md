@@ -7,9 +7,9 @@ repository under an owner, in any language, and turns the ambiguity they leave b
 into one clean, evidence-backed disclosure. It **doesn't reinvent scanners — it conducts
 them**, and adds the workflow, policy, evidence, and reporting on top.
 
-> Status: in active development. See **[docs/roadmap](docs/roadmap/rpl_README.md)** for the
-> design, decisions, security model, and build plan; **[docs/usage.md](docs/usage.md)** for
-> how to run it.
+> All six pipeline stages are shipped and tested end-to-end. See
+> **[docs/usage.md](docs/usage.md)** for how to run it, and
+> **[docs/roadmap](docs/roadmap/rpl_README.md)** for the design, decisions, and security model.
 
 ## Quickstart
 
@@ -19,16 +19,15 @@ repolens --help                                        # the stages, and the typ
 python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene guard works
 ```
 
-RepoLens is in active development: `repolens --help` shows the full pipeline
-(`discover → scan → resolve → flag → shortlist → report`), and each stage's own `--help`
-explains what to run before it, an example, its output, and the next step. `discover`,
-`scan`, `resolve`, and `report` have shipped behavior; `flag` and `shortlist` are
-registered placeholders until those stages land.
+`repolens --help` shows the full pipeline (`discover → scan → resolve → flag → shortlist
+→ report`), and each stage's own `--help` explains what to run before it, an example, its
+output, and the next step. All six stages run real orchestration today.
 
 ## What you get
 
-- **A deduplicated license disclosure** — `Name | License | …`, as a main report plus
-  per-category appendices. One row per library, nothing silently dropped.
+- **A deduplicated license disclosure** — `Name | License | …` as Markdown, CSV, and a
+  ready-to-share **`.docx`**, plus per-category appendices. One row per library, nothing
+  silently dropped.
 - **Risk flagged, not buried** — copyleft, network-copyleft, non-commercial, and
   source-available licenses surfaced against a configurable policy.
 - **Ambiguity resolved with evidence** — anything the tooling can't determine is flagged
@@ -63,20 +62,49 @@ with **anchored evidence under human approval**, never guessed.
 
 ## Usage
 
+Each stage reads the previous stage's output from the same `--work-root`, so a normal run
+is just the stages in order:
+
 ```
-repolens discover --owner <OWNER>                         # find + categorize repos; untick to exclude
-repolens discover --owner <OWNER> --repos "sentinel-alpha, sentinel-beta" # discover only named repos
-repolens scan --work-root work                            # inventory checked discover candidates
-repolens scan --work-root work --repos approved-repos.json # optional explicit override
-repolens resolve --work-root work --repo-ref <REPO_REF>    # resolve licenses cheapest-source-first
-repolens flag                                             # planned: policy + shortlist
-repolens shortlist                                        # planned: evidence + approval
-repolens report --work-root work --out-dir reports         # assemble the main disclosure
+repolens discover --owner <OWNER> --work-root work   # find + categorize repos -> approval checklist
+repolens scan      --work-root work                  # inventory the checked repos (hardened clone + Syft)
+repolens resolve   --work-root work --repo-ref <REPO_REF>   # resolve licenses cheapest-source-first
+repolens flag      --work-root work                  # apply policy, flag risk/unknowns -> shortlist queue
+repolens shortlist --work-root work                  # settle flagged items with evidence + your approval
+repolens report    --work-root work --out-dir reports # assemble the gated disclosure (md/csv/docx)
 ```
 
-Discovery and the final report are the shipped human checkpoints; the flag and shortlist
-gates are planned. The owner, repo categories, and report header are runtime inputs —
-never baked into the tool. **Full guide: [docs/usage.md](docs/usage.md).**
+Concrete example — scan a few specific repos under an owner and build the report:
+
+```
+repolens discover --owner KjellKod --repos "g3log, sketch2md, repolens" --work-root work
+#  edit work/repos.candidate.md — untick anything you don't want scanned
+repolens scan    --work-root work
+repolens resolve --work-root work --repo-ref repolens
+repolens flag    --work-root work
+repolens report  --work-root work --out-dir reports
+```
+
+### What the disclosure looks like
+
+`report.main` (illustrative excerpt — same columns in Markdown, CSV, and `.docx`):
+
+| name | spdx_id | version | source_url | origin | scope | distribution |
+|------|---------|---------|------------|--------|-------|--------------|
+| requests | Apache-2.0 | 2.32.3 | https://pypi.org/project/requests/ | third-party | runtime | server |
+| PyYAML | MIT | 6.0.2 | https://pypi.org/project/PyYAML/ | third-party | runtime | server |
+
+One row per library (deduplicated across repos), each carrying its resolved license,
+version, a fetchable source, and `origin`/`scope`/`distribution` tags. Excluded categories
+and first-party code land in `report.appendix.<category>.*` — nothing is dropped, only
+routed. The full row also records evidence provenance and any coverage gaps.
+
+You stay in control at three points: approving the repo list (`discover`), approving the
+flagged shortlist (`shortlist`), and the final report is **gated** until that shortlist is
+clear. The owner, repo categories, and report header are runtime inputs — never baked into
+the tool. `repolens scan --work-root work --repos approved-repos.json` is an optional
+override for callers that already have an approved list. **Full guide:
+[docs/usage.md](docs/usage.md).**
 
 ## Local Name Hygiene
 
