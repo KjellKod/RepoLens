@@ -132,10 +132,7 @@ class CliTests(unittest.TestCase):
             "Manual step: open work/repos.candidate.md, untick any repos you want to exclude",
             output,
         )
-        self.assertIn(
-            "Next CLI stage: repolens scan --work-root work --repos work/approved-repos.json",
-            output,
-        )
+        self.assertIn("Next CLI stage: repolens scan --work-root work", output)
 
     def test_discover_repos_routes_to_fetch_path(self) -> None:
         config = cli.load_config(".", None)
@@ -222,10 +219,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         output = stdout.getvalue()
-        self.assertIn(
-            "repolens scan --work-root /tmp/repo1 --repos /tmp/repo1/approved-repos.json",
-            output,
-        )
+        self.assertIn("repolens scan --work-root /tmp/repo1", output)
 
     def test_discover_force_routes_to_real_handler(self) -> None:
         config = cli.load_config(".", None)
@@ -241,19 +235,25 @@ class CliTests(unittest.TestCase):
                 candidate_path="work/repos.candidate.md",
             )
 
-            code = cli.main(
-                [
-                    "discover",
-                    "--owner",
-                    "sentinel-owner",
-                    "--work-root",
-                    "work",
-                    "--force",
-                ]
-            )
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = cli.main(
+                    [
+                        "discover",
+                        "--owner",
+                        "sentinel-owner",
+                        "--work-root",
+                        "work",
+                        "--force",
+                    ]
+                )
 
         self.assertEqual(code, 0)
         self.assertTrue(run_discover.call_args.kwargs["force_candidate"])
+        self.assertIn(
+            "discards prior checkbox/tick edits",
+            stderr.getvalue(),
+        )
 
     def test_usage_error_returns_two(self) -> None:
         self.assertEqual(cli.main(["not-a-command"]), 2)
@@ -469,8 +469,57 @@ class ScanCliTests(unittest.TestCase):
         repos_path.write_text(json.dumps({"repos": repos}), encoding="utf-8")
         return repos_path
 
+    def _discover_bridge_scaffold(self, work_root: Path, *, checked: bool = True) -> None:
+        (work_root / "tools").mkdir(parents=True, exist_ok=True)
+        (work_root / "tools" / "syft").write_text("#!/bin/sh\n", encoding="utf-8")
+        store.write_discovered(
+            work_root,
+            {
+                "schema_version": "1.0",
+                "generated_at": "2026-01-01T00:00:00Z",
+                "owner": "sentinel-owner",
+                "repository_count": 1,
+                "candidate_count": 1,
+                "hard_exclusion_count": 0,
+                "repositories": [
+                    {
+                        "name": "sentinel-alpha",
+                        "name_with_owner": "sentinel-owner/sentinel-alpha",
+                        "url": "https://example.invalid/sentinel-alpha",
+                        "description": "",
+                        "topics": [],
+                        "archived": False,
+                        "private": False,
+                        "category": "runtime-bucket",
+                        "category_source": "default",
+                        "hard_excluded": False,
+                        "exclusion_reason": None,
+                    }
+                ],
+            },
+        )
+        checkbox = "x" if checked else " "
+        (work_root / "repos.candidate.md").write_text(
+            "\n".join(
+                [
+                    "# Repository candidates",
+                    "",
+                    "## Candidates",
+                    "",
+                    (
+                        f"- [{checkbox}] `sentinel-owner/sentinel-alpha` "
+                        "- category `runtime-bucket` (`default`)"
+                    ),
+                    "",
+                    "## Hard exclusions",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
     def test_scan_arg_parse_and_routing_missing_args(self) -> None:
-        # `scan` now requires --work-root / --repos; argparse errors map to exit 2.
+        # `scan` requires --work-root; argparse errors map to exit 2.
         self.assertEqual(cli.main(["scan"]), 2)
 
     def test_scan_happy_path_persists_sbom_and_exits_zero(self) -> None:
@@ -494,6 +543,73 @@ class ScanCliTests(unittest.TestCase):
 
             self.assertEqual(code, 0)
             self.assertTrue(store.is_repo_scanned(work_root, "acme-alpha"))
+
+    def test_scan_work_root_defaults_to_checked_discover_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            self._discover_bridge_scaffold(work_root)
+            clone_urls = []
+
+            def clone_spy(options):
+                clone_urls.append(options.remote_url)
+                return _fake_clone(options)
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            with (
+                mock.patch("repolens.scan.runner.hardened_clone", clone_spy),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 0)
+            self.assertTrue(store.is_repo_scanned(work_root, "sentinel-alpha"))
+            self.assertEqual(
+                clone_urls,
+                ["https://github.com/sentinel-owner/sentinel-alpha.git"],
+            )
+
+    def test_scan_repos_override_wins_without_discover_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [
+                    {
+                        "repo_ref": "sentinel-override",
+                        "clone_url": "https://example.invalid/sentinel-override",
+                    }
+                ],
+            )
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            with (
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+
+            self.assertEqual(code, 0)
+            self.assertTrue(store.is_repo_scanned(work_root, "sentinel-override"))
+
+    def test_scan_work_root_zero_approved_exits_two(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            self._discover_bridge_scaffold(work_root, checked=False)
+
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = cli.main(["scan", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 2)
+            self.assertIn("no repos checked in repos.candidate.md", stderr.getvalue())
 
     def test_scan_mixed_run_persists_successes_and_exits_one(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

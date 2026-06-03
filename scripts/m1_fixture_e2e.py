@@ -28,6 +28,7 @@ from repolens.discovery.pipeline import run_discover
 from repolens.report import render_main_report
 from repolens.resolve.models import ApiCandidate, PackageFact
 from repolens.resolve.stage import run_resolve
+from repolens.scan.inputs import load_discover_approved_repo_specs
 from repolens.scan.runner import RepoSpec, scan_repos
 from repolens.security.clone import CloneOptions
 from repolens.security.http_client import FetchResult, HttpFetchOptions
@@ -82,7 +83,7 @@ def main() -> int:
     work_root.mkdir(parents=True, exist_ok=True)
     config = _fixture_config()
     _run_discover(owner, fixtures, work_root, config)
-    approved_repos = _approve_candidates(owner, fixtures, work_root)
+    approved_repos = _load_approved_candidates(work_root)
 
     clone_targets: dict[Path, str] = {}
     components = _components_by_repo(fixtures)
@@ -105,7 +106,7 @@ def main() -> int:
 
     scan_repos(
         work_root,
-        [RepoSpec(**record) for record in approved_repos["repos"]],
+        approved_repos,
         syft_path=work_root / "tools" / "syft",
         clone=clone,
         command_runner=syft_runner,
@@ -118,10 +119,10 @@ def main() -> int:
     }
     adapter = FixtureAdapter(all_components)
     fetcher = _fixture_fetcher_for(all_components.values())
-    for repo in approved_repos["repos"]:
+    for repo in approved_repos:
         run_resolve(
             work_root,
-            repo["repo_ref"],
+            repo.repo_ref,
             adapters=[adapter],
             fetcher=fetcher,
             evidence_resolver=_public_resolver,
@@ -181,25 +182,12 @@ def _run_discover(
     )
 
 
-def _approve_candidates(
-    owner: str, fixtures: list[dict[str, object]], work_root: Path
-) -> dict[str, list[dict[str, str]]]:
+def _load_approved_candidates(work_root: Path) -> list[RepoSpec]:
     candidate_path = work_root / "repos.candidate.md"
     candidate_text = candidate_path.read_text(encoding="utf-8")
     if "- [x]" not in candidate_text:
         raise RuntimeError("fixture approval expected discover candidates to default checked")
-
-    approved = {
-        "repos": [
-            {
-                "repo_ref": str(fixture["id"]),
-                "clone_url": f"https://example.invalid/{owner}/{fixture['id']}.git",
-            }
-            for fixture in fixtures
-        ]
-    }
-    store.atomic_write_json(work_root / "approved-repos.json", approved)
-    return approved
+    return load_discover_approved_repo_specs(work_root, RepoSpec)
 
 
 def _components_by_repo(fixtures: list[dict[str, object]]) -> dict[str, list[FixtureComponent]]:

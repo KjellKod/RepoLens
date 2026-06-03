@@ -66,7 +66,8 @@ with **anchored evidence under human approval**, never guessed.
 ```
 repolens discover --owner <OWNER>                         # find + categorize repos; untick to exclude
 repolens discover --owner <OWNER> --repos "sentinel-alpha, sentinel-beta" # discover only named repos
-repolens scan --work-root work --repos approved-repos.json # inventory dependencies across all languages
+repolens scan --work-root work                            # inventory checked discover candidates
+repolens scan --work-root work --repos approved-repos.json # optional explicit override
 repolens resolve --work-root work --repo-ref <REPO_REF>    # resolve licenses cheapest-source-first
 repolens flag                                             # planned: policy + shortlist
 repolens shortlist                                        # planned: evidence + approval

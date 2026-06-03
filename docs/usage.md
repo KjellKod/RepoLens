@@ -205,22 +205,32 @@ Exit codes are:
 
 ## `scan` — hardened clone + Syft → per-repo SBOM
 
-`repolens scan` consumes an already-approved repo list and produces one SBOM per repo. It
-does **not** re-run discovery and is independently rerunnable.
+`repolens scan` consumes the checked repositories from discover's reviewed artifacts and
+produces one SBOM per repo. It does **not** re-run discovery and is independently
+rerunnable.
 
 ```
+repolens scan --work-root work [--timeout SECONDS]
 repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS]
 ```
 
 - `--work-root` — the pipeline work root. Per-repo artifacts land under
   `work/work/<repo_ref>/` (`sbom.syft.json` + `scan.status.json`). The verified Syft binary
-  is read from `<work-root>/tools/syft`.
-- `--repos` — a JSON file of the approved repos. The owner/repo are **runtime inputs**, never
+  is read from `<work-root>/tools/syft`. By default, scan reads
+  `<work-root>/discovered.json` and `<work-root>/repos.candidate.md`.
+- `--repos` — optional override JSON for callers that already have approved repo specs. When
+  supplied, it wins over discover artifacts. The owner/repo are **runtime inputs**, never
   committed:
 
   ```json
   { "repos": [ { "repo_ref": "<repo>", "clone_url": "https://<host>/<owner>/<repo>.git" } ] }
   ```
+
+For the default bridge, checked rows in `repos.candidate.md` are joined back to
+`discovered.json`. Unticked rows and hard exclusions are skipped. Each checked repo's
+`repo_ref` is the discovered `name`, and the clone URL is derived as
+`https://github.com/<name_with_owner>.git`, then validated through the same HTTPS,
+no-credentials checks used by explicit `--repos` input.
 
 For each repo, `scan` clones through the hardened clone primitive (depth-1, no tags, single
 branch, no recursive submodules, hooks/symlinks/file-protocol disabled, prompts off, system
@@ -254,7 +264,7 @@ hardening actually delivered above, not full sandboxing.
 
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
-repolens scan      --work-root work --repos approved-repos.json   # hardened clone + Syft → per-repo SBOM (resumable)
+repolens scan      --work-root work  # checked candidates -> hardened clone + Syft SBOMs
 repolens resolve --work-root <WORK> --repo-ref <REPO_REF>
                                       # API-only license resolution for an existing SBOM
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
@@ -306,7 +316,7 @@ python scripts/m1_fixture_e2e.py --work-root /tmp/repolens-m1-fixture
 
 Expected output is a one-line JSON summary with discovered, SBOM, resolved, main report,
 appendix, and docx counts. The work root contains `discovered.json`,
-`repos.candidate.md`, `approved-repos.json`, per-fixture `sbom.syft.json` and
+`repos.candidate.md`, per-fixture `sbom.syft.json` and
 `resolved.ndjson`, a clear `shortlist.json`, `reports/report.main.{md,csv,docx}`, and
 `reports/report.appendix.<category>.{md,csv}`. This is a fixture harness only; live owner
 dogfood still uses the normal `repolens discover -> scan -> resolve -> flag -> report`
@@ -362,9 +372,9 @@ overwrite it unless you pass `--force`, so existing approval checkboxes are not 
 discarded. Candidate repositories default to checked, so every checked repo will be
 scanned. Untick repos only when you deliberately want to exclude them, and consider
 adding a note such as `— excluded: <reason>`. Use `--force` only when you intentionally
-want a fresh approval file. After a successful run, the CLI prints a concrete
-`repolens scan` command using the same `--work-root` and the expected
-`approved-repos.json` path.
+want a fresh approval file; it also warns on stderr that the prior checkbox edits are
+being discarded. After a successful run, the CLI prints a concrete `repolens scan`
+command using the same `--work-root`.
 
 ```json
 {
