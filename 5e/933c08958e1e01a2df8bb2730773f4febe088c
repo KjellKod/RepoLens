@@ -1,0 +1,35 @@
+docs/roadmap/archive/rpl_execution.md
+  s_bb8787cf071d6e::t_7c8d62ed15d5e5 91
+  s_bb8787cf071d6e::t_b955abf2afd9e4 3-7
+docs/roadmap/archive/rpl_roadmap.md
+  s_bb8787cf071d6e::t_a01659afdc5e9f 3-8
+  s_bb8787cf071d6e::t_7c8d62ed15d5e5 39,132,134,190,196
+README.md
+  s_bb8787cf071d6e::t_ad8af24295dbc3 65-78,80-85,88-93
+  s_bb8787cf071d6e::t_c46984e0ccd6c2 28-30
+  s_bb8787cf071d6e::t_d3cba4b886982f 22-24
+  s_bb8787cf071d6e::t_8b123892881256 10-12
+docs/usage.md
+  s_bb8787cf071d6e::t_b3d5e0243c49a0 12-13
+  s_bb8787cf071d6e::t_4df10b94fbbf4f 70-71
+  s_bb8787cf071d6e::t_32530a7a8bed4d 3-5
+docs/roadmap/rpl_README.md
+  s_bb8787cf071d6e::t_6f85ba680222ed 40-41
+  s_bb8787cf071d6e::t_bbb5a3e5269daa 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "5e933c08958e1e01a2df8bb2730773f4febe088c",
+  "prompts": {},
+  "sessions": {
+    "s_bb8787cf071d6e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9c1f98f3-95b8-4b2c-84ce-cb4d9a149af9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
