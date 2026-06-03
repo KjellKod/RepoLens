@@ -19,8 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from repolens.exit_codes import InternalError
-from repolens.scan.runner import RepoSpec, scan_repos
+from repolens.scan.runner import RepoSpec, ScanBatchError, scan_repos
 
 
 @pytest.mark.offline
@@ -44,7 +43,7 @@ def test_x2_scan_timeout_aborts(tmp_path: Path) -> None:
     sboms: list[dict] = []
     statuses: list[dict] = []
 
-    with pytest.raises(InternalError):
+    with pytest.raises(ScanBatchError) as exc_info:
         scan_repos(
             work_root,
             [RepoSpec(repo_ref="acme-slow", clone_url="https://example.invalid/acme-slow")],
@@ -59,6 +58,9 @@ def test_x2_scan_timeout_aborts(tmp_path: Path) -> None:
             write_status_fn=lambda path, value: statuses.append(value),
         )
 
+    report = exc_info.value.report
+    # The timed-out repo is recorded as a failed outcome on the batch error.
+    assert [o.status for o in report.outcomes] == ["failed"]
     # 1. no SBOM persisted for the timed-out repo.
     assert not sboms
     # 2. a redacted failure status was recorded.

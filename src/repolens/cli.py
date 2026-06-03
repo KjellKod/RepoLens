@@ -31,7 +31,7 @@ from .discovery.gh import DEFAULT_GH_LIMIT, MAX_GH_LIMIT, parse_repos_option
 from .discovery.pipeline import run_discover
 from .exit_codes import ExitCode, InputError, InternalError
 
-PATH_PATTERN = re.compile(r"(/[^\s:]+)+")
+PATH_PATTERN = re.compile(r"(?<![:/])(?:/[^\s:/]+)+")
 
 if TYPE_CHECKING:
     from repolens.scan.runner import ScanProgressEvent, ScanReport
@@ -484,6 +484,7 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
 def _handle_scan(args: argparse.Namespace) -> CommandResult:
     # Imported here so the rest of the CLI does not pull the scan/store stack
     # (and jsonschema) unless `scan` actually runs.
+    from repolens.githost import resolve_clone_credential_result
     from repolens.scan import runner as scan_runner
     from repolens.scan.inputs import load_discover_approved_repo_specs, load_explicit_repo_specs
 
@@ -496,9 +497,10 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     else:
         repos = load_discover_approved_repo_specs(args.work_root, scan_runner.RepoSpec)
     syft_path = _ensure_syft_for_scan(args)
-    # scan_repos persists every successful SBOM and raises InternalError (exit 1)
-    # if any repository fails; a clean run returns a report (exit 0). A None
-    # timeout lets the runner apply its default per-repo budget.
+    # scan_repos persists successful SBOMs and raises ScanBatchError only after
+    # finishing the batch when expected per-repo failures occurred. The credential
+    # provider resolves a read-only GitHub token lazily, only when a private repo
+    # is encountered. A None timeout uses the default per-repo budget.
     extra = {"timeout_seconds": args.timeout} if args.timeout is not None else {}
     progress = _ScanProgressPrinter(quiet=args.quiet, stream=sys.stderr)
     try:
@@ -506,15 +508,14 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
             args.work_root,
             repos,
             syft_path=syft_path,
+            credential_provider=resolve_clone_credential_result,
             progress=progress,
             **extra,
         )
     except scan_runner.ScanBatchError as exc:
         report = exc.report
     progress.finish(report)
-    if report.failed:
-        return CommandResult(CommandStatus.FINDINGS_OPEN)
-    return CommandResult(CommandStatus.SUCCESS)
+    return _scan_command_result(report)
 
 
 class _ScanProgressPrinter:
@@ -571,8 +572,6 @@ def _scan_outcome_line(event: ScanProgressEvent) -> str:
         deps_count = 0 if deps_count is None else deps_count
         elapsed = _format_seconds(event.elapsed_seconds)
         return f"{prefix} ✓ {deps_count} deps ({elapsed})"
-    if status == "skipped" and event.error == "private":
-        return f"{prefix} 🔒 skipped (private, needs auth)"
     if status == "skipped":
         return f"{prefix} ↻ skipped (cached)"
     reason = _sanitize(str(event.error or "unknown error"), redact_paths=True)
@@ -582,6 +581,23 @@ def _scan_outcome_line(event: ScanProgressEvent) -> str:
 def _format_seconds(value: float | None) -> str:
     seconds = 0.0 if value is None else float(value)
     return f"{seconds:.1f}s"
+
+
+def _scan_command_result(report: ScanReport) -> CommandResult:
+    summary = (
+        f"{len(report.outcomes)} repos - {len(report.scanned)} scanned, "
+        f"{len(report.skipped)} skipped, {len(report.failed)} failed"
+    )
+    if report.failed:
+        # Expected per-repo failures are user-actionable: print the summary + each
+        # redacted reason to stderr and exit 1. `Internal error` is reserved for
+        # genuine crashes (brief §2) and never appears here.
+        print(summary, file=sys.stderr)
+        for outcome in report.failed:
+            reason = _sanitize(str(outcome.error or "unknown error"), redact_paths=True)
+            print(f"  - {outcome.repo_ref}: {reason}", file=sys.stderr)
+        return CommandResult(CommandStatus.FINDINGS_OPEN)
+    return CommandResult(CommandStatus.SUCCESS)
 
 
 def _ensure_syft_for_scan(args: argparse.Namespace) -> Path:

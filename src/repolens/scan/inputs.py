@@ -70,6 +70,9 @@ def load_discover_approved_repo_specs(work_root: Path, repo_spec_cls: type) -> l
             {
                 "repo_ref": repo_ref,
                 "clone_url": f"https://github.com/{name_with_owner}.git",
+                # Carry the discovered privacy flag onto the record so the runner
+                # resolves a credential for private repos. Dropping it here (as the
+                # loader used to) silently clones private repos unauthenticated.
                 "private": discovered_record.get("private") is True,
             }
         )

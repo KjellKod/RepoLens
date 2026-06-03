@@ -5,13 +5,23 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
 from repolens.data.errors import LimitExceeded
 from repolens.data.limits import MAX_JSON_DEPTH, scan_depth
 from repolens.exit_codes import InputError
+from repolens.githost import (
+    GH_NOT_AUTHENTICATED_MESSAGE,
+    GH_NOT_INSTALLED_MESSAGE,
+    GhTransientError,
+    is_gh_transient,
+    is_gh_transient_error,
+    rate_limited_message,
+)
 from repolens.security.redaction import redact_tokens
+from repolens.security.retry import DEFAULT_BASE_DELAY, DEFAULT_MAX_ATTEMPTS, retry_with_backoff
 
 from .models import GhRepository
 
@@ -43,6 +53,58 @@ class GhRunResult:
 
 GhRunner = Callable[[Sequence[str], float], GhRunResult]
 
+#: Retry budget for transient (429 / secondary-rate-limit / network) gh failures.
+GH_RETRY_MAX_ATTEMPTS = DEFAULT_MAX_ATTEMPTS
+
+# Substrings marking a gh "not authenticated" failure (terminal, never retried).
+_GH_NOT_AUTHENTICATED_MARKERS = (
+    "not logged in",
+    "not logged into any github hosts",
+    "gh auth login",
+    "authentication required",
+    "you are not logged",
+)
+
+
+def _is_gh_not_authenticated(stderr: str) -> bool:
+    text = (stderr or "").casefold()
+    return any(marker in text for marker in _GH_NOT_AUTHENTICATED_MARKERS)
+
+
+def _run_gh_with_retry(
+    execute: GhRunner,
+    command: Sequence[str],
+    timeout_seconds: float,
+    *,
+    sleep: Callable[[float], None],
+    max_attempts: int,
+) -> GhRunResult:
+    """Run one gh invocation with bounded retry on RAW transient results.
+
+    Transience is classified on the raw ``GhRunResult`` (returncode + stderr) BEFORE
+    the caller redacts/rewrites the stderr — a rewrite (e.g. fetch_repositories'
+    generic message) would otherwise erase the 429/secondary-rate-limit signal and
+    make the retry a no-op (item 3). A transient result raises ``GhTransientError``
+    so :func:`retry_with_backoff` (exception-based) can drive the retry; a
+    non-transient result (success or terminal failure) is returned unchanged.
+    ``subprocess.TimeoutExpired``/``OSError`` from ``execute`` propagate to the
+    caller's existing handling (not retried).
+    """
+
+    def operation() -> GhRunResult:
+        result = execute(command, timeout_seconds)
+        if result.returncode != 0 and is_gh_transient(result.returncode, result.stderr):
+            raise GhTransientError(redact_tokens(result.stderr))
+        return result
+
+    return retry_with_backoff(
+        operation,
+        is_transient=is_gh_transient_error,
+        max_attempts=max_attempts,
+        base_delay=DEFAULT_BASE_DELAY,
+        sleep=sleep,
+    )
+
 
 def list_repositories(
     owner: str,
@@ -51,6 +113,8 @@ def list_repositories(
     runner: GhRunner | None = None,
     timeout_seconds: float = DEFAULT_GH_TIMEOUT_SECONDS,
     stdout_max_bytes: int = DEFAULT_GH_STDOUT_MAX_BYTES,
+    sleep: Callable[[float], None] = time.sleep,
+    retry_max_attempts: int = GH_RETRY_MAX_ATTEMPTS,
 ) -> tuple[GhRepository, ...]:
     """Return repositories under ``owner`` by invoking ``gh repo list``."""
 
@@ -61,16 +125,24 @@ def list_repositories(
     command = build_repo_list_command(normalized_owner, limit)
     execute = runner or subprocess_gh_runner
     try:
-        result = execute(command, timeout_seconds)
+        result = _run_gh_with_retry(
+            execute, command, timeout_seconds, sleep=sleep, max_attempts=retry_max_attempts
+        )
     except subprocess.TimeoutExpired as exc:
         raise InputError("gh repo list timed out") from exc
+    except FileNotFoundError as exc:
+        raise InputError(GH_NOT_INSTALLED_MESSAGE) from exc
     except OSError as exc:
         raise InputError("gh repo list could not be started") from exc
+    except GhTransientError as exc:
+        raise InputError(rate_limited_message(retry_max_attempts)) from exc
 
     stdout = result.stdout.encode("utf-8", errors="replace")
     if len(stdout) > stdout_max_bytes:
         raise LimitExceeded(f"gh repo list output exceeds {stdout_max_bytes} bytes")
     if result.returncode != 0:
+        if _is_gh_not_authenticated(result.stderr):
+            raise InputError(GH_NOT_AUTHENTICATED_MESSAGE)
         message = redact_tokens(result.stderr.strip() or "gh repo list failed")
         raise InputError(message)
 
@@ -185,6 +257,8 @@ def fetch_repositories(
     runner: GhRunner | None = None,
     timeout_seconds: float = DEFAULT_GH_TIMEOUT_SECONDS,
     stdout_max_bytes: int = DEFAULT_GH_STDOUT_MAX_BYTES,
+    sleep: Callable[[float], None] = time.sleep,
+    retry_max_attempts: int = GH_RETRY_MAX_ATTEMPTS,
 ) -> tuple[GhRepository, ...]:
     """Return the named repositories under ``owner`` via one ``gh repo view`` each.
 
@@ -205,16 +279,26 @@ def fetch_repositories(
     for name in normalized_names:
         command = build_repo_view_command(normalized_owner, name)
         try:
-            result = execute(command, timeout_seconds)
+            result = _run_gh_with_retry(
+                execute, command, timeout_seconds, sleep=sleep, max_attempts=retry_max_attempts
+            )
         except subprocess.TimeoutExpired as exc:
             raise InputError("gh repo view timed out") from exc
+        except FileNotFoundError as exc:
+            raise InputError(GH_NOT_INSTALLED_MESSAGE) from exc
         except OSError as exc:
             raise InputError("gh repo view could not be started") from exc
+        except GhTransientError as exc:
+            # Transient was classified on the RAW result before the generic rewrite
+            # below could erase the 429/secondary-rate-limit signal (item 3).
+            raise InputError(rate_limited_message(retry_max_attempts)) from exc
 
         stdout = result.stdout.encode("utf-8", errors="replace")
         if len(stdout) > stdout_max_bytes:
             raise LimitExceeded(f"gh repo view output exceeds {stdout_max_bytes} bytes")
         if result.returncode != 0:
+            if _is_gh_not_authenticated(result.stderr):
+                raise InputError(GH_NOT_AUTHENTICATED_MESSAGE)
             # A token-shaped name passes REPO_NAME_PATTERN, so redact the whole
             # message before it reaches the user. Do not relay gh's raw owner/repo
             # stderr here; the CLI path redactor intentionally scrubs slash-shaped

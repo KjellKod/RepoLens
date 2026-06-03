@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 53,
+    "expected_active_count": 55,
     "markers": [
         "offline",
         "security",
@@ -324,6 +324,18 @@
             "status": "active",
             "nodeid": "tests/canaries/security/test_token_canaries.py::test_p6b_report_docx_redacts_tokens",
             "guardrail": "token_redaction"
+        },
+        {
+            "id": "scan_auth_credential_scrubbed_after_clone",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_scan_auth_canaries.py::test_scan_auth_credential_present_in_clone_env_absent_from_tool_env_and_artifacts",
+            "guardrail": "scan_auth_credential_scrubbed_after_clone"
+        },
+        {
+            "id": "scan_auth_token_redaction",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_scan_auth_canaries.py::test_scan_auth_token_never_in_status_sbom_or_stderr",
+            "guardrail": "scan_auth_token_redaction"
         },
         {
             "id": "x2_injection_agent_family",

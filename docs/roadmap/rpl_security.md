@@ -44,6 +44,20 @@ The boundary is the **execution context (sandboxed vs not)**, not the repo owner
 - **Sandbox each job:** ephemeral workdir, **no secrets mounted**, read-only root FS,
   drop all capabilities, non-root UID, CPU/memory/disk quotas + wall-clock timeout,
   network egress allowlist (block private + link-local/metadata `169.254.169.254`).
+- **Authenticated fetch, fetch-only credential.** Private repos clone with a **read-only**
+  GitHub credential resolved at clone time (`gh auth token` → `GH_TOKEN` → `GITHUB_TOKEN`);
+  **public repos clone with no credential**. The credential is injected into the
+  hook-disabled clone/fetch subprocess **only**, as a process-scoped
+  `http.https://github.com/.extraheader` git config (`Authorization: Basic …`): **never in
+  argv** (invisible to `ps`), **never persisted** to any git config file, and **gone before
+  Syft or any post-clone step runs**. It is never embedded in the clone URL (embedded
+  credentials stay rejected) and is redacted from every message, log, and artifact.
+  **Rationale:** the hook-disabled fetch executes no repository code, so the credential is
+  only ever exposed to a fetch that cannot run anything untrusted; the Syft/tool-execution
+  environment (`_scrubbed_tool_env`) copies only safe keys, so neither the header nor
+  `GH_TOKEN`/`GITHUB_TOKEN` can reach it. Network operations (`gh auth token`, discover gh
+  calls, clone) retry with bounded backoff on 429 / secondary-rate-limit / transient
+  errors; auth/403 failures are never retried.
 
 ## 3. Safe parsing (parsers are an attack surface)
 
@@ -110,3 +124,5 @@ guaranteed temp-dir cleanup in a `finally` block.
 | Output: token | `ghp_…` through pipeline → absent from all artifacts and agent env |
 | Output: markdown | `[x](javascript:…)`, `![](…/pixel)` → href neutralized |
 | DoS | mock slow scan (600 s) → per-repo timeout aborts ≤ 310 s |
+| Auth: credential scrubbed | credentialed private clone → `Authorization: Basic …` header **present** in clone env (positive control), **absent** from Syft env (incl. `GH_TOKEN`/`GITHUB_TOKEN`), SBOM, `scan.status.json` |
+| Auth: token redaction | token-shaped string through success + failed credentialed clone → absent from status/SBOM/stderr; redaction marker present |

@@ -738,7 +738,7 @@ class ScanCliTests(unittest.TestCase):
             self.assertEqual(stdout.getvalue(), "")
             self.assertEqual(stderr.getvalue(), "")
 
-    def test_scan_private_repo_reports_auth_skip_without_clone(self) -> None:
+    def test_scan_private_repo_reports_auth_failure_without_clone(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work-root"
             repos_path = self._scaffold(
@@ -759,21 +759,27 @@ class ScanCliTests(unittest.TestCase):
 
             stderr = io.StringIO()
             with (
+                mock.patch("repolens.githost.resolve_clone_credential_result", return_value=None),
                 mock.patch("repolens.scan.runner.hardened_clone", clone_spy),
                 redirect_stdout(io.StringIO()) as stdout,
                 redirect_stderr(stderr),
             ):
                 code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
-            self.assertEqual(code, 0)
+            self.assertEqual(code, 1)
             self.assertEqual(stdout.getvalue(), "")
             self.assertEqual(clone_calls, [])
             progress = stderr.getvalue()
-            self.assertIn("[1/1] acme-private 🔒 skipped (private, needs auth)", progress)
+            self.assertIn(
+                "[1/1] acme-private ✗ failed: private repo acme-private needs auth",
+                progress,
+            )
             self.assertRegex(
                 progress,
-                r"Done: 1 repos — 0 scanned, 1 skipped, 0 failed in [0-9.]+s\.",
+                r"Done: 1 repos — 0 scanned, 0 skipped, 1 failed in [0-9.]+s\.",
             )
+            self.assertIn("1 repos - 0 scanned, 0 skipped, 1 failed", progress)
+            self.assertNotIn("Internal error", progress)
 
     def test_scan_cached_repo_reports_cached_skip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

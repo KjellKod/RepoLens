@@ -15,6 +15,47 @@
 - For mobile license enrichment (optional, auto-detected): a build toolchain
   (JDK + Gradle for Android, Xcode/SPM or a `GITHUB_TOKEN` for iOS).
 
+## Authentication & private repos
+
+`discover` already enumerates private repositories through authenticated `gh`. `scan`
+clones them through the same hardened clone primitive, and resolves a **read-only**
+GitHub credential at clone time so private repos succeed instead of failing with
+`could not read Username … prompts disabled`.
+
+**Credential resolution order** (first hit wins):
+
+1. `gh auth token` (run `gh auth login` once),
+2. the `GH_TOKEN` environment variable,
+3. the `GITHUB_TOKEN` environment variable.
+
+If none resolve, each **private** repo fails with a clear, per-repo message
+(`private repo <name> needs auth: run `gh auth login` or set GH_TOKEN.`) and `scan`
+exits 1 — never a bare count or `Internal error`. **Public repositories clone with no
+credential** and never require auth.
+
+**Fetch-only, then scrubbed.** When a credential is present it is injected into the
+clone/fetch subprocess only, as a process-scoped `http.https://github.com/.extraheader`
+git config (an `Authorization: Basic …` header). It is:
+
+- **never in argv** (so it is not visible via `ps`),
+- **never written to any git config file** (it lives only in the child process
+  environment, and `GIT_CONFIG_GLOBAL=/dev/null` + `GIT_CONFIG_NOSYSTEM=1` still hold),
+- **gone the moment the clone returns** — Syft and every post-clone step run with a
+  clean, secret-free environment (`GH_TOKEN`/`GITHUB_TOKEN` are not copied into the tool
+  env), and the token is redacted from every message, log, and artifact.
+
+**Why this is safe.** The clone runs hooks-disabled and executes no repository code, so
+the credential is only ever exposed to a fetch that cannot run anything from the
+untrusted repo. RepoLens still pins and integrity-verifies its own Syft, and never injects
+credentials into the clone URL (embedded `user:pass@` remotes are rejected).
+
+**Rate limits & transients.** `gh auth token`, the discover `gh` calls, and the clone all
+retry with bounded exponential backoff on HTTP 429, GitHub secondary-rate-limit, and
+network-class errors. If still unrecoverable, the repo surfaces
+`rate-limited after N retries - try again later` rather than hanging. Authentication and
+access (403) failures are never retried — they surface their distinct, actionable message
+immediately.
+
 ## Tool bootstrap
 
 Before any scan runs, RepoLens pins and integrity-verifies its own toolchain; it never

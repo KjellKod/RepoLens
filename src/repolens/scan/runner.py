@@ -22,15 +22,31 @@ import os
 import shutil
 import subprocess
 import tempfile
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from repolens.data.errors import ArtifactError
 from repolens.exit_codes import InputError, InternalError, RepoLensError
-from repolens.security.clone import CloneOptions, hardened_clone
+from repolens.githost import (
+    CloneCredentialResolution,
+    access_denied_message,
+    private_repo_needs_auth_message,
+    rate_limited_message,
+)
+from repolens.security.clone import CloneCredential, CloneOptions, hardened_clone
+from repolens.security.errors import (
+    CloneAccessDenied,
+    CloneAuthRequired,
+    CloneRateLimited,
+    CloneSecurityError,
+    CloneTransient,
+)
 from repolens.security.limits import DEFAULT_LIMITS
 from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
+from repolens.security.retry import DEFAULT_BASE_DELAY, retry_with_backoff
 
 SCHEMA_VERSION = "1.0"
 SYFT_OUTPUT_FORMAT = "syft-json"
@@ -44,6 +60,16 @@ CommandRunner = Callable[..., "subprocess.CompletedProcess[str]"]
 CloneFn = Callable[[CloneOptions], Path]
 #: Injected progress sink. The CLI maps these events to stderr; tests can collect them.
 ProgressFn = Callable[["ScanProgressEvent"], None]
+#: Resolves a read-only credential once per run (lazily, on first private repo).
+CredentialProvider = Callable[[], "CloneCredential | CloneCredentialResolution | None"]
+
+#: Clone-retry bounds. The attempt cap is the primary wall-clock bound: each
+#: attempt is itself capped at ``clone_timeout_seconds`` by the hardened clone
+#: primitive, so two attempts bound a hung repo at roughly ``2 * clone_timeout``.
+#: The elapsed budget is retained only as a guard against pathological clock or
+#: subprocess timeout overshoot.
+CLONE_RETRY_MAX_ATTEMPTS = 2
+_CLONE_ELAPSED_BUDGET_FACTOR = float(CLONE_RETRY_MAX_ATTEMPTS)
 
 
 @dataclass(frozen=True)
@@ -52,6 +78,8 @@ class RepoSpec:
 
     repo_ref: str
     clone_url: str
+    #: Whether discovery saw this repo as private. Drives credential resolution;
+    #: defaults False so legacy ``--repos`` JSON without the field clones public.
     private: bool = False
 
 
@@ -271,17 +299,40 @@ def _scan_one(
     repo_dir_fn: Callable[..., Path],
     write_sbom_fn: Callable[..., Path],
     write_status_fn: Callable[[str | Path, Any], None],
+    get_credential: CredentialProvider,
+    sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
 ) -> tuple[RepoScanOutcome, int | None]:
     repo_dir = repo_dir_fn(work_root, repo.repo_ref)
     repo_dir.mkdir(parents=True, exist_ok=True)
     workdir = Path(tempfile.mkdtemp(prefix=".scan-", dir=repo_dir))
     try:
-        clone_path = clone(
-            CloneOptions(
-                remote_url=repo.clone_url,
-                destination=workdir / "repo",
-                limits=DEFAULT_LIMITS,
+        credential_resolution = get_credential() if repo.private else None
+        credential, credential_miss_message = _coerce_credential_resolution(credential_resolution)
+        if repo.private and credential is None:
+            # No credential resolvable for a private repo: do not attempt clone.
+            # Prefer the resolver's precise gh-not-installed / gh-not-authed /
+            # rate-limit reason; otherwise use the generic private-repo needs-auth
+            # message for the no-token-anywhere case.
+            return (
+                _record_failure(
+                    repo,
+                    repo_dir,
+                    write_status_fn,
+                    clock,
+                    message=credential_miss_message
+                    or private_repo_needs_auth_message(repo.repo_ref),
+                ),
+                None,
             )
+
+        clone_path = _clone_with_retry(
+            repo,
+            workdir=workdir,
+            clone=clone,
+            credential=credential,
+            sleep=sleep,
+            monotonic=monotonic,
         )
         document = _run_syft(
             command_runner,
@@ -312,26 +363,97 @@ def _scan_one(
             RepoScanOutcome(repo.repo_ref, "scanned", tool_version=tool_version),
             len(sbom["artifacts"]),
         )
-    except Exception as exc:
-        # Per-repo isolation boundary.
-        # One untrusted repository must never abort the batch (AC#14). Any hard
-        # per-repo failure (clone rejection, Syft failure/timeout, mapping error)
-        # is recorded with a redacted message; the caller raises InternalError
-        # after the remaining repos finish so the process still exits 1.
-        message = redact_tokens(str(exc))[:500]
-        _write_status(
-            repo_dir,
-            write_status_fn,
-            repo_ref=repo.repo_ref,
-            status="failed",
-            tool_version=None,
-            error=message,
-            generated_at=clock(),
+    except (CloneSecurityError, SyftScanError, ArtifactError) as exc:
+        # Per-repo isolation boundary for EXPECTED failures only. One untrusted
+        # repository must never abort the batch; the CLI maps a non-empty failed
+        # set to exit 1 with a clear message. Genuine crashes (programming bugs)
+        # are NOT caught here — they propagate and surface as `Internal error`
+        # (brief §2). Typed clone failures get their distinct, actionable wording.
+        return (
+            _record_failure(
+                repo,
+                repo_dir,
+                write_status_fn,
+                clock,
+                message=_failure_message(repo, exc),
+            ),
+            None,
         )
-        return RepoScanOutcome(repo.repo_ref, "failed", error=message), None
     finally:
         # Guaranteed cleanup of the scan-owned ephemeral workdir (rpl_security §7).
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _clone_with_retry(
+    repo: RepoSpec,
+    *,
+    workdir: Path,
+    clone: CloneFn,
+    credential: CloneCredential | None,
+    sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
+) -> Path:
+    """Clone with bounded retry on transient/rate-limit failures only.
+
+    ``CloneAuthRequired``/``CloneAccessDenied`` are never retried; they propagate
+    immediately to the caller's typed-failure mapping.
+    """
+
+    options = CloneOptions(
+        remote_url=repo.clone_url,
+        destination=workdir / "repo",
+        limits=DEFAULT_LIMITS,
+        credential=credential,
+    )
+    return retry_with_backoff(
+        lambda: clone(options),
+        is_transient=lambda exc: isinstance(exc, CloneRateLimited | CloneTransient),
+        max_attempts=CLONE_RETRY_MAX_ATTEMPTS,
+        base_delay=DEFAULT_BASE_DELAY,
+        sleep=sleep,
+        max_elapsed=DEFAULT_LIMITS.clone_timeout_seconds * _CLONE_ELAPSED_BUDGET_FACTOR,
+        monotonic=monotonic,
+    )
+
+
+def _coerce_credential_resolution(
+    value: CloneCredential | CloneCredentialResolution | None,
+) -> tuple[CloneCredential | None, str | None]:
+    if isinstance(value, CloneCredentialResolution):
+        return value.credential, value.unavailable_message
+    return value, None
+
+
+def _failure_message(repo: RepoSpec, exc: Exception) -> str:
+    """Map an expected per-repo failure onto its redacted, actionable message."""
+
+    if isinstance(exc, CloneAuthRequired):
+        return private_repo_needs_auth_message(repo.repo_ref)
+    if isinstance(exc, CloneAccessDenied):
+        return access_denied_message(repo.repo_ref)
+    if isinstance(exc, CloneRateLimited | CloneTransient):
+        return rate_limited_message(CLONE_RETRY_MAX_ATTEMPTS)
+    return redact_tokens(str(exc))[:500]
+
+
+def _record_failure(
+    repo: RepoSpec,
+    repo_dir: Path,
+    write_status_fn: Callable[[str | Path, Any], None],
+    clock: Callable[[], str],
+    *,
+    message: str,
+) -> RepoScanOutcome:
+    _write_status(
+        repo_dir,
+        write_status_fn,
+        repo_ref=repo.repo_ref,
+        status="failed",
+        tool_version=None,
+        error=message,
+        generated_at=clock(),
+    )
+    return RepoScanOutcome(repo.repo_ref, "failed", error=message)
 
 
 def _write_status(
@@ -366,6 +488,9 @@ def scan_repos(
     clone: CloneFn | None = None,
     command_runner: CommandRunner | None = None,
     clock: Callable[[], str] | None = None,
+    credential_provider: CredentialProvider | None = None,
+    sleep: Callable[[float], None] | None = None,
+    monotonic: Callable[[], float] | None = None,
     is_scanned_fn: Callable[..., bool] | None = None,
     repo_dir_fn: Callable[..., Path] | None = None,
     write_sbom_fn: Callable[..., Path] | None = None,
@@ -373,6 +498,14 @@ def scan_repos(
     progress: ProgressFn | None = None,
 ) -> ScanReport:
     """Scan each repository: resume-skip, hardened clone, Syft, persist, status.
+
+    Returns the full :class:`ScanReport` on clean runs. Expected per-repo
+    failures are collected across the batch and then raised as
+    :class:`ScanBatchError` so the CLI can still print progress, final counts,
+    and actionable reasons while exiting 1. Genuine crashes propagate.
+    ``credential_provider`` is resolved lazily and at most once, the first time
+    a private repo is encountered (the result, including ``None``, is memoized);
+    public repos never trigger resolution.
 
     Every store-backed seam (``is_scanned_fn``/``repo_dir_fn``/``write_sbom_fn``/
     ``write_status_fn``) is injectable. They default to the on-disk store, which is
@@ -383,6 +516,8 @@ def scan_repos(
     clone = clone or hardened_clone
     command_runner = command_runner or _default_command_runner
     clock = clock or _utc_now
+    sleep = sleep or time.sleep
+    monotonic = monotonic or time.monotonic
 
     if None in (is_scanned_fn, repo_dir_fn, write_sbom_fn, write_status_fn):
         # Lazy: importing the store pulls jsonschema (absent from the lock-only
@@ -398,6 +533,8 @@ def scan_repos(
         repo_dir_fn = repo_dir_fn or repo_dir
         write_sbom_fn = write_sbom_fn or write_sbom
         write_status_fn = write_status_fn or atomic_write_json
+
+    get_credential = _memoized_credential_provider(credential_provider)
 
     syft = Path(syft_path)
     outcomes: list[RepoScanOutcome] = []
@@ -421,22 +558,6 @@ def scan_repos(
                     )
                 )
             continue
-        if repo.private:
-            outcome = RepoScanOutcome(repo.repo_ref, "skipped", skipped_reason="private")
-            outcomes.append(outcome)
-            if progress is not None:
-                progress(
-                    ScanProgressEvent(
-                        "outcome",
-                        index,
-                        total,
-                        repo.repo_ref,
-                        status=outcome.status,
-                        error=outcome.skipped_reason,
-                        elapsed_seconds=_elapsed_seconds(progress_start),
-                    )
-                )
-            continue
         outcome, deps_count = _scan_one(
             repo,
             work_root=work_root,
@@ -448,6 +569,9 @@ def scan_repos(
             repo_dir_fn=repo_dir_fn,
             write_sbom_fn=write_sbom_fn,
             write_status_fn=write_status_fn,
+            get_credential=get_credential,
+            sleep=sleep,
+            monotonic=monotonic,
         )
         outcomes.append(outcome)
         if progress is not None:
@@ -474,3 +598,18 @@ def scan_repos(
 
 def _elapsed_seconds(started_at: _dt.datetime) -> float:
     return (_dt.datetime.now(_dt.UTC) - started_at).total_seconds()
+
+
+def _memoized_credential_provider(
+    credential_provider: CredentialProvider | None,
+) -> CredentialProvider:
+    """Resolve the credential at most once per run, caching the result (incl. None)."""
+
+    cache: dict[str, CloneCredential | CloneCredentialResolution | None] = {}
+
+    def get_credential() -> CloneCredential | CloneCredentialResolution | None:
+        if "value" not in cache:
+            cache["value"] = credential_provider() if credential_provider is not None else None
+        return cache["value"]
+
+    return get_credential

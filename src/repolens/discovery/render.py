@@ -117,11 +117,14 @@ def _repo_payload(item: CategorizedRepository) -> dict[str, object]:
 def _repo_markdown(item: CategorizedRepository, *, checkbox: bool) -> list[str]:
     repo = item.repo
     prefix = "- [x]" if checkbox else "-"
+    # A trailing marker after the source fence; scan.inputs._CANDIDATE_ROW_RE's
+    # `(?:\s.*)?$` tolerates trailing text, so checkbox parsing is unaffected.
+    private_marker = " — private - needs auth to clone" if repo.private else ""
     lines = [
         (
             f"{prefix} {render_code_span(repo.name_with_owner)} "
             f"- category {render_code_span(item.category)} "
-            f"({render_code_span(item.category_source)})"
+            f"({render_code_span(item.category_source)}){private_marker}"
         )
     ]
     if item.hard_exclusion_reason:

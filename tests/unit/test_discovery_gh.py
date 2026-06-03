@@ -17,6 +17,15 @@ from repolens.discovery.gh import (
     parse_repos_option,
 )
 from repolens.exit_codes import InputError
+from repolens.githost import (
+    GH_NOT_AUTHENTICATED_MESSAGE,
+    GH_NOT_INSTALLED_MESSAGE,
+    rate_limited_message,
+)
+
+
+def _no_sleep(_delay: float) -> None:
+    return None
 
 
 def _repo_view_runner(payload: dict[str, object]) -> tuple[list[list[str]], GhRunner]:
@@ -267,3 +276,74 @@ def test_fetch_repositories_malformed_response_surfaces_view_wording() -> None:
         fetch_repositories("sentinel-owner", ("sentinel-alpha",), runner=runner)
 
     assert "gh repo list" not in str(excinfo.value)
+
+
+# --- gh not installed / not authenticated / transient retry --------------
+
+
+def test_list_repositories_gh_not_installed_message() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        raise FileNotFoundError("gh")
+
+    with pytest.raises(InputError) as excinfo:
+        list_repositories("sentinel-owner", runner=runner)
+
+    assert str(excinfo.value) == GH_NOT_INSTALLED_MESSAGE
+
+
+def test_list_repositories_gh_not_authenticated_message() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        return GhRunResult(1, "", "gh: not logged into any GitHub hosts. Run gh auth login")
+
+    with pytest.raises(InputError) as excinfo:
+        list_repositories("sentinel-owner", runner=runner)
+
+    assert str(excinfo.value) == GH_NOT_AUTHENTICATED_MESSAGE
+
+
+def test_list_repositories_transient_retried_then_surfaced() -> None:
+    calls = {"n": 0}
+
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        calls["n"] += 1
+        return GhRunResult(1, "", "HTTP 429: API rate limit exceeded")
+
+    with pytest.raises(InputError) as excinfo:
+        list_repositories("sentinel-owner", runner=runner, sleep=_no_sleep, retry_max_attempts=3)
+
+    assert calls["n"] == 3
+    assert str(excinfo.value) == rate_limited_message(3)
+
+
+def test_fetch_repositories_transient_detected_before_generic_rewrite() -> None:
+    # item 3: the 429/secondary-rate-limit signal must be seen on the RAW result,
+    # before fetch_repositories' generic "could not resolve repo name" rewrite.
+    calls = {"n": 0}
+
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        calls["n"] += 1
+        return GhRunResult(1, "", "You have exceeded a secondary rate limit. Please wait")
+
+    with pytest.raises(InputError) as excinfo:
+        fetch_repositories(
+            "sentinel-owner",
+            ("sentinel-alpha",),
+            runner=runner,
+            sleep=_no_sleep,
+            retry_max_attempts=3,
+        )
+
+    assert calls["n"] == 3
+    message = str(excinfo.value)
+    assert message == rate_limited_message(3)
+    assert "could not resolve repo name" not in message
+
+
+def test_fetch_repositories_gh_not_authenticated_message() -> None:
+    def runner(command: Sequence[str], timeout_seconds: float) -> GhRunResult:
+        return GhRunResult(1, "", "gh: not logged into any GitHub hosts")
+
+    with pytest.raises(InputError) as excinfo:
+        fetch_repositories("sentinel-owner", ("sentinel-alpha",), runner=runner)
+
+    assert str(excinfo.value) == GH_NOT_AUTHENTICATED_MESSAGE
