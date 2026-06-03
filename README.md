@@ -85,6 +85,20 @@ repolens flag    --work-root work
 repolens report  --work-root work --out-dir reports
 ```
 
+### What the disclosure looks like
+
+`report.main` (illustrative excerpt — same columns in Markdown, CSV, and `.docx`):
+
+| name | spdx_id | version | source_url | origin | scope | distribution |
+|------|---------|---------|------------|--------|-------|--------------|
+| requests | Apache-2.0 | 2.32.3 | https://pypi.org/project/requests/ | third-party | runtime | server |
+| PyYAML | MIT | 6.0.2 | https://pypi.org/project/PyYAML/ | third-party | runtime | server |
+
+One row per library (deduplicated across repos), each carrying its resolved license,
+version, a fetchable source, and `origin`/`scope`/`distribution` tags. Excluded categories
+and first-party code land in `report.appendix.<category>.*` — nothing is dropped, only
+routed. The full row also records evidence provenance and any coverage gaps.
+
 You stay in control at three points: approving the repo list (`discover`), approving the
 flagged shortlist (`shortlist`), and the final report is **gated** until that shortlist is
 clear. The owner, repo categories, and report header are runtime inputs — never baked into
