@@ -674,7 +674,9 @@ class ScanCliTests(unittest.TestCase):
 
             def fake_runner(argv, *, timeout):
                 if "acme-bad" in argv[2]:
-                    return subprocess.CompletedProcess(list(argv), 1, stdout="", stderr="boom")
+                    return subprocess.CompletedProcess(
+                        list(argv), 1, stdout="", stderr="boom at /tmp/acme/private"
+                    )
                 return subprocess.CompletedProcess(
                     list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
                 )
@@ -694,7 +696,8 @@ class ScanCliTests(unittest.TestCase):
             self.assertFalse(store.is_repo_scanned(work_root, "acme-bad"))
             progress = stderr.getvalue()
             self.assertIn("[1/2] acme-ok ✓ 1 deps", progress)
-            self.assertIn("[2/2] acme-bad ✗ failed: boom", progress)
+            self.assertIn("[2/2] acme-bad ✗ failed: boom at [REDACTED_PATH]", progress)
+            self.assertNotIn("/tmp/acme/private", progress)
             self.assertRegex(
                 progress,
                 r"Done: 2 repos — 1 scanned, 0 skipped, 1 failed in [0-9.]+s\.",

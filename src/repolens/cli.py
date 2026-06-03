@@ -575,7 +575,7 @@ def _scan_outcome_line(event: ScanProgressEvent) -> str:
         return f"{prefix} 🔒 skipped (private, needs auth)"
     if status == "skipped":
         return f"{prefix} ↻ skipped (cached)"
-    reason = str(event.error or "unknown error")
+    reason = _sanitize(str(event.error or "unknown error"), redact_paths=True)
     return f"{prefix} ✗ failed: {reason}"
 
 
