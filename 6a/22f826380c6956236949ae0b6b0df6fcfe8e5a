@@ -1,0 +1,49 @@
+tests/unit/shortlist/test_prescreen.py
+  s_80bf0aee96b635::t_9bc7abe9b09dc5 1-38,40-73
+src/repolens/shortlist/__init__.py
+  s_80bf0aee96b635::t_1d8e7533122f54 1-12
+src/repolens/shortlist/prescreen.py
+  s_80bf0aee96b635::t_7c2bd5c696ca7e 1-23,25-28,31-84,87-88,95-103,109-112,122-123,125,127,129-131,133,135,146-148
+  s_80bf0aee96b635::t_4b4deefd04bdc7 24
+  s_80bf0aee96b635::t_f34504edf25310 85-86,89-94,104-108,113-121,124,126,128,132,134,136-145
+src/repolens/shortlist/stage.py
+  s_80bf0aee96b635::t_4ade78a87dbec5 1-39,41-177,181-209
+src/repolens/shortlist/agent.py
+  s_80bf0aee96b635::t_dff73b223fb0f6 1-132
+tests/unit/shortlist/test_verify.py
+  s_80bf0aee96b635::t_ab067dbce0a4f8 1-60,64-110
+tests/unit/shortlist/test_agent.py
+  s_80bf0aee96b635::t_ad8a1c0a357316 1-28,30-60
+src/repolens/shortlist/verify.py
+  s_80bf0aee96b635::t_a1e0530c88b35e 1-9,15-26,28-94
+tests/unit/shortlist/test_decisions.py
+  s_80bf0aee96b635::t_e4b9863182c6a9 1-3,17-46,49-58,60-67,69,71-80,82-94
+  s_80bf0aee96b635::t_305f898628621c 4-16
+  s_80bf0aee96b635::t_94947845c079e8 47-48
+  s_80bf0aee96b635::t_ba4a8b15a06790 59
+  s_80bf0aee96b635::t_07484986374e51 68,70
+  s_80bf0aee96b635::t_0eaefe1bd26820 81
+tests/unit/shortlist/test_stage.py
+  s_80bf0aee96b635::t_df89146ca470a9 1-199,204-207,209,211-217,219-220
+  s_80bf0aee96b635::t_b441590ee4528a 200-203,208,210,218
+src/repolens/shortlist/decisions.py
+  s_80bf0aee96b635::t_9dfb9067b54f63 1-100
+src/repolens/shortlist/render.py
+  s_80bf0aee96b635::t_cdc2931295fafa 1-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "6a22f826380c6956236949ae0b6b0df6fcfe8e5a",
+  "prompts": {},
+  "sessions": {
+    "s_80bf0aee96b635": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "764e156b-145d-41e3-ab9b-cb21d2eea30d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
