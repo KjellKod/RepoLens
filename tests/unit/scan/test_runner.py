@@ -14,8 +14,7 @@ from pathlib import Path
 import pytest
 
 from repolens.data import store
-from repolens.exit_codes import InternalError
-from repolens.scan.runner import RepoSpec, scan_repos
+from repolens.scan.runner import RepoSpec, ScanBatchError, scan_repos
 
 CLONE_URL = "https://example.invalid/acme-alpha"
 
@@ -110,10 +109,11 @@ def test_resume_skips_already_scanned_repo(tmp_path: Path) -> None:
     )
 
     assert [o.status for o in report.outcomes] == ["skipped"]
+    assert report.outcomes[0].skipped_reason == "cached"
     assert clone_calls == []  # resume guard prevented re-clone
 
 
-def test_mixed_run_persists_successes_and_exits_failure(tmp_path: Path) -> None:
+def test_mixed_run_returns_failure_report_and_persists_successes(tmp_path: Path) -> None:
     work_root = tmp_path / "work-root"
     document = _syft_document()
 
@@ -122,7 +122,7 @@ def test_mixed_run_persists_successes_and_exits_failure(tmp_path: Path) -> None:
             return subprocess.CompletedProcess(list(argv), 1, stdout="", stderr="syft boom")
         return subprocess.CompletedProcess(list(argv), 0, stdout=json.dumps(document), stderr="")
 
-    with pytest.raises(InternalError):
+    with pytest.raises(ScanBatchError) as exc_info:
         scan_repos(
             work_root,
             [
@@ -135,6 +135,8 @@ def test_mixed_run_persists_successes_and_exits_failure(tmp_path: Path) -> None:
             clock=lambda: "2026-01-01T00:00:00Z",
         )
 
+    report = exc_info.value.report
+    assert [o.status for o in report.outcomes] == ["scanned", "failed"]
     # The good repo's SBOM is persisted despite the sibling failure.
     assert store.is_repo_scanned(work_root, "acme-ok")
     assert not store.is_repo_scanned(work_root, "acme-bad")
@@ -143,6 +145,54 @@ def test_mixed_run_persists_successes_and_exits_failure(tmp_path: Path) -> None:
         (store.repo_dir(work_root, "acme-bad") / "scan.status.json").read_text(encoding="utf-8")
     )
     assert status["status"] == "failed"
+
+
+def test_progress_events_include_start_outcomes_and_dependency_counts(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    events = []
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(_syft_document()),
+        clock=lambda: "2026-01-01T00:00:00Z",
+        progress=events.append,
+    )
+
+    assert [(event.kind, event.index, event.total, event.repo_ref) for event in events] == [
+        ("start", 1, 1, "acme-alpha"),
+        ("outcome", 1, 1, "acme-alpha"),
+    ]
+    assert events[1].status == "scanned"
+    assert events[1].deps_count == 1
+    assert events[1].elapsed_seconds is not None
+
+
+def test_private_repo_skips_without_clone(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    clone_calls: list = []
+    events = []
+
+    def clone_spy(options):
+        clone_calls.append(options)
+        return _clone_into(options)
+
+    report = scan_repos(
+        work_root,
+        [RepoSpec("acme-private", CLONE_URL, private=True)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=clone_spy,
+        command_runner=_syft_ok(_syft_document()),
+        progress=events.append,
+    )
+
+    assert [o.status for o in report.outcomes] == ["skipped"]
+    assert report.outcomes[0].skipped_reason == "private"
+    assert clone_calls == []
+    assert events[-1].status == "skipped"
+    assert events[-1].error == "private"
 
 
 def test_ephemeral_workdir_cleaned_up(tmp_path: Path) -> None:
@@ -166,7 +216,7 @@ def test_status_file_redacts_token_in_error(tmp_path: Path) -> None:
     def runner(argv, *, timeout):
         return subprocess.CompletedProcess(list(argv), 1, stdout="", stderr=f"denied {token}")
 
-    with pytest.raises(InternalError):
+    with pytest.raises(ScanBatchError) as exc_info:
         scan_repos(
             work_root,
             [RepoSpec("acme-alpha", CLONE_URL)],
@@ -176,6 +226,8 @@ def test_status_file_redacts_token_in_error(tmp_path: Path) -> None:
             clock=lambda: "2026-01-01T00:00:00Z",
         )
 
+    report = exc_info.value.report
+    assert [o.status for o in report.outcomes] == ["failed"]
     status_text = (store.repo_dir(work_root, "acme-alpha") / "scan.status.json").read_text(
         encoding="utf-8"
     )
@@ -189,7 +241,7 @@ def test_timeout_records_failure_without_sbom(tmp_path: Path) -> None:
     def slow(argv, *, timeout):
         raise subprocess.TimeoutExpired(list(argv), timeout)
 
-    with pytest.raises(InternalError):
+    with pytest.raises(ScanBatchError) as exc_info:
         scan_repos(
             work_root,
             [RepoSpec("acme-alpha", CLONE_URL)],
@@ -200,4 +252,6 @@ def test_timeout_records_failure_without_sbom(tmp_path: Path) -> None:
             clock=lambda: "2026-01-01T00:00:00Z",
         )
 
+    report = exc_info.value.report
+    assert [o.status for o in report.outcomes] == ["failed"]
     assert not store.is_repo_scanned(work_root, "acme-alpha")

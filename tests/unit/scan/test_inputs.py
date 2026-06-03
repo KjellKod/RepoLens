@@ -16,6 +16,7 @@ def _repo(
     *,
     owner: str = "sentinel-owner",
     hard_excluded: bool = False,
+    private: bool = False,
 ) -> dict[str, object]:
     return {
         "name": name,
@@ -24,7 +25,7 @@ def _repo(
         "description": "",
         "topics": [],
         "archived": False,
-        "private": False,
+        "private": private,
         "category": "runtime-bucket",
         "category_source": "default",
         "hard_excluded": hard_excluded,
@@ -105,6 +106,45 @@ def test_unticked_candidates_are_omitted(tmp_path: Path) -> None:
         RepoSpec(
             repo_ref="sentinel-beta",
             clone_url="https://github.com/sentinel-owner/sentinel-beta.git",
+        )
+    ]
+
+
+def test_private_discover_candidates_are_preserved_for_scan_progress(tmp_path: Path) -> None:
+    _write_discovered(tmp_path, [_repo("sentinel-private", private=True)])
+    _write_candidates(
+        tmp_path,
+        ["- [x] `sentinel-owner/sentinel-private` - category `runtime-bucket` (`default`)"],
+    )
+
+    specs = load_discover_approved_repo_specs(tmp_path, RepoSpec)
+
+    assert specs == [
+        RepoSpec(
+            repo_ref="sentinel-private",
+            clone_url="https://github.com/sentinel-owner/sentinel-private.git",
+            private=True,
+        )
+    ]
+
+
+def test_explicit_repo_specs_accept_optional_private_flag() -> None:
+    specs = repo_specs_from_records(
+        [
+            {
+                "repo_ref": "sentinel-private",
+                "clone_url": "https://example.invalid/repo.git",
+                "private": True,
+            }
+        ],
+        RepoSpec,
+    )
+
+    assert specs == [
+        RepoSpec(
+            repo_ref="sentinel-private",
+            clone_url="https://example.invalid/repo.git",
+            private=True,
         )
     ]
 

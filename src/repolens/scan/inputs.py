@@ -70,6 +70,7 @@ def load_discover_approved_repo_specs(work_root: Path, repo_spec_cls: type) -> l
             {
                 "repo_ref": repo_ref,
                 "clone_url": f"https://github.com/{name_with_owner}.git",
+                "private": discovered_record.get("private") is True,
             }
         )
 
@@ -93,7 +94,13 @@ def repo_specs_from_records(records: object, repo_spec_cls: type) -> list:
         if not isinstance(repo_ref, str) or not repo_ref:
             raise InputError(f"Repo list entry {index} is missing a 'repo_ref'")
         _validate_clone_url(clone_url, index=index)
-        specs.append(repo_spec_cls(repo_ref=repo_ref, clone_url=clone_url))
+        specs.append(
+            repo_spec_cls(
+                repo_ref=repo_ref,
+                clone_url=clone_url,
+                private=record.get("private") is True,
+            )
+        )
     return specs
 
 
