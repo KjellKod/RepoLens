@@ -261,7 +261,7 @@ repolens flag      --work-root work  # apply policy, flag risk/unknowns -> short
 repolens shortlist --work-root work [--identity <REVIEWER>]
                                       # settle flagged items + human approval
 repolens report --work-root <WORK> --out-dir reports
-                                      # assemble report.main.md + report.main.csv
+                                      # assemble gated main, docx, and appendix reports
 ```
 
 Discovery (you approve the repo list), the `shortlist` approval gate, and the final report
@@ -304,11 +304,13 @@ boundaries, then writes the normal artifacts under the supplied work root:
 python scripts/m1_fixture_e2e.py --work-root /tmp/repolens-m1-fixture
 ```
 
-Expected output is a one-line JSON summary with discovered, SBOM, resolved, and report
-counts. The work root contains `discovered.json`, `repos.candidate.md`,
-`approved-repos.json`, per-fixture `sbom.syft.json` and `resolved.ndjson`, and
-`reports/report.main.{md,csv}`. This is a fixture harness only; live owner dogfood still
-uses the normal `repolens discover -> scan -> resolve -> report` commands above.
+Expected output is a one-line JSON summary with discovered, SBOM, resolved, main report,
+appendix, and docx counts. The work root contains `discovered.json`,
+`repos.candidate.md`, `approved-repos.json`, per-fixture `sbom.syft.json` and
+`resolved.ndjson`, a clear `shortlist.json`, `reports/report.main.{md,csv,docx}`, and
+`reports/report.appendix.<category>.{md,csv}`. This is a fixture harness only; live owner
+dogfood still uses the normal `repolens discover -> scan -> resolve -> flag -> report`
+commands above.
 
 ### Discover
 
@@ -434,6 +436,41 @@ stage.
 The command writes `<WORK>/work/<REPO_REF>/resolved.ndjson` with SPDX-normalized
 license records or schema-valid unresolved records when evidence cannot be verified.
 
+### Report
+
+`report` reads resolved occurrences, discovered repository categories when available, and
+local runtime report config. If `<WORK>/shortlist.json` exists with `open_count > 0` or
+any item whose `status` is `open`, the command exits with findings-open status and writes
+no report artifacts. A missing shortlist does not block assembly.
+
+The docx header is required and must come from untracked runtime config:
+
+```json
+{
+  "report": {
+    "selection": {
+      "include": ["runtime", "customer-facing"]
+    },
+    "header": {
+      "org_name": "Runtime Organization Name",
+      "legal_text": "Runtime legal review text."
+    }
+  }
+}
+```
+
+`report.selection.include` is optional. When it is omitted, every observed third-party
+category is selected into `report.main`. When present, third-party occurrences in included
+categories go to `report.main.{md,csv,docx}`; excluded third-party categories go to
+`report.appendix.<category>.{md,csv}`. First-party occurrences always go to
+`report.appendix.first-party.{md,csv}`.
+
+The main markdown and CSV keep the frozen P6a columns. Category is used only for routing,
+appendix filenames, and appendix headings. If a resolved repo cannot be joined to
+`discovered.json` by exact trimmed `name` or `name_with_owner`, it uses
+`discover.taxonomy.default_category` or `uncategorized` and the row records a
+`missing_category` coverage gap.
+
 ## Outputs
 
 - `discovered.json` — the structured repository list for later stages.
@@ -441,9 +478,9 @@ license records or schema-valid unresolved records when evidence cannot be verif
   exclusion reasons.
 - `<WORK>/work/<repo_ref>/sbom.syft.json` — the per-repo Syft SBOM from `scan`.
 - `<WORK>/work/<repo_ref>/resolved.ndjson` — license records and evidence from `resolve`.
-- `report.main.{md,csv}` — the shipped main disclosure output.
-- `inventory.json`, `shortlist.md`, `report.main.docx`, and
-  `report.appendix.<category>.*` — planned downstream artifacts, not emitted at HEAD.
+- `inventory.json`, `shortlist.json`, and `shortlist.md` — policy output from `flag`.
+- `report.main.{md,csv,docx}` — the gated main disclosure output.
+- `report.appendix.<category>.{md,csv}` — excluded-category and first-party appendices.
 
 ## Safety
 

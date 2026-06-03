@@ -312,15 +312,106 @@ class CliTests(unittest.TestCase):
                 ],
             )
 
-            code = cli.main(["report", "--work-root", str(work_root), "--out-dir", str(out_dir)])
+            config_path = _report_config_path(work_root)
+            code = cli.main(
+                [
+                    "--config",
+                    str(config_path),
+                    "report",
+                    "--work-root",
+                    str(work_root),
+                    "--out-dir",
+                    str(out_dir),
+                ]
+            )
 
             self.assertEqual(code, 0)
             self.assertTrue((out_dir / "report.main.md").exists())
             self.assertTrue((out_dir / "report.main.csv").exists())
+            self.assertTrue((out_dir / "report.main.docx").exists())
 
     def test_report_missing_work_root_returns_two(self) -> None:
         with TemporaryDirectory() as tmp:
             work_root = Path(tmp)
+            config_path = _report_config_path(work_root)
+
+            code = cli.main(
+                [
+                    "--config",
+                    str(config_path),
+                    "report",
+                    "--work-root",
+                    str(work_root),
+                    "--out-dir",
+                    str(work_root / "out"),
+                ]
+            )
+
+            self.assertEqual(code, 2)
+
+    def test_report_cli_exit_findings_open_when_shortlist_open(self) -> None:
+        with TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            out_dir = work_root / "out"
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [
+                    {
+                        "schema_version": "1.0",
+                        "name": "acme-lib",
+                        "version": "1.2.3",
+                        "repo": "acme-alpha",
+                        "purl": "pkg:pypi/acme-lib@1.2.3",
+                        "declared_license_raw": "MIT",
+                        "spdx_id": "MIT",
+                        "evidence": {"source_layer": "syft"},
+                        "tags": {
+                            "origin": "third-party-oss",
+                            "scope": "runtime",
+                            "distribution": "server",
+                        },
+                        "modified": "unknown",
+                    }
+                ],
+            )
+            store.atomic_write_json(
+                work_root / "shortlist.json",
+                {
+                    "schema_version": "1.0",
+                    "generated_at": "2026-01-01T00:00:00Z",
+                    "open_count": 1,
+                    "items": [{"status": "open"}],
+                },
+            )
+
+            code = cli.main(["report", "--work-root", str(work_root), "--out-dir", str(out_dir)])
+
+            self.assertEqual(code, 1)
+            self.assertFalse((out_dir / "report.main.csv").exists())
+
+    def test_report_cli_exit_two_when_docx_header_missing(self) -> None:
+        with TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [
+                    {
+                        "schema_version": "1.0",
+                        "name": "acme-lib",
+                        "version": "1.2.3",
+                        "repo": "acme-alpha",
+                        "evidence": {"source_layer": "syft"},
+                        "tags": {
+                            "origin": "third-party-oss",
+                            "scope": "runtime",
+                            "distribution": "server",
+                        },
+                        "modified": "unknown",
+                    }
+                ],
+            )
 
             code = cli.main(
                 ["report", "--work-root", str(work_root), "--out-dir", str(work_root / "out")]
@@ -334,6 +425,24 @@ def _fake_clone(options):
     destination.mkdir(parents=True, exist_ok=True)
     (destination / "README.md").write_text("acme\n", encoding="utf-8")
     return destination
+
+
+def _report_config_path(work_root: Path) -> Path:
+    path = work_root / "report.local.json"
+    path.write_text(
+        json.dumps(
+            {
+                "report": {
+                    "header": {
+                        "org_name": "Example Org",
+                        "legal_text": "Example legal notice.",
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 def _syft_document() -> dict:

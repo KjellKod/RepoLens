@@ -1,7 +1,9 @@
+import zipfile
 from pathlib import Path
 
 import pytest
 
+from repolens.config import Config
 from repolens.flag import run_flag
 from repolens.flag import stage as flag_stage
 from repolens.report import main as report_main
@@ -66,7 +68,7 @@ def test_p6a_report_token_redacts_emitted_artifacts(
     resolved_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(report_main.store, "iter_resolved", lambda path: iter([record]))
 
-    result = render_main_report(tmp_path, tmp_path / "out")
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
 
     for path in (result.csv_path, result.markdown_path):
         data = path.read_bytes()
@@ -74,6 +76,44 @@ def test_p6a_report_token_redacts_emitted_artifacts(
         assert session.encode("utf-8") not in data
         assert fine_grained.encode("utf-8") not in data
         assert REDACTION.encode("utf-8") in data
+
+
+def test_p6b_report_docx_redacts_tokens(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    classic = "gh" + "p_" + "A" * 24
+    session = "gh" + "s_" + "B" * 24
+    record = {
+        "schema_version": "1.0",
+        "name": f"acme-token-{classic}",
+        "version": f"1.2.3-{session}",
+        "repo": "acme-alpha",
+        "purl": f"pkg:pypi/acme-token@1.2.3-{session}",
+        "declared_license_raw": "MIT",
+        "spdx_id": "MIT",
+        "evidence": {
+            "source_layer": "syft",
+            "url": "https://example.invalid/licenses/mit",
+        },
+        "tags": {
+            "origin": "third-party-oss",
+            "scope": "runtime",
+            "distribution": "server",
+        },
+        "modified": "unknown",
+    }
+    resolved_path = tmp_path / "work" / "acme-alpha" / "resolved.ndjson"
+    resolved_path.parent.mkdir(parents=True)
+    resolved_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(report_main.store, "iter_resolved", lambda path: iter([record]))
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+    docx_bytes = result.docx_path.read_bytes()
+    with zipfile.ZipFile(result.docx_path) as archive:
+        xml = archive.read("word/document.xml")
+
+    for data in (docx_bytes, xml):
+        assert classic.encode("utf-8") not in data
+        assert session.encode("utf-8") not in data
+    assert REDACTION.encode("utf-8") in xml
 
 
 def test_p4_flag_token_redacts_emitted_artifacts(
@@ -128,3 +168,17 @@ def _stub_flag_json_writers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(flag_stage.store, "write_inventory", write_inventory)
     monkeypatch.setattr(flag_stage.store, "write_shortlist", write_shortlist)
+
+
+def _report_config() -> Config:
+    return Config(
+        values={
+            "report": {
+                "header": {
+                    "org_name": "Example Org",
+                    "legal_text": "Example legal notice.",
+                }
+            }
+        },
+        sources=(),
+    )
