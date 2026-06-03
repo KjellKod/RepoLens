@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 41,
+    "expected_active_count": 48,
     "markers": [
         "offline",
         "security",
@@ -254,9 +254,46 @@
             "guardrail": "scancode_unresolved_only"
         },
         {
-            "id": "x2_injection_agent_family",
-            "status": "pending",
-            "pending_reason": "Capability-minimized agent and evidence re-fetch flow are not present in M1."
+            "id": "p5_injection_override_requires_anchor",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_injection_override_requires_anchor",
+            "guardrail": "agent_resolution_requires_exact_evidence_anchor"
+        },
+        {
+            "id": "p5_injection_roleplay_routes_human_agent_not_invoked",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_injection_roleplay_routes_human_agent_not_invoked",
+            "guardrail": "prescreen_detection_routes_to_human"
+        },
+        {
+            "id": "p5_injection_container_escape_stripped_and_flagged",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_injection_container_escape_stripped_and_flagged",
+            "guardrail": "boundary_token_strip_and_flag"
+        },
+        {
+            "id": "p5_injection_oversize_truncated",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_injection_oversize_truncated",
+            "guardrail": "untrusted_content_cap"
+        },
+        {
+            "id": "p5_injection_bad_anchor_fails_verification",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_injection_bad_anchor_fails_verification",
+            "guardrail": "verify_dont_trust_evidence"
+        },
+        {
+            "id": "p5_injection_off_allowlist_evidence_blocked",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_injection_off_allowlist_evidence_blocked",
+            "guardrail": "evidence_host_allowlist_fail_closed"
+        },
+        {
+            "id": "p5_shortlist_token_absent_from_artifacts_and_agent",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_shortlist_token_absent_from_artifacts_and_agent",
+            "guardrail": "token_absent_from_artifacts_and_agent"
         }
     ]
 }

@@ -30,8 +30,46 @@ class F1OfflineCanaries(unittest.TestCase):
             self.assertEqual(result.returncode, 0, name)
 
     def test_exit_code_contract_canary(self) -> None:
-        self.assertEqual(cli.main(["shortlist"]), 0)
-        self.assertEqual(cli.main(["shortlist", "--findings-open"]), 1)
+        from repolens.data import store
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            # SUCCESS (0): no open items.
+            store.write_shortlist(
+                work_root,
+                {
+                    "schema_version": "1.0",
+                    "generated_at": "2026-01-01T00:00:00Z",
+                    "open_count": 0,
+                    "items": [],
+                },
+            )
+            self.assertEqual(cli.main(["shortlist", "--work-root", str(work_root)]), 0)
+
+            # FINDINGS_OPEN (1): one item still open.
+            store.write_shortlist(
+                work_root,
+                {
+                    "schema_version": "1.0",
+                    "generated_at": "2026-01-01T00:00:00Z",
+                    "open_count": 1,
+                    "items": [
+                        {
+                            "component_ref": "acme-lib|UNKNOWN",
+                            "reason": "UNKNOWN",
+                            "evidence": {"source_layer": "api"},
+                            "candidate_spdx": None,
+                            "status": "open",
+                            "decided_by": None,
+                            "decided_at": None,
+                            "note": None,
+                        }
+                    ],
+                },
+            )
+            self.assertEqual(cli.main(["shortlist", "--work-root", str(work_root)]), 1)
+
+        # USAGE_OR_INPUT_ERROR (2): unknown command.
         self.assertEqual(cli.main(["bad-command"]), 2)
 
     def test_yaml_unsafe_tag_canary(self) -> None:

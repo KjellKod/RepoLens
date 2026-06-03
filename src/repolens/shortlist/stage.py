@@ -34,10 +34,10 @@ from typing import Any
 
 from repolens.data import store
 from repolens.data.limits import SCHEMA_VERSION
+from repolens.resolve.models import FetchFunction
 from repolens.security.http_client import Resolver, fetch_url
 from repolens.security.limits import DEFAULT_LIMITS, SecurityLimits
 from repolens.security.redaction import redact_tokens
-from repolens.resolve.models import FetchFunction
 from repolens.shortlist.agent import AgentClient, AgentRequest, Resolution
 from repolens.shortlist.decisions import apply_decisions, parse_checkbox_decisions
 from repolens.shortlist.prescreen import ItemContent, prescreen_item
@@ -175,9 +175,7 @@ def _resolve_open_item(
         record["note"] = "agent:abstained"
         return 1
 
-    verified = verify_agent_resolution(
-        response, fetcher=fetcher, resolver=evidence_resolver
-    )
+    verified = verify_agent_resolution(response, fetcher=fetcher, resolver=evidence_resolver)
     if not verified.verified:
         record["note"] = verified.reason
         return 1

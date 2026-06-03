@@ -36,7 +36,7 @@ def test_clean_content_wraps_for_agent() -> None:
     assert outcome.routed_to_agent
     context = outcome.wrapped_context
     assert context is not None
-    assert context.startswith("<untrusted_content source=\"shortlist\" path=\"acme-lib|MIT\">")
+    assert context.startswith('<untrusted_content source="shortlist" path="acme-lib|MIT">')
     # The output instruction is appended strictly AFTER the wrapped block (AC 5).
     block_end = context.index("</untrusted_content>")
     assert "Reply with a single JSON object" in context[block_end:]

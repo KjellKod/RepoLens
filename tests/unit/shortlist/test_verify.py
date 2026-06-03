@@ -58,9 +58,7 @@ def test_off_allowlist_url_fails_closed() -> None:
     # github.com / raw.githubusercontent.com are NOT in API_ALLOWED_HOSTS; an off-allowlist
     # evidence URL fails closed to the human queue rather than forking the allowlist (AC 15).
     assert "raw.githubusercontent.com" not in API_ALLOWED_HOSTS
-    resolution = Resolution(
-        "MIT", "https://attacker.example.invalid/license?token=ghp_x", "MIT"
-    )
+    resolution = Resolution("MIT", "https://attacker.example.invalid/license?token=ghp_x", "MIT")
     outcome = verify_agent_resolution(
         resolution,
         fetcher=_fetcher_returning(b'{"license":"MIT"}'),

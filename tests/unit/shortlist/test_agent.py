@@ -26,7 +26,8 @@ def test_agent_request_carries_no_token_or_paths() -> None:
 
 def test_agent_response_rejects_non_schema_json() -> None:
     assert isinstance(parse_agent_payload({"spdx_id": "MIT"}), Abstain)
-    assert isinstance(parse_agent_payload({"spdx_id": "", "evidence_url": "u", "evidence_anchor": "a"}), Abstain)
+    empty_field = {"spdx_id": "", "evidence_url": "u", "evidence_anchor": "a"}
+    assert isinstance(parse_agent_payload(empty_field), Abstain)
     assert isinstance(parse_agent_payload(["MIT"]), Abstain)
     assert isinstance(
         parse_agent_payload(

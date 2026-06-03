@@ -28,10 +28,12 @@ def test_active_canary_count_matches_collection() -> None:
 
 
 def test_pending_canaries_have_reasons() -> None:
+    # P5 (A4) superseded the reserved x2_injection_agent_family umbrella with seven concrete
+    # active p5_injection_* nodes, so the matrix may legitimately have zero pending entries.
+    # The invariant is that any pending entry carries a reason, not that one must exist.
     matrix = json.loads((ROOT / MATRIX_PATH).read_text(encoding="utf-8"))
     pending = [entry for entry in matrix["canaries"] if entry["status"] == "pending"]
 
-    assert pending
     assert all(entry.get("pending_reason") for entry in pending)
 
 

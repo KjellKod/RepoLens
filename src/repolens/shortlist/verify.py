@@ -7,11 +7,11 @@ fetched body exactly contains the claimed SPDX id via
 stage's verification primitives (one home per concern) rather than reimplementing them.
 
 The evidence host is validated against :data:`API_ALLOWED_HOSTS` — the frozen API allowlist,
-**not** forked. ``API_ALLOWED_HOSTS`` does not include ``github.com`` / ``raw.githubusercontent.com``,
-so any raw blob/file evidence URL that P4 may have written is intentionally treated as
-off-allowlist and fails closed (``VerifyOutcome.verified is False`` → human queue), consistent
-with AC 15. A private-IP resolution behind an allowlisted host is likewise blocked by
-``validate_url_for_fetch``.
+**not** forked. ``API_ALLOWED_HOSTS`` does not include ``github.com`` /
+``raw.githubusercontent.com``, so any raw blob/file evidence URL that P4 may have written is
+intentionally treated as off-allowlist and fails closed (``VerifyOutcome.verified is False``
+→ human queue), consistent with AC 15. A private-IP resolution behind an allowlisted host is
+likewise blocked by ``validate_url_for_fetch``.
 """
 
 from __future__ import annotations
@@ -24,7 +24,12 @@ from repolens.resolve.adapters import API_ALLOWED_HOSTS
 from repolens.resolve.evidence import has_exact_license_evidence
 from repolens.resolve.models import ApiCandidate, FetchFunction
 from repolens.security.errors import FetchSecurityError
-from repolens.security.http_client import HttpFetchOptions, Resolver, fetch_url, validate_url_for_fetch
+from repolens.security.http_client import (
+    HttpFetchOptions,
+    Resolver,
+    fetch_url,
+    validate_url_for_fetch,
+)
 from repolens.shortlist.agent import Resolution
 
 
