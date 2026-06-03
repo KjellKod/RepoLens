@@ -49,11 +49,19 @@ jobs:
           RPL_LIVE_TOKEN: ${{ secrets.RPL_LIVE_TOKEN || github.token }}
         run: python scripts/ci/live_smoke.py --mode r0
 
-  # P5 X3 deliverable: scheduled dogfood-on-self of the discover -> ... -> shortlist
-  # pipeline. This is a scheduled-lane-only job (it never becomes a required offline
-  # check); the offline `security-canaries` gate runs the P5 injection canaries on every
-  # PR. It probes the shipped `shortlist` stage against the self repo so suspicious
-  # dependency metadata routes to the human queue and no token reaches the artifacts.
+  # P5 X3 deliverable: scheduled lane for dogfooding the discover -> ... -> shortlist
+  # pipeline on the self repo. This is a scheduled-lane-only job (it never becomes a
+  # required offline check); the offline `security-canaries` gate runs the P5 injection
+  # canaries on every PR.
+  #
+  # Current capability: `live_smoke.py --mode r0` is a CLI-presence probe. Until the
+  # `repolens` package (with a runnable `shortlist` subcommand) is installed in this
+  # runtime, the probe reports `dogfood_status=pending_capability`
+  # (`pending_reason=repolens_cli_unavailable` / `repolens_smoke_command_unavailable`)
+  # and does NOT yet drive the pipeline or inspect `shortlist.{json,md}`. Once the CLI
+  # is installed in the live lane, extend `live_smoke.py` to drive shortlist-on-self and
+  # assert that suspicious dependency metadata routes to the human queue and that no
+  # token reaches the artifacts.
   dogfood-shortlist:
     if: github.event_name != 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch || 'main')
     runs-on: ubuntu-latest
@@ -74,7 +82,7 @@ jobs:
       - name: Install locked dev tools
         run: python -m pip install --require-hashes -r requirements-dev.txt
 
-      - name: Dogfood the shortlist stage on self
+      - name: Probe shortlist CLI presence on self (pending installed package)
         env:
           RPL_LIVE_OWNER: ${{ inputs.target_owner || vars.RPL_LIVE_OWNER || github.repository_owner }}
           RPL_LIVE_REPOSITORY: ${{ inputs.target_repository || vars.RPL_LIVE_REPOSITORY || github.event.repository.name || github.repository }}
