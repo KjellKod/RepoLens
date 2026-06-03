@@ -42,6 +42,8 @@ _SAFE_ENV_KEYS = ("HOME", "PATH", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP", "USERPR
 CommandRunner = Callable[..., "subprocess.CompletedProcess[str]"]
 #: Injected boundary for performing the hardened clone.
 CloneFn = Callable[[CloneOptions], Path]
+#: Injected progress sink. The CLI maps these events to stderr; tests can collect them.
+ProgressFn = Callable[["ScanProgressEvent"], None]
 
 
 @dataclass(frozen=True)
@@ -50,6 +52,7 @@ class RepoSpec:
 
     repo_ref: str
     clone_url: str
+    private: bool = False
 
 
 @dataclass(frozen=True)
@@ -59,6 +62,21 @@ class RepoScanOutcome:
     repo_ref: str
     status: str  # "scanned" | "skipped" | "failed"
     tool_version: str | None = None
+    error: str | None = None
+    skipped_reason: str | None = None
+
+
+@dataclass(frozen=True)
+class ScanProgressEvent:
+    """A per-repository scan progress event."""
+
+    kind: str  # "start" | "outcome"
+    index: int
+    total: int
+    repo_ref: str
+    status: str | None = None
+    deps_count: int | None = None
+    elapsed_seconds: float | None = None
     error: str | None = None
 
 
@@ -83,6 +101,14 @@ class ScanReport:
 
 class SyftScanError(RepoLensError):
     """Raised when the Syft invocation fails or its output is unusable."""
+
+
+class ScanBatchError(InternalError):
+    """Raised after all repos finish when one or more repo scans failed."""
+
+    def __init__(self, report: ScanReport) -> None:
+        self.report = report
+        super().__init__(f"{len(report.failed)} repository scan(s) failed")
 
 
 def resolve_syft_path(work_root: str | Path) -> Path:
@@ -245,7 +271,7 @@ def _scan_one(
     repo_dir_fn: Callable[..., Path],
     write_sbom_fn: Callable[..., Path],
     write_status_fn: Callable[[str | Path, Any], None],
-) -> RepoScanOutcome:
+) -> tuple[RepoScanOutcome, int | None]:
     repo_dir = repo_dir_fn(work_root, repo.repo_ref)
     repo_dir.mkdir(parents=True, exist_ok=True)
     workdir = Path(tempfile.mkdtemp(prefix=".scan-", dir=repo_dir))
@@ -282,7 +308,10 @@ def _scan_one(
             error=None,
             generated_at=sbom["generated_at"],
         )
-        return RepoScanOutcome(repo.repo_ref, "scanned", tool_version=tool_version)
+        return (
+            RepoScanOutcome(repo.repo_ref, "scanned", tool_version=tool_version),
+            len(sbom["artifacts"]),
+        )
     except Exception as exc:
         # Per-repo isolation boundary.
         # One untrusted repository must never abort the batch (AC#14). Any hard
@@ -299,7 +328,7 @@ def _scan_one(
             error=message,
             generated_at=clock(),
         )
-        return RepoScanOutcome(repo.repo_ref, "failed", error=message)
+        return RepoScanOutcome(repo.repo_ref, "failed", error=message), None
     finally:
         # Guaranteed cleanup of the scan-owned ephemeral workdir (rpl_security §7).
         shutil.rmtree(workdir, ignore_errors=True)
@@ -341,6 +370,7 @@ def scan_repos(
     repo_dir_fn: Callable[..., Path] | None = None,
     write_sbom_fn: Callable[..., Path] | None = None,
     write_status_fn: Callable[[str | Path, Any], None] | None = None,
+    progress: ProgressFn | None = None,
 ) -> ScanReport:
     """Scan each repository: resume-skip, hardened clone, Syft, persist, status.
 
@@ -371,28 +401,76 @@ def scan_repos(
 
     syft = Path(syft_path)
     outcomes: list[RepoScanOutcome] = []
-    for repo in repos:
+    total = len(repos)
+    for index, repo in enumerate(repos, start=1):
+        progress_start = _dt.datetime.now(_dt.UTC)
+        if progress is not None:
+            progress(ScanProgressEvent("start", index, total, repo.repo_ref))
         if is_scanned_fn(work_root, repo.repo_ref):
-            outcomes.append(RepoScanOutcome(repo.repo_ref, "skipped"))
+            outcome = RepoScanOutcome(repo.repo_ref, "skipped", skipped_reason="cached")
+            outcomes.append(outcome)
+            if progress is not None:
+                progress(
+                    ScanProgressEvent(
+                        "outcome",
+                        index,
+                        total,
+                        repo.repo_ref,
+                        status=outcome.status,
+                        elapsed_seconds=_elapsed_seconds(progress_start),
+                    )
+                )
             continue
-        outcomes.append(
-            _scan_one(
-                repo,
-                work_root=work_root,
-                syft_path=syft,
-                timeout_seconds=timeout_seconds,
-                clone=clone,
-                command_runner=command_runner,
-                clock=clock,
-                repo_dir_fn=repo_dir_fn,
-                write_sbom_fn=write_sbom_fn,
-                write_status_fn=write_status_fn,
-            )
+        if repo.private:
+            outcome = RepoScanOutcome(repo.repo_ref, "skipped", skipped_reason="private")
+            outcomes.append(outcome)
+            if progress is not None:
+                progress(
+                    ScanProgressEvent(
+                        "outcome",
+                        index,
+                        total,
+                        repo.repo_ref,
+                        status=outcome.status,
+                        error=outcome.skipped_reason,
+                        elapsed_seconds=_elapsed_seconds(progress_start),
+                    )
+                )
+            continue
+        outcome, deps_count = _scan_one(
+            repo,
+            work_root=work_root,
+            syft_path=syft,
+            timeout_seconds=timeout_seconds,
+            clone=clone,
+            command_runner=command_runner,
+            clock=clock,
+            repo_dir_fn=repo_dir_fn,
+            write_sbom_fn=write_sbom_fn,
+            write_status_fn=write_status_fn,
         )
+        outcomes.append(outcome)
+        if progress is not None:
+            progress(
+                ScanProgressEvent(
+                    "outcome",
+                    index,
+                    total,
+                    repo.repo_ref,
+                    status=outcome.status,
+                    deps_count=deps_count,
+                    elapsed_seconds=_elapsed_seconds(progress_start),
+                    error=outcome.error,
+                )
+            )
 
     report = ScanReport(tuple(outcomes))
     if report.failed:
         # Mixed-run rule: successes are already persisted; a hard failure makes the
-        # process exit 1 (main() sanitizes the message).
-        raise InternalError(f"{len(report.failed)} repository scan(s) failed")
+        # process exit 1. The report is attached so the CLI can still print final counts.
+        raise ScanBatchError(report)
     return report
+
+
+def _elapsed_seconds(started_at: _dt.datetime) -> float:
+    return (_dt.datetime.now(_dt.UTC) - started_at).total_seconds()

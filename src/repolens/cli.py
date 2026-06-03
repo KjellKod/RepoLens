@@ -7,10 +7,12 @@ import math
 import re
 import shlex
 import sys
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING, TextIO
 
 from repolens.bootstrap.cache import (
     DOC_LINK,
@@ -30,6 +32,9 @@ from .discovery.pipeline import run_discover
 from .exit_codes import ExitCode, InputError, InternalError
 
 PATH_PATTERN = re.compile(r"(/[^\s:]+)+")
+
+if TYPE_CHECKING:
+    from repolens.scan.runner import ScanProgressEvent, ScanReport
 
 
 class CommandStatus(Enum):
@@ -313,6 +318,11 @@ def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Require the verified shared Syft cache; never download or prompt.",
     )
+    subparser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress scan progress output on stderr.",
+    )
     subparser.set_defaults(handler=_handle_scan)
 
 
@@ -490,9 +500,88 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     # if any repository fails; a clean run returns a report (exit 0). A None
     # timeout lets the runner apply its default per-repo budget.
     extra = {"timeout_seconds": args.timeout} if args.timeout is not None else {}
-    report = scan_runner.scan_repos(args.work_root, repos, syft_path=syft_path, **extra)
-    summary = f"scanned {len(report.scanned)} repositories ({len(report.skipped)} already complete)"
-    return CommandResult(CommandStatus.SUCCESS, summary)
+    progress = _ScanProgressPrinter(quiet=args.quiet, stream=sys.stderr)
+    try:
+        report = scan_runner.scan_repos(
+            args.work_root,
+            repos,
+            syft_path=syft_path,
+            progress=progress,
+            **extra,
+        )
+    except scan_runner.ScanBatchError as exc:
+        report = exc.report
+    progress.finish(report)
+    if report.failed:
+        return CommandResult(CommandStatus.FINDINGS_OPEN)
+    return CommandResult(CommandStatus.SUCCESS)
+
+
+class _ScanProgressPrinter:
+    def __init__(self, *, quiet: bool, stream: TextIO) -> None:
+        self._quiet = quiet
+        self._stream = stream
+        self._tty = bool(getattr(stream, "isatty", lambda: False)())
+        self._started_at = time.monotonic()
+        self._last_line_length = 0
+
+    def __call__(self, event: ScanProgressEvent) -> None:
+        if self._quiet:
+            return
+        if event.kind == "start":
+            self._write_progress_line(_scan_start_line(event), newline=not self._tty)
+            return
+        if event.kind == "outcome":
+            self._write_progress_line(_scan_outcome_line(event), newline=True)
+
+    def finish(self, report: ScanReport) -> None:
+        if self._quiet:
+            return
+        total = len(report.outcomes)
+        elapsed = _format_seconds(time.monotonic() - self._started_at)
+        line = (
+            f"Done: {total} repos — {len(report.scanned)} scanned, "
+            f"{len(report.skipped)} skipped, {len(report.failed)} "
+            f"failed in {elapsed}."
+        )
+        self._write_progress_line(line, newline=True)
+
+    def _write_progress_line(self, line: str, *, newline: bool) -> None:
+        if self._tty:
+            padding = " " * max(0, self._last_line_length - len(line))
+            text = f"\r{line}{padding}"
+            self._last_line_length = len(line)
+            if newline:
+                text += "\n"
+                self._last_line_length = 0
+        else:
+            text = f"{line}\n"
+        print(text, end="", file=self._stream, flush=True)
+
+
+def _scan_start_line(event: ScanProgressEvent) -> str:
+    return f"[{event.index}/{event.total}] {event.repo_ref} — cloning…"
+
+
+def _scan_outcome_line(event: ScanProgressEvent) -> str:
+    prefix = f"[{event.index}/{event.total}] {event.repo_ref}"
+    status = event.status
+    if status == "scanned":
+        deps_count = event.deps_count
+        deps_count = 0 if deps_count is None else deps_count
+        elapsed = _format_seconds(event.elapsed_seconds)
+        return f"{prefix} ✓ {deps_count} deps ({elapsed})"
+    if status == "skipped" and event.error == "private":
+        return f"{prefix} 🔒 skipped (private, needs auth)"
+    if status == "skipped":
+        return f"{prefix} ↻ skipped (cached)"
+    reason = _sanitize(str(event.error or "unknown error"), redact_paths=True)
+    return f"{prefix} ✗ failed: {reason}"
+
+
+def _format_seconds(value: float | None) -> str:
+    seconds = 0.0 if value is None else float(value)
+    return f"{seconds:.1f}s"
 
 
 def _ensure_syft_for_scan(args: argparse.Namespace) -> Path:

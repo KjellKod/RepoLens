@@ -318,8 +318,8 @@ produces one SBOM per repo. It does **not** re-run discovery and is independentl
 rerunnable.
 
 ```
-repolens scan --work-root work [--timeout SECONDS] [--yes] [--offline]
-repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [--yes]
+repolens scan --work-root work [--timeout SECONDS] [--yes] [--offline] [--quiet]
+repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [--yes] [--quiet]
 ```
 
 - `--work-root` — the pipeline work root. Per-repo artifacts land under
@@ -338,6 +338,8 @@ repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [
 - `--offline` — require the verified shared cache. Scan never downloads or prompts; if the
   cache is absent or stale, it exits with a usage error and tells you to run
   `repolens bootstrap`.
+- `--quiet` — suppress per-repo progress and the final scan summary. By default, scan writes
+  progress to stderr so stdout stays clean for automation.
 
 For the default bridge, checked rows in `repos.candidate.md` are joined back to
 `discovered.json`. Unticked rows and hard exclusions are skipped. Each checked repo's
@@ -353,6 +355,10 @@ store (token-redacted, schema-validated). A completed SBOM lets a rerun **skip**
 Every successful SBOM is persisted even within a mixed run; if any repo fails the process
 exits `1` after the rest finish. Token redaction is applied to both the SBOM and
 `scan.status.json` before they are written.
+
+During a multi-repo run, stderr shows one line when each approved repo starts, one outcome line
+when it finishes or is skipped, and a final `Done:` count. Non-TTY stderr gets plain appended
+lines; TTY stderr may rewrite the in-progress line. stdout remains empty.
 
 `scan` orchestrates external tools only — it never reimplements SBOM generation or license
 detection. On a cache miss it acquires only RepoLens's pinned Syft and verifies it through

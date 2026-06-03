@@ -578,11 +578,21 @@ class ScanCliTests(unittest.TestCase):
             with (
                 mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
                 mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+                redirect_stdout(io.StringIO()) as stdout,
+                redirect_stderr(io.StringIO()) as stderr,
             ):
                 code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
             self.assertEqual(code, 0)
+            self.assertEqual(stdout.getvalue(), "")
             self.assertTrue(store.is_repo_scanned(work_root, "acme-alpha"))
+            progress = stderr.getvalue()
+            self.assertIn("[1/1] acme-alpha — cloning…", progress)
+            self.assertRegex(progress, r"\[1/1\] acme-alpha ✓ 1 deps \([0-9.]+s\)")
+            self.assertRegex(
+                progress,
+                r"Done: 1 repos — 1 scanned, 0 skipped, 0 failed in [0-9.]+s\.",
+            )
 
     def test_scan_work_root_defaults_to_checked_discover_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -664,7 +674,9 @@ class ScanCliTests(unittest.TestCase):
 
             def fake_runner(argv, *, timeout):
                 if "acme-bad" in argv[2]:
-                    return subprocess.CompletedProcess(list(argv), 1, stdout="", stderr="boom")
+                    return subprocess.CompletedProcess(
+                        list(argv), 1, stdout="", stderr="boom at /tmp/acme/private"
+                    )
                 return subprocess.CompletedProcess(
                     list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
                 )
@@ -673,13 +685,156 @@ class ScanCliTests(unittest.TestCase):
             with (
                 mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
                 mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+                redirect_stdout(io.StringIO()) as stdout,
                 redirect_stderr(stderr),
             ):
                 code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
             self.assertEqual(code, 1)
+            self.assertEqual(stdout.getvalue(), "")
             self.assertTrue(store.is_repo_scanned(work_root, "acme-ok"))
             self.assertFalse(store.is_repo_scanned(work_root, "acme-bad"))
+            progress = stderr.getvalue()
+            self.assertIn("[1/2] acme-ok ✓ 1 deps", progress)
+            self.assertIn("[2/2] acme-bad ✗ failed: boom at [REDACTED_PATH]", progress)
+            self.assertNotIn("/tmp/acme/private", progress)
+            self.assertRegex(
+                progress,
+                r"Done: 2 repos — 1 scanned, 0 skipped, 1 failed in [0-9.]+s\.",
+            )
+            self.assertNotIn("Internal error", progress)
+
+    def test_scan_quiet_suppresses_progress_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            with (
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+                redirect_stdout(io.StringIO()) as stdout,
+                redirect_stderr(io.StringIO()) as stderr,
+            ):
+                code = cli.main(
+                    [
+                        "scan",
+                        "--work-root",
+                        str(work_root),
+                        "--repos",
+                        str(repos_path),
+                        "--quiet",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertEqual(stderr.getvalue(), "")
+
+    def test_scan_private_repo_reports_auth_skip_without_clone(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [
+                    {
+                        "repo_ref": "acme-private",
+                        "clone_url": "https://example.invalid/acme-private",
+                        "private": True,
+                    }
+                ],
+            )
+            clone_calls = []
+
+            def clone_spy(options):
+                clone_calls.append(options)
+                return _fake_clone(options)
+
+            stderr = io.StringIO()
+            with (
+                mock.patch("repolens.scan.runner.hardened_clone", clone_spy),
+                redirect_stdout(io.StringIO()) as stdout,
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(stdout.getvalue(), "")
+            self.assertEqual(clone_calls, [])
+            progress = stderr.getvalue()
+            self.assertIn("[1/1] acme-private 🔒 skipped (private, needs auth)", progress)
+            self.assertRegex(
+                progress,
+                r"Done: 1 repos — 0 scanned, 1 skipped, 0 failed in [0-9.]+s\.",
+            )
+
+    def test_scan_cached_repo_reports_cached_skip(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            store.write_sbom(
+                work_root,
+                "acme-alpha",
+                {
+                    "schema_version": "1.0",
+                    "repo": "acme-alpha",
+                    "generated_at": "2026-01-01T00:00:00Z",
+                    "tool": {"name": "syft", "version": "1.18.1"},
+                    "source": "https://example.invalid/acme-alpha",
+                    "artifacts": [],
+                },
+            )
+
+            stderr = io.StringIO()
+            with (
+                mock.patch("repolens.scan.runner.hardened_clone") as clone,
+                redirect_stdout(io.StringIO()) as stdout,
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(stdout.getvalue(), "")
+            clone.assert_not_called()
+            self.assertIn("[1/1] acme-alpha ↻ skipped (cached)", stderr.getvalue())
+
+    def test_scan_tty_rewrites_in_progress_line(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            stderr = _TtyStringIO()
+            with (
+                mock.patch("sys.stderr", stderr),
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+                redirect_stdout(io.StringIO()) as stdout,
+            ):
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
+
+            self.assertEqual(code, 0)
+            self.assertEqual(stdout.getvalue(), "")
+            output = stderr.getvalue()
+            self.assertIn("\r[1/1] acme-alpha — cloning…", output)
+            self.assertIn("\r[1/1] acme-alpha ✓ 1 deps", output)
 
     def test_scan_missing_syft_binary_exits_two(self) -> None:
         self._use_real_syft_ensure()
