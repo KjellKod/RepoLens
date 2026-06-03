@@ -55,6 +55,32 @@ def test_oversize_truncated_to_cap() -> None:
     assert len(body.encode("utf-8")) <= DEFAULT_LIMITS.license_text_bytes + 2  # newlines
 
 
+def test_multi_source_not_truncated_to_license_budget() -> None:
+    # A near-max LICENSE plus a README must not let wrap_untrusted_content's backstop cap
+    # silently trim the already-budgeted README tail off the combined agent context. The
+    # combined cap is the SUM of the included per-source budgets, not the license budget.
+    license_blob = "L" * (DEFAULT_LIMITS.license_text_bytes - 16)
+    readme_marker = "README_TAIL_SENTINEL"
+    readme_fill = "R" * (DEFAULT_LIMITS.readme_excerpt_bytes - len(readme_marker) - 1)
+    readme_blob = readme_fill + readme_marker
+    outcome = prescreen_item(
+        ItemContent(license_text=license_blob, readme_excerpt=readme_blob),
+        source="shortlist",
+        path="acme-lib|MIT",
+    )
+
+    assert outcome.routed_to_agent
+    context = outcome.wrapped_context
+    assert context is not None
+    body = context[context.index(">") + 1 : context.index("</untrusted_content>")]
+    # The README content survives — it would be cut off if the combined text were
+    # re-capped to the license-only budget.
+    assert readme_marker in body
+    assert len(body.encode("utf-8")) <= (
+        DEFAULT_LIMITS.license_text_bytes + DEFAULT_LIMITS.readme_excerpt_bytes + 2
+    )
+
+
 def test_no_content_routes_to_human() -> None:
     outcome = prescreen_item(ItemContent(), source="shortlist", path="acme-lib|MIT")
 

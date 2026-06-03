@@ -82,7 +82,7 @@ def prescreen_item(
     ``wrap_untrusted_content`` and carry no authority.
     """
 
-    sized_sources = _sized_sources(content, limits)
+    sized_sources, combined_cap = _sized_sources(content, limits)
     if not any(text.strip() for text in sized_sources):
         return PrescreenOutcome(route="human", human_reason="no_content")
 
@@ -102,37 +102,54 @@ def prescreen_item(
         )
 
     # Clean content: wrap (which re-caps + normalizes + escapes) and append the output
-    # instruction strictly AFTER the block (AC 5).
+    # instruction strictly AFTER the block (AC 5). The re-cap budget is the SUM of the
+    # per-source budgets actually included (computed in _sized_sources), not the
+    # license-only budget — otherwise wrap's backstop cap would silently trim the
+    # already-capped README/description/evidence tail off the combined payload. Each
+    # source is still individually bounded upstream; this only stops a double-truncation.
     wrapped = wrap_untrusted_content(
-        combined_raw, source=source, path=path, cap_bytes=limits.license_text_bytes, limits=limits
+        combined_raw, source=source, path=path, cap_bytes=combined_cap, limits=limits
     )
     wrapped_context = f"{wrapped}\n\n{_OUTPUT_INSTRUCTION}"
     return PrescreenOutcome(route="agent", wrapped_context=wrapped_context)
 
 
-def _sized_sources(content: ItemContent, limits: SecurityLimits) -> list[str]:
+def _sized_sources(content: ItemContent, limits: SecurityLimits) -> tuple[list[str], int]:
     """Decode + byte-cap each source without stripping injection-marker characters.
 
     Capping bounds DoS before screening; the per-source byte budgets match AC 5
     (LICENSE ≤ 32 KB, README ≤ 8 KB, description ≤ 512 B). Directional / control characters
     are intentionally preserved here so ``screen_untrusted_content`` can detect them; they
     are stripped later by ``wrap_untrusted_content`` before the agent sees the text.
+
+    Returns the capped sources plus the combined byte budget (the sum of the per-source
+    caps included, plus one byte per ``"\\n"`` join separator) so the caller can size
+    ``wrap_untrusted_content``'s backstop cap to the legitimately-budgeted combined
+    payload instead of the license-only budget.
     """
 
     sources: list[str] = []
+    budget = 0
     if content.license_text is not None:
         sources.append(_raw_cap(content.license_text, limits.license_text_bytes))
+        budget += limits.license_text_bytes
     if content.readme_excerpt is not None:
         sources.append(_raw_cap(content.readme_excerpt, limits.readme_excerpt_bytes))
+        budget += limits.readme_excerpt_bytes
     if content.description is not None:
         sources.append(_raw_cap(content.description, limits.description_bytes))
+        budget += limits.description_bytes
     # Fall back to flag-supplied evidence so an item with no clone-tree text still has a
     # context (capped to the description budget — these are short identifiers, not blobs).
     if content.evidence_anchor:
         sources.append(_raw_cap(content.evidence_anchor, limits.description_bytes))
+        budget += limits.description_bytes
     if content.evidence_url:
         sources.append(_raw_cap(content.evidence_url, limits.description_bytes))
-    return sources
+        budget += limits.description_bytes
+    if sources:
+        budget += len(sources) - 1  # "\n" separators added by the caller's join
+    return sources, budget
 
 
 def _raw_cap(value: bytes | str, cap_bytes: int) -> str:
