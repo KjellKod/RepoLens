@@ -6,9 +6,17 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
+from repolens.config import Config
 from repolens.data import store
+from repolens.data.limits import max_bytes_for
+from repolens.discovery.taxonomy import DEFAULT_CATEGORY
 from repolens.exit_codes import InputError
+from repolens.report.categories import RoutedRecord, build_category_index, route_occurrences
+from repolens.report.docx import render_docx
+from repolens.report.gate import ReportGateOpen, run_report_gate
+from repolens.report.selection import report_header_from_config, report_selection_from_config
 from repolens.security.redaction import redact_tokens
 from repolens.security.sanitize import (
     markdown_link,
@@ -58,8 +66,10 @@ class ReportResult:
 
     markdown_path: Path
     csv_path: Path
+    docx_path: Path
     row_count: int
     file_gaps: tuple[str, ...]
+    appendix_paths: tuple[Path, ...] = ()
 
 
 @dataclass
@@ -101,26 +111,64 @@ class _DisclosureAccumulator:
         )
 
 
-def render_main_report(work_root: Path, out_dir: Path | None = None) -> ReportResult:
-    """Render ``report.main.md`` and ``report.main.csv`` from R1 resolved artifacts."""
+def render_main_report(
+    work_root: Path,
+    out_dir: Path | None = None,
+    config: Config | None = None,
+) -> ReportResult:
+    """Render main and appendix report artifacts from resolved occurrences."""
 
     root = Path(work_root)
     output_dir = Path(out_dir) if out_dir is not None else root / "out"
+    gate = run_report_gate(root)
+    if not gate.clear:
+        raise ReportGateOpen(gate.message)
+
+    header = report_header_from_config(config)
+    selection = report_selection_from_config(config)
+    category_index = build_category_index(_read_discovered_or_empty(root))
+    default_category = _default_category(config)
+
     records, file_gaps = collect_resolved_records(root)
-    rows = aggregate_rows(records)
+    split = route_occurrences(records, category_index, selection.include, default_category)
+    rows = aggregate_rows(split.main_records)
 
     csv_text = redact_tokens(render_csv(rows))
     markdown_text = redact_tokens(render_markdown(rows, file_gaps))
+    docx_bytes = render_docx(header, COLUMNS, rows)
 
     csv_path = output_dir / "report.main.csv"
     markdown_path = output_dir / "report.main.md"
+    docx_path = output_dir / "report.main.docx"
     store.atomic_write_bytes(csv_path, csv_text.encode("utf-8"))
     store.atomic_write_bytes(markdown_path, markdown_text.encode("utf-8"))
+    store.atomic_write_bytes(docx_path, docx_bytes)
+
+    appendix_paths: list[Path] = []
+    for label, routed_records in split.appendix_records_by_label.items():
+        appendix_rows = aggregate_rows(routed_records)
+        stem = f"report.appendix.{quote(label, safe='')}"
+        appendix_csv_path = output_dir / f"{stem}.csv"
+        appendix_markdown_path = output_dir / f"{stem}.md"
+        appendix_csv = redact_tokens(render_csv(appendix_rows))
+        appendix_markdown = redact_tokens(
+            render_markdown(
+                appendix_rows,
+                (),
+                title=f"RepoLens Appendix: {label}",
+            )
+        )
+        store.atomic_write_bytes(appendix_csv_path, appendix_csv.encode("utf-8"))
+        store.atomic_write_bytes(appendix_markdown_path, appendix_markdown.encode("utf-8"))
+        appendix_paths.extend((appendix_markdown_path, appendix_csv_path))
+
     return ReportResult(
         markdown_path=markdown_path,
         csv_path=csv_path,
+        docx_path=docx_path,
         row_count=len(rows),
         file_gaps=tuple(file_gaps),
+        appendix_paths=tuple(appendix_paths),
     )
 
 
@@ -158,11 +206,12 @@ def collect_resolved_records(work_root: Path) -> tuple[list[dict[str, Any]], lis
     return records, sorted(file_gaps, key=lambda value: (value.casefold(), value))
 
 
-def aggregate_rows(records: Iterable[dict[str, Any]]) -> list[DisclosureRow]:
+def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[DisclosureRow]:
     """Deduplicate records by ``(name, spdx_id or UNKNOWN)`` and aggregate fields."""
 
     groups: dict[tuple[str, str], _DisclosureAccumulator] = {}
-    for record in records:
+    for raw_record in records:
+        record, extra_gaps = _record_and_extra_gaps(raw_record)
         name = str(record["name"])
         spdx_id = _normalized_spdx(record.get("spdx_id"))
         key = (name, spdx_id)
@@ -186,6 +235,7 @@ def aggregate_rows(records: Iterable[dict[str, Any]]) -> list[DisclosureRow]:
         group.origins.add(str(tags["origin"]))
         group.scopes.add(str(tags["scope"]))
         group.distributions.add(str(tags["distribution"]))
+        group.coverage_gaps.update(extra_gaps)
 
     return sorted(
         (group.to_row() for group in groups.values()),
@@ -216,11 +266,16 @@ def render_csv(rows: Sequence[DisclosureRow]) -> str:
     return serialize_csv_rows(csv_rows)
 
 
-def render_markdown(rows: Sequence[DisclosureRow], file_gaps: Sequence[str]) -> str:
+def render_markdown(
+    rows: Sequence[DisclosureRow],
+    file_gaps: Sequence[str],
+    *,
+    title: str = "RepoLens Main Report",
+) -> str:
     """Render report rows as sanitized Markdown."""
 
     lines = [
-        "# RepoLens Main Report",
+        f"# {title.replace(chr(10), ' ')}",
         "",
         "| " + " | ".join(_markdown_table_cell(column) for column in COLUMNS) + " |",
         "| " + " | ".join("---" for _ in COLUMNS) + " |",
@@ -298,6 +353,45 @@ def _markdown_source_urls(source_urls: Sequence[str]) -> str:
 
 def _markdown_table_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _record_and_extra_gaps(
+    raw_record: dict[str, Any] | RoutedRecord,
+) -> tuple[dict[str, Any], tuple[str, ...]]:
+    if isinstance(raw_record, RoutedRecord):
+        return raw_record.record, raw_record.extra_coverage_gaps
+    return raw_record, ()
+
+
+def _read_discovered_or_empty(work_root: Path) -> dict[str, object]:
+    path = Path(work_root) / "discovered.json"
+    if not path.exists():
+        return {"repositories": []}
+    value = store.load_json_capped(path, max_bytes=max_bytes_for("discovered"))
+    if not isinstance(value, dict):
+        raise InputError("discovered.json must be an object")
+    return value
+
+
+def _default_category(config: Config | None) -> str:
+    if config is None:
+        return DEFAULT_CATEGORY
+    discover = config.values.get("discover", {})
+    if discover is None:
+        return DEFAULT_CATEGORY
+    if not isinstance(discover, dict):
+        raise InputError("config discover must be an object")
+    taxonomy = discover.get("taxonomy", {})
+    if taxonomy is None:
+        return DEFAULT_CATEGORY
+    if not isinstance(taxonomy, dict):
+        raise InputError("config discover.taxonomy must be an object")
+    raw_default = taxonomy.get("default_category")
+    if raw_default is None:
+        return DEFAULT_CATEGORY
+    if not isinstance(raw_default, str) or not raw_default.strip():
+        raise InputError("config discover.taxonomy.default_category must be a non-empty string")
+    return raw_default.strip()
 
 
 def _path_sort_key(path: Path) -> tuple[str, str]:

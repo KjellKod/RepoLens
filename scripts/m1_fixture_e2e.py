@@ -20,7 +20,7 @@ from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from repolens.config import load_config
+from repolens.config import Config
 from repolens.data import store
 from repolens.data.validation import validate_artifact
 from repolens.discovery.gh import GhRunResult
@@ -80,7 +80,8 @@ def main() -> int:
     fixtures = manifest["fixtures"]
 
     work_root.mkdir(parents=True, exist_ok=True)
-    _run_discover(owner, fixtures, work_root)
+    config = _fixture_config()
+    _run_discover(owner, fixtures, work_root, config)
     approved_repos = _approve_candidates(owner, fixtures, work_root)
 
     clone_targets: dict[Path, str] = {}
@@ -126,7 +127,16 @@ def main() -> int:
             evidence_resolver=_public_resolver,
         )
 
-    report = render_main_report(work_root, work_root / "reports")
+    store.atomic_write_json(
+        work_root / "shortlist.json",
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "open_count": 0,
+            "items": [],
+        },
+    )
+    report = render_main_report(work_root, work_root / "reports", config)
     summary = _validate_and_summarize(work_root, report.csv_path)
     print(json.dumps(summary, sort_keys=True))
     return 0
@@ -139,7 +149,12 @@ def _load_manifest(fixture_root: Path) -> dict[str, object]:
     return manifest
 
 
-def _run_discover(owner: str, fixtures: list[dict[str, object]], work_root: Path) -> None:
+def _run_discover(
+    owner: str,
+    fixtures: list[dict[str, object]],
+    work_root: Path,
+    config: Config,
+) -> None:
     repos = [
         {
             "name": fixture["id"],
@@ -160,7 +175,7 @@ def _run_discover(owner: str, fixtures: list[dict[str, object]], work_root: Path
     run_discover(
         owner=owner,
         work_root=work_root,
-        config=load_config(Path.cwd(), None),
+        config=config,
         runner=runner,
         generated_at="2026-01-01T00:00:00+00:00",
     )
@@ -311,6 +326,11 @@ def _validate_and_summarize(work_root: Path, csv_path: Path) -> dict[str, object
 
     with csv_path.open(encoding="utf-8", newline="") as handle:
         report_rows = list(csv.DictReader(handle))
+    appendix_paths = sorted((work_root / "reports").glob("report.appendix.*.csv"))
+    appendix_rows = []
+    for appendix_path in appendix_paths:
+        with appendix_path.open(encoding="utf-8", newline="") as handle:
+            appendix_rows.extend(csv.DictReader(handle))
 
     return {
         "approved_repos": discovered["candidate_count"],
@@ -318,6 +338,8 @@ def _validate_and_summarize(work_root: Path, csv_path: Path) -> dict[str, object
         "sbom_artifacts": sbom_rows,
         "resolved_rows": resolved_rows,
         "report_rows": len(report_rows),
+        "appendix_rows": len(appendix_rows),
+        "report_union_rows": len(report_rows) + len(appendix_rows),
         "report_rows_with_license": sum(1 for row in report_rows if row["spdx_id"] != "UNKNOWN"),
         "report_rows_with_source_url": sum(1 for row in report_rows if row["source_url"]),
         "deduped_shared_component_rows": sum(
@@ -325,7 +347,37 @@ def _validate_and_summarize(work_root: Path, csv_path: Path) -> dict[str, object
         ),
         "report_md_exists": (work_root / "reports" / "report.main.md").exists(),
         "report_csv_exists": csv_path.exists(),
+        "report_docx_exists": (work_root / "reports" / "report.main.docx").exists(),
+        "appendix_csv_exists": bool(appendix_paths),
+        "appendix_md_exists": bool(list((work_root / "reports").glob("report.appendix.*.md"))),
     }
+
+
+def _fixture_config() -> Config:
+    return Config(
+        values={
+            "discover": {
+                "taxonomy": {
+                    "default_category": "tooling",
+                    "topics": {
+                        "python": "runtime",
+                        "node": "runtime",
+                        "go": "tooling",
+                        "rust": "tooling",
+                        "jvm": "tooling",
+                    },
+                }
+            },
+            "report": {
+                "selection": {"include": ["runtime"]},
+                "header": {
+                    "org_name": "RepoLens Synthetic Fixture Org",
+                    "legal_text": "Synthetic fixture legal notice for offline validation.",
+                },
+            },
+        },
+        sources=(),
+    )
 
 
 if __name__ == "__main__":

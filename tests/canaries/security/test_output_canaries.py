@@ -3,12 +3,16 @@ from __future__ import annotations
 import csv
 import io
 import socket
+import zipfile
 from pathlib import Path
+from xml.etree import ElementTree
 
 import pytest
 
+from repolens.config import Config
 from repolens.report import main as report_main
 from repolens.report import render_main_report
+from repolens.report.gate import ReportGateOpen
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import HttpFetchOptions, validate_url_for_fetch
 from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
@@ -59,7 +63,7 @@ def test_p6a_report_csv_artifact_neutralizes_formula_fields(
         ],
     )
 
-    csv_path = render_main_report(tmp_path, tmp_path / "out").csv_path
+    csv_path = render_main_report(tmp_path, tmp_path / "out", _report_config()).csv_path
     data = csv_path.read_bytes()
     parsed = list(csv.DictReader(io.StringIO(data.decode("utf-8"))))
 
@@ -89,13 +93,105 @@ def test_p6a_report_markdown_artifact_sanitizes_hrefs_and_names(
         ],
     )
 
-    data = render_main_report(tmp_path, tmp_path / "out").markdown_path.read_bytes()
+    data = render_main_report(
+        tmp_path,
+        tmp_path / "out",
+        _report_config(),
+    ).markdown_path.read_bytes()
     markdown = data.decode("utf-8")
 
     assert "`acme-markdown\\|name`" in markdown
     assert "javascript:" not in markdown
     assert "javascript&#58;alert\\(1\\)" in markdown
     assert "](javascript" not in markdown
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_p6b_report_docx_artifact_escapes_untrusted_markup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_report_records(
+        tmp_path,
+        monkeypatch,
+        [
+            _resolved_record(
+                name="acme <w:pwned/>",
+                evidence_url="https://example.invalid/license?x=<bad>&y=1",
+            )
+        ],
+    )
+
+    docx_path = render_main_report(tmp_path, tmp_path / "out", _report_config()).docx_path
+    with zipfile.ZipFile(docx_path) as archive:
+        xml = archive.read("word/document.xml")
+
+    ElementTree.fromstring(xml)
+    assert b"<w:pwned/>" not in xml
+    assert b"acme &lt;w:pwned/&gt;" in xml
+    assert b"x=&lt;bad&gt;&amp;y=1" in xml
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_p6b_appendix_csv_neutralizes_formula_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_report_records(
+        tmp_path,
+        monkeypatch,
+        [_resolved_record(name="=appendix-name", version="+appendix-version")],
+    )
+
+    render_main_report(tmp_path, tmp_path / "out", _report_config(include=("runtime",)))
+    data = (tmp_path / "out" / "report.appendix.uncategorized.csv").read_bytes()
+
+    assert b'"\t=appendix-name"' in data
+    assert b'"\t+appendix-version"' in data
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_p6b_appendix_markdown_sanitizes_hrefs_and_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_report_records(
+        tmp_path,
+        monkeypatch,
+        [_resolved_record(name="appendix|name", evidence_url="javascript:alert(1)")],
+    )
+
+    render_main_report(tmp_path, tmp_path / "out", _report_config(include=("runtime",)))
+    markdown = (tmp_path / "out" / "report.appendix.uncategorized.md").read_text(encoding="utf-8")
+
+    assert "`appendix\\|name`" in markdown
+    assert "javascript:" not in markdown
+    assert "javascript&#58;alert\\(1\\)" in markdown
+    assert "](javascript" not in markdown
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_p6b_report_gate_blocks_while_shortlist_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_report_records(tmp_path, monkeypatch, [_resolved_record()])
+    (tmp_path / "shortlist.json").write_text(
+        (
+            '{"schema_version":"1.0","generated_at":"2026-01-01T00:00:00Z",'
+            '"open_count":1,"items":[{"status":"open"}]}\n'
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ReportGateOpen):
+        render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+    assert not (tmp_path / "out" / "report.main.csv").exists()
 
 
 @pytest.mark.offline
@@ -256,3 +352,15 @@ def _stub_flag_json_writers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(flag_stage.store, "write_inventory", write_inventory)
     monkeypatch.setattr(flag_stage.store, "write_shortlist", write_shortlist)
+
+
+def _report_config(include: tuple[str, ...] | None = None) -> Config:
+    report: dict[str, object] = {
+        "header": {
+            "org_name": "Example Org",
+            "legal_text": "Example legal notice.",
+        }
+    }
+    if include is not None:
+        report["selection"] = {"include": list(include)}
+    return Config(values={"report": report}, sources=())

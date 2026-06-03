@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 48,
+    "expected_active_count": 53,
     "markers": [
         "offline",
         "security",
@@ -294,6 +294,41 @@
             "status": "active",
             "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_shortlist_token_absent_from_artifacts_and_agent",
             "guardrail": "token_absent_from_artifacts_and_agent"
+        },
+        {
+            "id": "p6b_report_docx_escapes_untrusted_markup",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_output_canaries.py::test_p6b_report_docx_artifact_escapes_untrusted_markup",
+            "guardrail": "docx_xml_escaping"
+        },
+        {
+            "id": "p6b_appendix_csv_neutralizes_formula_fields",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_output_canaries.py::test_p6b_appendix_csv_neutralizes_formula_fields",
+            "guardrail": "csv_formula_neutralization"
+        },
+        {
+            "id": "p6b_appendix_markdown_sanitizes_hrefs_and_names",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_output_canaries.py::test_p6b_appendix_markdown_sanitizes_hrefs_and_names",
+            "guardrail": "markdown_href_sanitization"
+        },
+        {
+            "id": "p6b_report_gate_blocks_while_shortlist_open",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_output_canaries.py::test_p6b_report_gate_blocks_while_shortlist_open",
+            "guardrail": "report_shortlist_gate"
+        },
+        {
+            "id": "p6b_report_docx_redacts_tokens",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_token_canaries.py::test_p6b_report_docx_redacts_tokens",
+            "guardrail": "token_redaction"
+        },
+        {
+            "id": "x2_injection_agent_family",
+            "status": "pending",
+            "pending_reason": "Capability-minimized agent and evidence re-fetch flow are not present in M1."
         }
     ]
 }

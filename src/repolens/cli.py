@@ -14,7 +14,7 @@ from enum import Enum
 from pathlib import Path
 from urllib.parse import urlparse
 
-from repolens.report import render_main_report
+from repolens.report import ReportGateOpen, render_main_report
 from repolens.security.redaction import redact_tokens
 
 from .config import load_config
@@ -124,15 +124,15 @@ _STAGE_HELP = {
         ),
     ),
     "report": StageHelp(
-        help="Assemble the deduplicated main disclosure report.",
+        help="Assemble gated main, appendix, and docx disclosure reports.",
         description=(
-            "Stage 6/6 — assemble the deduplicated main disclosure from resolved artifacts."
+            "Stage 6/6 — assemble gated disclosure reports from resolved artifacts."
         ),
         epilog=_stage_epilog(
-            "resolved.ndjson files from resolve; shortlist gating is planned but not "
-            "wired at HEAD.",
+            "resolved.ndjson files from resolve, discovered.json categories when present, "
+            "a clear shortlist.json when present, and report.header config for docx.",
             "repolens report --work-root <WORK> --out-dir reports",
-            "report.main.md + report.main.csv.",
+            "report.main.{md,csv,docx} + report.appendix.<category>.{md,csv}.",
             "review and share it — you are responsible for validating the result.",
         ),
     ),
@@ -353,7 +353,7 @@ def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--out-dir",
         type=Path,
-        help="Directory for report.main.md and report.main.csv.",
+        help="Directory for report.main.{md,csv,docx} and appendix artifacts.",
     )
     subparser.set_defaults(handler=_report)
 
@@ -526,10 +526,14 @@ def _load_repo_specs(path: Path, repo_spec_cls: type) -> list:
 
 
 def _report(args: argparse.Namespace) -> CommandResult:
-    result = render_main_report(args.work_root, args.out_dir)
+    try:
+        result = render_main_report(args.work_root, args.out_dir, args.runtime_config)
+    except ReportGateOpen as exc:
+        return CommandResult(CommandStatus.FINDINGS_OPEN, str(exc))
+    written = [result.markdown_path, result.csv_path, result.docx_path, *result.appendix_paths]
     return CommandResult(
         CommandStatus.SUCCESS,
-        f"wrote {result.markdown_path} and {result.csv_path}",
+        "wrote " + ", ".join(str(path) for path in written),
     )
 
 

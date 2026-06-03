@@ -165,7 +165,7 @@ resolved shortlist; it never resolves items itself.
       two-queue `shortlist.md` with human checkboxes; every cited evidence URL is
       **re-fetched and verified** before an item can close. **Security-critical: full
       workflow lane** ([execution doc](rpl_execution.md#execution-intensity--model-lanes)).
-- [ ] P6b — report full: extends the merged P6a with category selection →
+- [x] P6b — report full: extends the merged P6a with category selection →
       `report.main.{md,csv,docx}` + `report.appendix.<category>.*`; docx from the
       generic template with org/legal text injected at runtime; **refuses to assemble
       while any flagged item is open**.
@@ -178,9 +178,9 @@ resolved shortlist; it never resolves items itself.
 **Acceptance** (owner in bold)
 - [x] **P5** — **injection canaries green**: suspicious content routed to human, never
       auto-resolved; every cited evidence URL re-fetched and verified.
-- [ ] **P6b** — `report` **refuses to assemble** while any flagged item is open.
-- [ ] **P6b** — excluded categories + first-party appear in appendices (nothing deleted).
-- [ ] **P6b** — docx renders from the generic template; org/legal text injected at runtime.
+- [x] **P6b** — `report` **refuses to assemble** while any flagged item is open.
+- [x] **P6b** — excluded categories + first-party appear in appendices (nothing deleted).
+- [x] **P6b** — docx renders from the generic template; org/legal text injected at runtime.
 - [ ] **Round** — full [definition of done](rpl_requirements.md) met; dogfood disclosure
       produced for RepoLens itself. **Not tickable while issue #20 (dogfood coverage
       gaps) is open** — M3 is the final backstop if the M2 re-measure left anything.
