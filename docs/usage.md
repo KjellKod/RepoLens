@@ -1,16 +1,16 @@
 # RepoLens — usage
 
-> In active development. This guide describes the intended workflow and **grows as each
-> command ships** (tracked on the [roadmap](roadmap/rpl_roadmap.md)). For the full design,
-> see [docs/roadmap](roadmap/rpl_README.md).
+> All six pipeline stages (`discover → scan → resolve → flag → shortlist → report`) are
+> shipped. For the design behind them see [docs/roadmap](roadmap/rpl_README.md); the
+> original build plan is archived under [docs/roadmap/archive](roadmap/archive/rpl_roadmap.md).
 
 ## Prerequisites
 
 - `gh` (authenticated), `git`, `python3`.
 - `pip install -e .` (or `pip install -e '.[test]'` for the test suite) — provides the
   `repolens` command and the importable package the `python -m repolens.*` commands use.
-- `syft` + `scancode` — installed and version-pinned by a future bootstrap step
-  (checksum/signature-verified).
+- `syft` + `scancode` — acquired and version-pinned by RepoLens's own bootstrap step,
+  checksum/signature-verified before use (see [Tool bootstrap](#tool-bootstrap)).
 - For mobile license enrichment (optional, auto-detected): a build toolchain
   (JDK + Gradle for Android, Xcode/SPM or a `GITHUB_TOKEN` for iOS).
 
@@ -67,11 +67,8 @@ python3 -m repolens.security.name_hygiene                 # scan tracked tree; e
 python3 -m repolens.security.name_hygiene --self-test     # prove the guard fires (invented sentinel; no config)
 ```
 
-Findings are emitted as `sha256:` hashes, never the literal name, so a real forbidden
-value never appears in output or logs.
-
-Findings are reported only by a non-reversible `sha256:` token id, so a real name never
-lands in CI logs.
+Findings are emitted as non-reversible `sha256:` hashes, never the literal name, so a real
+forbidden value never appears in output or CI logs.
 
 ## Configuration (all untracked / local)
 

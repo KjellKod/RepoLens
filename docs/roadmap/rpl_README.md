@@ -23,7 +23,7 @@ and secure against untrusted repo content by design.
 |-----------|-----------------|
 | **Orchestrate, don't reimplement** | Wrap Syft, ScanCode, registry/GitHub/deps.dev APIs, native mobile tools. No home-grown parsers or license DB. |
 | **Ship the thin slice first** | A working multi-language inventory + report lands in M1; depth is added behind it. |
-| **Parallel by default** | Fixed on-disk schemas let every pipeline stage be built concurrently. See [roadmap](rpl_roadmap.md). |
+| **Parallel by default** | Fixed on-disk schemas let every pipeline stage be built concurrently. See the [archived roadmap](archive/rpl_roadmap.md). |
 | **Security is scope, not a phase** | The [security guardrails](rpl_security.md) are mandatory from M0 and gate every milestone. No deviation. |
 | **KISS / DRY / SRP / quality** | Small single-purpose components; shared primitives; on-disk files over a database; tested. |
 | **No speculative scope** | Build exactly the stated requirements — fully — and nothing invented beyond them. |
@@ -37,5 +37,5 @@ and secure against untrusted repo content by design.
 | [architecture.md](rpl_architecture.md) | The orchestration design (pipeline, resolution ladder, storage, report views) |
 | [security.md](rpl_security.md) | **Mandatory** guardrails + canary tests — must not deviate |
 | [license-policy.md](rpl_license-policy.md) | The default, config-ready risk policy |
-| [roadmap.md](rpl_roadmap.md) | Parallel workstreams, sequencing, milestones, acceptance |
-| [execution.md](rpl_execution.md) | How we drive the build: Quest vs Workflow vs prompt, parallel rounds, brief seeds, Quest placement |
+| [archive/roadmap.md](archive/rpl_roadmap.md) | ✅ *Delivered (historical).* The parallel workstreams, sequencing, milestones, acceptance the build followed. |
+| [archive/execution.md](archive/rpl_execution.md) | ✅ *Delivered (historical).* How the build was driven: Quest vs Workflow lanes, parallel rounds, gates. |
