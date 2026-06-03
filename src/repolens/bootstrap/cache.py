@@ -81,20 +81,7 @@ def load_syft_pin(
 ) -> SyftPinSummary:
     """Read the current platform's RepoLens Syft pin from ``pins.toml``."""
 
-    pins = load_pins(pins_path)
-    plat = platform_key or current_platform()
-    syft = pins.tool("syft")
-    artifact = syft.artifact_for(plat)
-    if syft.signature is None:
-        raise UsageError("Syft pin is missing its required signature block.")
-    return SyftPinSummary(
-        version=syft.version,
-        artifact=artifact.artifact,
-        artifact_sha256=artifact.sha256,
-        source=syft.source,
-        platform_key=plat,
-        signature=syft.signature,
-    )
+    return _syft_pin_from_pins(load_pins(pins_path), platform_key=platform_key)
 
 
 def syft_cache_dir(pin: SyftPinSummary, *, cache_home: Path | str | None = None) -> Path:

@@ -78,3 +78,39 @@ not broken.
 | Evidence model + capability-minimized agent | — |
 | Report views + docx render | — |
 | **Security primitives** (clone, fetch, parse, sanitize, redact) | — |
+
+## Tool bootstrap & integrity
+
+RepoLens acquires and verifies its own pinned toolchain rather than trusting whatever is on
+the machine. `src/repolens/bootstrap/pins.toml` is the single source of truth: exact
+versions plus sha256 digests for Syft, ScanCode, cosign, `git`, `gh`, and the base image
+(by digest) — never `latest`.
+
+Syft acquisition is **fail-closed**, in order, all **before** the binary is ever made
+executable or run:
+
+1. **sha256** of the downloaded artifact must equal the pinned digest;
+2. **cosign** verifies the signed checksums file against the pinned signer identity / OIDC
+   issuer;
+3. a **manifest-hash-signed cross-check** ties the pin in `pins.toml` to the cosign-verified
+   checksums entry, so a maintainer cannot quietly edit the pin to a value the signature does
+   not vouch for.
+
+ScanCode installs via a hash-pinned `--require-hashes` requirements file. Resolved
+versions/digests are recorded in `tool_versions.json` (under the gitignored work root). The
+manifest can be validated offline with `python3 -m repolens.bootstrap --dry-run`.
+
+## Scan execution model & sandbox scope
+
+`scan` runs clone + Syft **in-process** with a hardened git environment, an ephemeral
+per-repo workdir (guaranteed `finally` cleanup), a per-repo wall-clock timeout, and no
+secrets (no GitHub token) in the child environment. No untrusted code from a scanned
+repository executes — clone hooks/symlinks/file-protocol are disabled and Syft is a static
+inventory.
+
+Full container/VM **runner-layer** isolation — read-only root FS, dropped Linux
+capabilities, non-root UID, CPU/memory/disk quotas, network egress allowlist — is a
+deliberate scope boundary, layered at the runner rather than inside the process. The
+mobile/native enrichment path (P3b) is the one execution-bearing step and runs only through
+the sandbox boundary; see [security.md](rpl_security.md) for the mandatory guardrails and
+canaries.

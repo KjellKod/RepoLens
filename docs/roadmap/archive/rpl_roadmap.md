@@ -1,5 +1,11 @@
 # Roadmap — fast, parallel, sequenced
 
+> ✅ **Delivered & archived.** This was the build plan; all milestones M0–M3 shipped.
+> Kept for historical reference — it is **not** current product documentation. For how
+> RepoLens works today, see the [README](../../../README.md) and [usage guide](../../usage.md);
+> for the live design, the [architecture](../rpl_architecture.md),
+> [security](../rpl_security.md), and [decisions](../rpl_decisions.md) docs.
+
 Strategy: build **foundation in parallel**, freeze the on-disk schemas early so **every
 pipeline stage can be built concurrently** against fixtures, ship a **thin end-to-end
 slice** first, then deepen. Security primitives and their canaries are part of the
@@ -30,7 +36,7 @@ foundation — not a later phase — and **gate every milestone**.
 | ID | Deliverable | Depends |
 |----|-------------|---------|
 | **X1** | Test harness + multi-language fixtures (invented names) + the **watermark canary** | F3 |
-| **X2** | **Security canary suite** ([security.md](rpl_security.md)) — must-pass, offline | F2 |
+| **X2** | **Security canary suite** ([security.md](../rpl_security.md)) — must-pass, offline | F2 |
 | **X3** | CI: offline PR job (lint + unit + integration + canaries + **name-hygiene guard** + version/checksum pins); scheduled live-smoke + **dogfood on self** | F1, X1, X2 |
 
 ## Parallelism & critical path
@@ -123,9 +129,9 @@ licenses (that's P3). The "planted AGPL → BLOCK" acceptance is **P4's**, not P
 **Delivery** (each Quest ticks its ID on merge)
 - [x] P3b — resolve full: (1) ScanCode invoked **only** on items the API ladder left
       unresolved, scoped to a single package dir / `LICENSE*` files
-      ([architecture, ladder step 3](rpl_architecture.md)); (2) mobile native enrichment
+      ([architecture, ladder step 3](../rpl_architecture.md)); (2) mobile native enrichment
       (AboutLibraries / LicensePlist) — auto-detected, **opt-in and off by default**,
-      run only inside the sandbox spec of [security.md §2 + §4](rpl_security.md)
+      run only inside the sandbox spec of [security.md §2 + §4](../rpl_security.md)
       (no secrets mounted, read-only repo mount, egress allowlist, quotas + timeout).
 - [x] P4 — flag: tag `origin`/`scope`/`distribution`, apply F5 policy tiers, dedup →
       write `inventory.json` + `shortlist.md`; exit non-zero while any item is open.
@@ -181,13 +187,13 @@ resolved shortlist; it never resolves items itself.
 - [x] **P6b** — `report` **refuses to assemble** while any flagged item is open.
 - [x] **P6b** — excluded categories + first-party appear in appendices (nothing deleted).
 - [x] **P6b** — docx renders from the generic template; org/legal text injected at runtime.
-- [ ] **Round** — full [definition of done](rpl_requirements.md) met; dogfood disclosure
+- [ ] **Round** — full [definition of done](../rpl_requirements.md) met; dogfood disclosure
       produced for RepoLens itself. **Not tickable while issue #20 (dogfood coverage
       gaps) is open** — M3 is the final backstop if the M2 re-measure left anything.
 
 ## Standing gates (every milestone)
 
-- The full **security canary suite** ([security.md](rpl_security.md)) is green — no deviation.
+- The full **security canary suite** ([security.md](../rpl_security.md)) is green — no deviation.
 - The **name-hygiene guard** is green; no owner/repo names in code, tests, or docs.
   Public CI uses invented sentinel tokens only. Real owner/repo/company names are
   supplied privately through gitignored local config discovered from the main checkout.
