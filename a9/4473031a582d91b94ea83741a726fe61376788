@@ -1,0 +1,21 @@
+src/repolens/cli.py
+  s_325f39f33357ac::t_d327413cadfe02 128
+src/repolens/report/docx.py
+  s_325f39f33357ac::t_d327413cadfe02 67
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a94473031a582d91b94ea83741a726fe61376788",
+  "prompts": {},
+  "sessions": {
+    "s_325f39f33357ac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "60662e9c-7edd-4763-8b08-b0d6860efd61",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
