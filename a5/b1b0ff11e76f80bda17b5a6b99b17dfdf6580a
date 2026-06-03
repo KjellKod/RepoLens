@@ -1,0 +1,24 @@
+src/repolens/shortlist/prescreen.py
+  s_80bf0aee96b635::t_7c0636c059a019 117,124-128,132,135,138,141,146,149-152
+  s_80bf0aee96b635::t_1b6fc3dc335b26 105-109,111
+  s_80bf0aee96b635::t_ab5240a6102a10 85
+tests/unit/shortlist/test_prescreen.py
+  s_80bf0aee96b635::t_c53747c1f8ec3c 64-65
+  s_80bf0aee96b635::t_165c3ae0c68105 58-63,66-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a5b1b0ff11e76f80bda17b5a6b99b17dfdf6580a",
+  "prompts": {},
+  "sessions": {
+    "s_80bf0aee96b635": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "764e156b-145d-41e3-ab9b-cb21d2eea30d",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
