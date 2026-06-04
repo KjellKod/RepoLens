@@ -13,7 +13,15 @@ from jsonschema.exceptions import ValidationError
 from repolens.data.errors import SchemaValidationError
 
 SCHEMA_NAMES = frozenset(
-    {"sbom", "resolved", "discovered", "inventory", "shortlist", "shortlist_proposals"}
+    {
+        "sbom",
+        "resolved",
+        "discovered",
+        "inventory",
+        "shortlist",
+        "shortlist_proposals",
+        "local_config",
+    }
 )
 
 

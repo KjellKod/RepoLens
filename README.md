@@ -40,7 +40,7 @@ python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene 
   ready-to-share **`.docx`**, plus per-category appendices. One row per library, nothing
   silently dropped.
 - **Risk flagged, not buried** — copyleft, network-copyleft, non-commercial, and
-  source-available licenses surfaced against a configurable policy.
+  source-available licenses surfaced against RepoLens's policy tiers.
 - **Ambiguity resolved with evidence** — anything the tooling can't determine is flagged
   and settled against a *fetchable* source (LICENSE permalink, registry field, SPDX
   match), with a human approving before it lands.
@@ -205,9 +205,10 @@ coverage gaps such as `UNKNOWN`, `missing_spdx_id`, `missing_source_url`, or
 
 You stay in control at three points: approving the repo list (`discover`), approving the
 flagged shortlist (`shortlist`), and the final report is **gated** until that shortlist is
-clear. The owner, repo categories, and report header are runtime inputs — never baked into
-the tool. `repolens scan --work-root work --repos approved-repos.json` is an optional
-override for callers that already have an approved list. **Full guide:
+clear. The owner and repo selection stay runtime CLI inputs; repo categories and report
+header text live only in untracked JSON local config. `repolens scan --work-root work
+--repos approved-repos.json` is an optional override for callers that already have an
+approved list. **Full guide:
 [docs/usage.md](docs/usage.md).**
 
 ## Local Name Hygiene

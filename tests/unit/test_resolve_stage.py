@@ -1100,7 +1100,7 @@ def test_android_mobile_repo_unresolved_dependency_falls_back_to_scancode(
     app_dir = staged / "app"
     app_dir.mkdir(parents=True)
     (staged / "settings.gradle").write_text(
-        'pluginManagement { repositories {} }\n', encoding="utf-8"
+        "pluginManagement { repositories {} }\n", encoding="utf-8"
     )
     (staged / "build.gradle").write_text(
         "plugins { id 'com.android.application' version '8.0.0' apply false }\n",

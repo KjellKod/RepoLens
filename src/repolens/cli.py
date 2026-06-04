@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import math
 import re
 import shlex
@@ -30,7 +31,15 @@ from repolens.bootstrap.errors import IntegrityError, UsageError
 from repolens.report import ReportGateOpen, ReportResult, render_main_report
 from repolens.security.redaction import redact_tokens
 
-from .config import Config, load_config
+from .config import (
+    Config,
+    config_discovery_lines,
+    human_schema_text,
+    load_config,
+    local_config_json_schema,
+    validate_config_file_message,
+    validate_config_values,
+)
 from .data.errors import ArtifactError
 from .discovery.gh import DEFAULT_GH_LIMIT, MAX_GH_LIMIT, parse_repos_option
 from .discovery.pipeline import run_discover
@@ -200,12 +209,14 @@ _DESCRIPTION = (
 
 _EPILOG = (
     "global options:\n"
-    "  Put global options before the stage name, e.g.\n"
-    "    repolens --config ./repolens.local.toml discover --owner <OWNER>\n"
-    "  Config files hold local taxonomy, policy, and report settings; owner is\n"
+    "  Put global options before the command name, e.g.\n"
+    "    repolens --config ./.repolens.local.json discover --owner <OWNER>\n"
+    "  JSON config files hold local taxonomy, scan, and report settings; owner is\n"
     "  still supplied at runtime with --owner.\n"
     "  Use stage options such as --work-root for output directories; --config is\n"
     "  only for local config files.\n"
+    "  Use `repolens config init`, `repolens config schema`, and\n"
+    "  `repolens config validate <path>` for local config workflows.\n"
     "\n"
     "recommended:\n"
     "  repolens run --work-root work --owner <OWNER>\n"
@@ -220,7 +231,7 @@ _EPILOG = (
     "\n"
     "Scan auto-acquires and verifies RepoLens's pinned Syft into a shared cache on\n"
     "first use; `repolens bootstrap` pre-seeds it for offline runs. Run\n"
-    "`repolens <stage> --help` for one stage. Full guide: docs/usage.md."
+    "`repolens <command> --help` for details. Full guide: docs/usage.md."
 )
 
 
@@ -236,14 +247,14 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         metavar="PATH",
         help=(
-            "Global option before <stage>: path to an untracked local config file "
-            "(taxonomy, policy, report settings)."
+            "Global option before <command>: path to an untracked local config file "
+            "(JSON only: taxonomy, scan, and report settings)."
         ),
     )
     subparsers = parser.add_subparsers(
         dest="command",
-        metavar="<stage>",
-        title="stages (run in order)",
+        metavar="<command>",
+        title="commands",
     )
 
     bootstrap_parser = subparsers.add_parser(
@@ -259,6 +270,18 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     bootstrap_parser.set_defaults(handler=_bootstrap_command)
+
+    config_parser = subparsers.add_parser(
+        "config",
+        help="Initialize, validate, and display JSON-only local runtime config.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Manage RepoLens JSON-only local runtime config. Local config can set "
+            "discover taxonomy, scan options, and report options; owner/repo inputs "
+            "remain runtime CLI inputs."
+        ),
+    )
+    _configure_config_parser(config_parser)
 
     run_parser = subparsers.add_parser(
         "run",
@@ -344,6 +367,67 @@ def build_parser() -> argparse.ArgumentParser:
             subparser.set_defaults(handler=_stage_stub)
 
     return parser
+
+
+def _configure_config_parser(subparser: argparse.ArgumentParser) -> None:
+    actions = subparser.add_subparsers(
+        dest="config_action",
+        metavar="<action>",
+        title="config actions",
+        required=True,
+    )
+    init_parser = actions.add_parser(
+        "init",
+        help="Guided creation of a minimal JSON local config file.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Create a minimal JSON local config file through guided prompts.",
+        epilog=(
+            "Examples:\n"
+            "  repolens config init\n"
+            "  repolens config init --work-root work\n"
+            "  repolens config init --out ./.repolens.local.json"
+        ),
+    )
+    init_parser.add_argument(
+        "--work-root",
+        type=Path,
+        metavar="DIR",
+        help=("Use DIR/.repolens.local.json as the default save path and in next-step commands."),
+    )
+    init_parser.add_argument(
+        "--out",
+        type=Path,
+        metavar="PATH",
+        help="Default save path for the new JSON config file.",
+    )
+    init_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing config without an overwrite confirmation prompt.",
+    )
+    init_parser.set_defaults(handler=_config_init_command)
+
+    schema_parser = actions.add_parser(
+        "schema",
+        help="Show supported local config keys and operational impact.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Show the RepoLens local config schema in readable form.",
+    )
+    schema_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print the canonical JSON Schema instead of the human-readable definition.",
+    )
+    schema_parser.set_defaults(handler=_config_schema_command)
+
+    validate_parser = actions.add_parser(
+        "validate",
+        help="Validate one JSON local config file and summarize it.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Validate exactly one JSON local config file, without discovery or merging.",
+    )
+    validate_parser.add_argument("path", type=Path, metavar="PATH")
+    validate_parser.set_defaults(handler=_config_validate_command)
 
 
 def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
@@ -578,8 +662,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.print_help()
             return int(ExitCode.SUCCESS)
 
-        config_path = getattr(args, "run_config", None) or args.config
-        args.runtime_config = load_config(Path.cwd(), config_path)
+        if args.command in {"config", "bootstrap"}:
+            args.runtime_config = Config(values={}, sources=())
+        else:
+            config_path = getattr(args, "run_config", None) or args.config
+            args.runtime_config = load_config(
+                Path.cwd(),
+                config_path,
+                work_root=_config_work_root(args),
+            )
         result = args.handler(args)
         if result.message:
             print(result.message)
@@ -595,6 +686,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     except Exception as exc:
         print(_sanitize(f"Internal error: {exc}", redact_paths=True), file=sys.stderr)
         return int(ExitCode.FINDINGS_OPEN)
+
+
+def _config_work_root(args: argparse.Namespace) -> Path | None:
+    work_root = getattr(args, "work_root", None)
+    return Path(work_root) if work_root is not None else None
 
 
 def _stage_stub(args: argparse.Namespace) -> CommandResult:
@@ -619,7 +715,328 @@ def _bootstrap_command(args: argparse.Namespace) -> CommandResult:
     )
 
 
+def _config_schema_command(args: argparse.Namespace) -> CommandResult:
+    if args.json:
+        return CommandResult(
+            CommandStatus.SUCCESS,
+            json.dumps(local_config_json_schema(), indent=2, sort_keys=True),
+        )
+    return CommandResult(CommandStatus.SUCCESS, human_schema_text())
+
+
+def _config_validate_command(args: argparse.Namespace) -> CommandResult:
+    return CommandResult(CommandStatus.SUCCESS, validate_config_file_message(args.path))
+
+
+def _config_init_command(args: argparse.Namespace) -> CommandResult:
+    path = _prompt_config_path(args, input_stream=sys.stdin, output_stream=sys.stdout)
+    if (
+        path.exists()
+        and not args.force
+        and not _confirm(
+            f"Overwrite existing {path}?",
+            input_stream=sys.stdin,
+            output_stream=sys.stdout,
+        )
+    ):
+        raise InputError(f"Refused to overwrite existing config: {path}")
+
+    values = _prompt_config_values(input_stream=sys.stdin, output_stream=sys.stdout)
+    validate_config_values(values, path=path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(values, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+
+    work_root = args.work_root if args.work_root is not None else Path("work")
+    run_command = (
+        f"repolens run --work-root {shlex.quote(str(work_root))} "
+        f"--owner <OWNER> --config {shlex.quote(str(path))}"
+    )
+    discover_command = (
+        f"repolens --config {shlex.quote(str(path))} discover "
+        f"--owner <OWNER> --work-root {shlex.quote(str(work_root))}"
+    )
+    return CommandResult(
+        CommandStatus.SUCCESS,
+        "\n".join(
+            (
+                f"Wrote config: {path}",
+                "Next commands:",
+                f"  {run_command}",
+                f"  {discover_command}",
+            )
+        ),
+    )
+
+
+def _prompt_config_path(
+    args: argparse.Namespace,
+    *,
+    input_stream: TextIO,
+    output_stream: TextIO,
+) -> Path:
+    if args.out is not None:
+        default = args.out
+    elif args.work_root is not None:
+        default = args.work_root / ".repolens.local.json"
+    else:
+        default = Path(".repolens.local.json")
+    answer = _prompt(
+        "Where should RepoLens save the JSON local config?",
+        default=str(default),
+        input_stream=input_stream,
+        output_stream=output_stream,
+    )
+    return Path(answer)
+
+
+def _prompt_config_values(*, input_stream: TextIO, output_stream: TextIO) -> dict[str, object]:
+    values: dict[str, object] = {}
+
+    taxonomy = _prompt_taxonomy(input_stream=input_stream, output_stream=output_stream)
+    if taxonomy:
+        values["discover"] = {"taxonomy": taxonomy}
+
+    scan = _prompt_scan_config(input_stream=input_stream, output_stream=output_stream)
+    if scan:
+        values["scan"] = scan
+
+    report = _prompt_report_config(input_stream=input_stream, output_stream=output_stream)
+    if report:
+        values["report"] = report
+
+    return values
+
+
+def _prompt_taxonomy(*, input_stream: TextIO, output_stream: TextIO) -> dict[str, object]:
+    taxonomy: dict[str, object] = {}
+    print(
+        "\nCategories are labels for grouping repositories and report routing; they do not "
+        "exclude repos.",
+        file=output_stream,
+    )
+    default_category = _prompt(
+        "Default category (blank keeps RepoLens default)",
+        default="",
+        input_stream=input_stream,
+        output_stream=output_stream,
+    )
+    if default_category:
+        taxonomy["default_category"] = default_category
+
+    print(
+        "\nExplicit repos are exact repo or owner/repo category matches.",
+        file=output_stream,
+    )
+    explicit = _parse_mapping(
+        _prompt(
+            "Explicit repo categories, comma-separated owner/repo=category pairs",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        ),
+        label="explicit repo category",
+    )
+    if explicit:
+        taxonomy["explicit"] = explicit
+
+    print(
+        "\nPatterns are glob rules checked after explicit repo matches.",
+        file=output_stream,
+    )
+    patterns = _parse_patterns(
+        _prompt(
+            "Pattern categories, comma-separated glob=category pairs",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
+    )
+    if patterns:
+        taxonomy["patterns"] = patterns
+
+    print(
+        "\nTopics are GitHub repo tags. They appear on the GitHub repo page and can be "
+        "checked with `gh repo view OWNER/REPO --json repositoryTopics`.",
+        file=output_stream,
+    )
+    topics = _parse_mapping(
+        _prompt(
+            "Topic categories, comma-separated topic=category pairs",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        ),
+        label="topic category",
+    )
+    if topics:
+        taxonomy["topics"] = topics
+
+    print(
+        "\nDead repos are exact repos to hard-exclude with a visible reason; use this only "
+        "for retired/dead repos.",
+        file=output_stream,
+    )
+    dead = _parse_mapping(
+        _prompt(
+            "Dead repos, comma-separated owner/repo=reason pairs",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        ),
+        label="dead repo",
+    )
+    if dead:
+        taxonomy["dead"] = dead
+
+    return taxonomy
+
+
+def _prompt_scan_config(*, input_stream: TextIO, output_stream: TextIO) -> dict[str, object]:
+    scan: dict[str, object] = {}
+
+    print(
+        "\nscan.exclude_paths are repo-relative path prefixes filtered from SBOM artifacts.",
+        file=output_stream,
+    )
+    exclude_paths = _parse_csv_values(
+        _prompt(
+            "Exclude path prefixes, comma-separated",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
+    )
+    if exclude_paths:
+        scan["exclude_paths"] = exclude_paths
+
+    print("\nscan.clone_timeout_seconds is a positive clone timeout.", file=output_stream)
+    clone_timeout = _prompt(
+        "Clone timeout seconds",
+        default="",
+        input_stream=input_stream,
+        output_stream=output_stream,
+    )
+    if clone_timeout:
+        try:
+            value = float(clone_timeout)
+        except ValueError as exc:
+            raise InputError("scan.clone_timeout_seconds must be a positive number") from exc
+        if not math.isfinite(value) or value <= 0:
+            raise InputError("scan.clone_timeout_seconds must be a positive number")
+        scan["clone_timeout_seconds"] = int(value) if value.is_integer() else value
+
+    print(
+        "\nscan.syft.catalogers is an optional restricted cataloger list; RepoLens still "
+        "preserves mobile catalogers.",
+        file=output_stream,
+    )
+    catalogers = _parse_csv_values(
+        _prompt(
+            "Syft catalogers, comma-separated",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
+    )
+    if catalogers:
+        scan["syft"] = {"catalogers": catalogers}
+
+    return scan
+
+
+def _prompt_report_config(*, input_stream: TextIO, output_stream: TextIO) -> dict[str, object]:
+    report: dict[str, object] = {}
+
+    print(
+        "\nreport.selection.include is the category list included in the main report.",
+        file=output_stream,
+    )
+    include = _parse_csv_values(
+        _prompt(
+            "Main report categories, comma-separated",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
+    )
+    if include:
+        report["selection"] = {"include": include}
+
+    print(
+        "\nreport.header.org_name and report.header.legal_text are optional docx cover text.",
+        file=output_stream,
+    )
+    if _confirm(
+        "Add report header text?",
+        input_stream=input_stream,
+        output_stream=output_stream,
+    ):
+        org_name = _prompt(
+            "Report header org_name",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
+        legal_text = _prompt(
+            "Report header legal_text",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
+        report["header"] = {"org_name": org_name, "legal_text": legal_text}
+
+    return report
+
+
+def _prompt(
+    label: str,
+    *,
+    default: str,
+    input_stream: TextIO,
+    output_stream: TextIO,
+) -> str:
+    print(f"{label} [{default}]: ", end="", file=output_stream, flush=True)
+    raw = input_stream.readline()
+    if raw == "":
+        raise InputError("config init needs interactive input or piped answers")
+    value = raw.strip()
+    return value if value else default
+
+
+def _confirm(label: str, *, input_stream: TextIO, output_stream: TextIO) -> bool:
+    print(f"{label} [y/N]: ", end="", file=output_stream, flush=True)
+    raw = input_stream.readline()
+    if raw == "":
+        raise InputError("config init needs interactive input or piped answers")
+    return raw.strip().lower() in {"y", "yes"}
+
+
+def _parse_csv_values(value: str) -> list[str]:
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _parse_mapping(value: str, *, label: str) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for item in _parse_csv_values(value):
+        key, sep, child = item.partition("=")
+        if not sep or not key.strip() or not child.strip():
+            raise InputError(f"{label} entries must use key=value")
+        result[key.strip()] = child.strip()
+    return result
+
+
+def _parse_patterns(value: str) -> list[dict[str, str]]:
+    return [
+        {"glob": glob, "category": category}
+        for glob, category in _parse_mapping(value, label="pattern category").items()
+    ]
+
+
 def _discover_command(args: argparse.Namespace) -> CommandResult:
+    _print_config_summary(args, label="discover")
     repos = parse_repos_option(args.repos) if args.repos is not None else None
     if args.force:
         print(
@@ -658,6 +1075,7 @@ def _run_command(args: argparse.Namespace) -> CommandResult:
 
     work_root = Path(args.work_root)
     out_dir = _resolve_report_out_dir(work_root, args.out_dir)
+    _print_run_header(args, out_dir)
     summary = RunSummary(reports_dir=out_dir)
     interactive = _run_interactive(args)
 
@@ -836,6 +1254,7 @@ def _stage_args(
         identity=None,
         emit_contexts=emit_contexts_path,
         proposals=proposals_path,
+        in_run=True,
     )
 
 
@@ -849,10 +1268,45 @@ def _run_interactive(args: argparse.Namespace) -> bool:
     )
 
 
+def _print_run_header(args: argparse.Namespace, out_dir: Path) -> None:
+    if getattr(args, "quiet", False):
+        return
+    print(
+        "\n".join(
+            (
+                "== RepoLens run ==",
+                f"Work root: {args.work_root}",
+                f"Owner: {args.owner}",
+                f"Reports: {out_dir}",
+                "Config:",
+                *(f"  {line}" for line in config_discovery_lines(args.runtime_config)),
+            )
+        ),
+        file=sys.stderr,
+    )
+
+
+def _print_config_summary(args: argparse.Namespace, *, label: str) -> None:
+    if getattr(args, "quiet", False) or getattr(args, "in_run", False):
+        return
+    print(
+        "\n".join(
+            (
+                f"== {label} config ==",
+                *(f"  {line}" for line in config_discovery_lines(args.runtime_config)),
+            )
+        ),
+        file=sys.stderr,
+    )
+
+
 def _run_banner(args: argparse.Namespace, stage: str, detail: str) -> None:
     if args.quiet:
         return
-    print(f"> {stage} ... {detail}", file=sys.stderr)
+    if getattr(args, "_last_banner_stage", None) != stage:
+        print(f"\n== {stage.title()} ==", file=sys.stderr)
+        args._last_banner_stage = stage
+    print(f"Status: {detail}", file=sys.stderr)
 
 
 def _run_pause(message: str, *, interactive: bool) -> None:
@@ -1331,6 +1785,7 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     from repolens.scan import runner as scan_runner
     from repolens.scan.inputs import load_discover_approved_repo_specs, load_explicit_repo_specs
 
+    _print_config_summary(args, label="scan")
     if args.offline and args.yes:
         raise InputError("--offline cannot be combined with --yes")
     _validate_positive_timeout("--timeout", args.timeout)
@@ -1950,6 +2405,7 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
 
 
 def _report(args: argparse.Namespace) -> CommandResult:
+    _print_config_summary(args, label="report")
     out_dir = _resolve_report_out_dir(Path(args.work_root), args.out_dir)
     try:
         result = render_main_report(
