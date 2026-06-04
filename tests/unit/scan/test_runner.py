@@ -173,9 +173,7 @@ def test_scan_writes_bounded_source_snapshot_from_sparse_manifest_paths(
     assert (snapshot / "vendor" / "fixture-lib" / "package.json").read_text(
         encoding="utf-8"
     ) == '{"name":"fixture-lib"}\n'
-    assert (snapshot / "vendor" / "fixture-lib" / "LICENSE").read_text(
-        encoding="utf-8"
-    ) == "MIT\n"
+    assert (snapshot / "vendor" / "fixture-lib" / "LICENSE").read_text(encoding="utf-8") == "MIT\n"
     assert not (snapshot / ".git" / "config").exists()
     assert not (snapshot / "src" / "private.py").exists()
     assert not (snapshot / "dist" / "bundle.js").exists()
