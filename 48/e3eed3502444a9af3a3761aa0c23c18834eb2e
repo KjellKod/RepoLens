@@ -1,0 +1,66 @@
+tests/canaries/security/test_scan_timeout_canary.py
+  s_65a503e45c7f95::t_f6e22f8f09ba98 59
+tests/canaries/security/test_scan_auth_canaries.py
+  s_65a503e45c7f95::t_f6e22f8f09ba98 90,164
+src/repolens/data/store.py
+  s_46e10df83f35ef::t_1e4953d65f373c 177-218
+src/repolens/flag/stage.py
+  s_46e10df83f35ef::t_a5f82536ecffb6 103-109
+src/repolens/scan/first_party.py
+  s_46e10df83f35ef::t_301226dd619482 131
+  s_65a503e45c7f95::t_f6e22f8f09ba98 144-146
+  s_46e10df83f35ef::t_1cfad49f423b80 1-130,132-143,147-234
+tests/unit/flag/test_flag_policy.py
+  s_46e10df83f35ef::t_2371e74ecdb4c7 94-115,117-127
+  s_46e10df83f35ef::t_ce7bcb60b1e903 116
+tests/unit/test_resolve_stage.py
+  s_46e10df83f35ef::t_301226dd619482 151
+  s_46e10df83f35ef::t_54f81edb749751 117-150,152-177
+tests/canaries/security/test_scan_token_canary.py
+  s_65a503e45c7f95::t_f6e22f8f09ba98 80
+tests/canaries/security/test_rce_canary.py
+  s_65a503e45c7f95::t_f6e22f8f09ba98 75
+src/repolens/resolve/stage.py
+  s_46e10df83f35ef::t_40819d5aa1f43b 125-127
+  s_46e10df83f35ef::t_e7d37b68178592 146-154
+  s_46e10df83f35ef::t_1c631d38579a3e 88,94,96-100,107-122,128
+  s_46e10df83f35ef::t_bc64dd74b9ee61 61
+tests/unit/scan/test_runner.py
+  s_46e10df83f35ef::t_59cc4881a9f2e2 59-72
+  ai_agent 106-138
+src/repolens/scan/runner.py
+  s_46e10df83f35ef::t_4956f5ea250dd1 41
+  s_46e10df83f35ef::t_34f610b872eaac 557
+  s_46e10df83f35ef::t_301226dd619482 619
+  s_46e10df83f35ef::t_fc03ed25241e14 807,809,814,822
+  s_46e10df83f35ef::t_b7b652d8d1afac 615-618
+  s_46e10df83f35ef::t_3fd644e1dd9b5b 654-668
+  s_46e10df83f35ef::t_1ccd55e1dfd403 780
+  s_46e10df83f35ef::t_3b428abc0713b4 861
+tests/unit/scan/test_first_party.py
+  s_46e10df83f35ef::t_fa3423aedd5912 1-113
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "48e3eed3502444a9af3a3761aa0c23c18834eb2e",
+  "prompts": {},
+  "sessions": {
+    "s_46e10df83f35ef": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a26d21ba-859d-448f-9266-31f84e283634",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_65a503e45c7f95": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e930d-168b-7490-a150-45e23feb9e88",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
