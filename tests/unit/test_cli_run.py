@@ -884,9 +884,7 @@ def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: 
         report_paths=(main_md, main_csv),
         appendix_rows_by_label={"build-ci": 1},
         appendix_paths_by_label={"build-ci": (appendix_md, appendix_csv)},
-        coverage_gaps_by_label={
-            "build-ci": {"missing_spdx_id": 1, "missing_source_url": 1}
-        },
+        coverage_gaps_by_label={"build-ci": {"missing_spdx_id": 1, "missing_source_url": 1}},
         docx_skipped=True,
     )
 
@@ -897,8 +895,7 @@ def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: 
     assert "Failures: 1" in message
     assert "Appendix rows: build-ci=1" in message
     assert (
-        "Coverage gaps to double-check: build-ci: missing_source_url=1, "
-        "missing_spdx_id=1"
+        "Coverage gaps to double-check: build-ci: missing_source_url=1, missing_spdx_id=1"
     ) in message
     assert "Docx skipped" in message
 

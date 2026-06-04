@@ -1261,8 +1261,7 @@ def _format_gap_counts(gaps_by_label: dict[str, dict[str, int]]) -> str:
         if not gaps:
             continue
         chunks.append(
-            f"{label}: "
-            + ", ".join(f"{gap}={count}" for gap, count in sorted(gaps.items()))
+            f"{label}: " + ", ".join(f"{gap}={count}" for gap, count in sorted(gaps.items()))
         )
     return "; ".join(chunks)
 
@@ -1914,9 +1913,7 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
                 f"rerun `{rerun_command}`."
             ),
         )
-    report_command = (
-        f"repolens report --work-root {shlex.quote(str(args.work_root))}"
-    )
+    report_command = f"repolens report --work-root {shlex.quote(str(args.work_root))}"
     return CommandResult(CommandStatus.SUCCESS, f"{summary}\nNext CLI stage: {report_command}")
 
 
