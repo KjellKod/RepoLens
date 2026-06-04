@@ -1,0 +1,21 @@
+tests/unit/test_resolve_stage.py
+  s_6c814c6770acb8::t_32ce00fa6e7124 933-986
+src/repolens/resolve/ecosystems.py
+  s_6c814c6770acb8::t_d2f1b81a1ddb7d 55-56
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "923fbf939514990c311947a9b8d278a77462d98a",
+  "prompts": {},
+  "sessions": {
+    "s_6c814c6770acb8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e93e8-b469-7ca2-88d4-31b5bfe68bec",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
