@@ -72,15 +72,16 @@ class F1OfflineCanaries(unittest.TestCase):
         # USAGE_OR_INPUT_ERROR (2): unknown command.
         self.assertEqual(cli.main(["bad-command"]), 2)
 
-    def test_yaml_unsafe_tag_canary(self) -> None:
+    def test_runtime_config_rejects_yaml_instead_of_parsing_it(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            (root / "unsafe.local.yml").write_text(
+            path = root / "unsafe.local.yml"
+            path.write_text(
                 "value: !!python/object/apply:os.system ['echo bad']\n",
                 encoding="utf-8",
             )
-            with self.assertRaises(InputError):
-                load_config(root)
+            with self.assertRaisesRegex(InputError, "JSON-only"):
+                load_config(root, path)
 
     def test_name_hygiene_seeded_bad_term_fails(self) -> None:
         term = "acme-" + "blocked-token"

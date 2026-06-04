@@ -162,36 +162,55 @@ forbidden value never appears in output or CI logs.
 
 ## Configuration (all untracked / local)
 
-Pass a local config file with the global `--config` option before the stage name:
+RepoLens local runtime config is JSON-only. The recommended filename is the hidden
+`.repolens.local.json`; an explicit `--config` path may point at another JSON filename
+such as `repolens.local.json`.
+
+Create a minimal config through guided prompts:
 
 ```bash
-repolens --config ./repolens.local.toml discover --owner <OWNER>
+repolens config init
+repolens config init --work-root work
+repolens config init --out ./.repolens.local.json
 ```
 
-Owner is supplied at runtime (`--owner` / env) and never committed. Discover taxonomy
-config is loaded from untracked local config files. The private name-hygiene denylist is
-also local and untracked, but it uses the dedicated `.name-hygiene.local.json` file shown
-below.
+Inspect and validate config before using it:
 
-The runtime config loader supports three formats: JSON, TOML, and YAML. YAML has two
-file extensions, so there are four filename patterns, not four different config models:
+```bash
+repolens config schema
+repolens config schema --json
+repolens config validate ./.repolens.local.json
+```
 
-- `*.local.json`
-- `*.local.toml`
-- `*.local.yaml`
-- `*.local.yml`
+Pass a local config file explicitly with the global `--config` option before the stage
+name:
 
-Prefer one local config file unless you intentionally need layered overrides. When
-multiple local config files exist, precedence is:
+```bash
+repolens --config ./.repolens.local.json discover --owner <OWNER> --work-root work
+```
 
-1. `--config <path>`
-2. `*.local.toml`
-3. `*.local.yaml`
-4. `*.local.yml`
-5. `*.local.json`
+`run` also accepts `--config` after the subcommand:
 
-On key collisions, the higher-precedence source replaces the lower-precedence value at
-that key path; non-colliding keys are preserved.
+```bash
+repolens run --work-root work --owner <OWNER> --config ./.repolens.local.json
+```
+
+Discovery is deterministic and does not merge neighbors:
+
+1. Explicit `--config <path>` wins and validates exactly that JSON file.
+2. If the command has `--work-root`, RepoLens checks `<work-root>/.repolens.local.json`.
+3. RepoLens then checks `<cwd>/.repolens.local.json`.
+4. If no config exists, commands that can use defaults continue and print that no config
+   was active.
+
+TOML, YAML, and YML are not RepoLens local runtime config formats. Pipeline artifact JSON
+schemas and `shortlist.proposals.json` remain unchanged.
+
+Owner and repo selection stay runtime inputs (`--owner`, `--repos`, and scan `--repos`);
+do not store them in local config. Discover taxonomy, scan options, and report options
+are loaded from untracked local JSON config. License policy is not runtime-configurable
+through local config today. The private name-hygiene denylist is also local and
+untracked, but it uses the dedicated `.name-hygiene.local.json` file shown below.
 
 `discover.taxonomy` is the optional set of rules that assigns each discovered repository
 to a category. Categories are labels for review/reporting; they do not remove a repo from
@@ -211,27 +230,7 @@ Matching order for categories is `explicit`, then `patterns`, then `topics`, the
 `default_category`. The authoritative parser is
 [`src/repolens/discovery/taxonomy.py`](../src/repolens/discovery/taxonomy.py).
 
-Example taxonomy in `repolens.local.toml`:
-
-```toml
-[discover.taxonomy]
-default_category = "uncategorized"
-
-[discover.taxonomy.explicit]
-"sentinel-owner/sentinel-alpha" = "runtime-bucket"
-
-[[discover.taxonomy.patterns]]
-glob = "tool-*"
-category = "tooling-bucket"
-
-[discover.taxonomy.topics]
-mobile = "mobile-bucket"
-
-[discover.taxonomy.dead]
-sentinel-retired = "retired by local approval"
-```
-
-The same taxonomy in `repolens.local.json`:
+Example `.repolens.local.json`:
 
 ```json
 {
@@ -253,6 +252,22 @@ The same taxonomy in `repolens.local.json`:
       "dead": {
         "sentinel-retired": "retired by local approval"
       }
+    }
+  },
+  "scan": {
+    "exclude_paths": ["generated-fixtures/"],
+    "clone_timeout_seconds": 300,
+    "syft": {
+      "catalogers": ["python-package-cataloger"]
+    }
+  },
+  "report": {
+    "selection": {
+      "include": ["runtime-bucket", "mobile-bucket"]
+    },
+    "header": {
+      "org_name": "Runtime Organization Name",
+      "legal_text": "Runtime legal review text."
     }
   }
 }
@@ -541,19 +556,27 @@ Default scan exclusions remove artifacts located only under clearly non-shipped 
 Top-level `fixtures/` and `vendor/` are not excluded by default. A local config can replace
 the default list when a repository has local non-shipped sample or generated paths:
 
-```toml
-[scan]
-exclude_paths = ["generated-fixtures/"]
-clone_timeout_seconds = 300
+```json
+{
+  "scan": {
+    "exclude_paths": ["generated-fixtures/"],
+    "clone_timeout_seconds": 300
+  }
+}
 ```
 
 When local config restricts Syft catalogers, RepoLens preserves that restriction but also
 adds Gradle, CocoaPods, and Swift Package Manager catalogers so mobile manifests remain
 cataloged:
 
-```toml
-[scan.syft]
-catalogers = ["python-package-cataloger"]
+```json
+{
+  "scan": {
+    "syft": {
+      "catalogers": ["python-package-cataloger"]
+    }
+  }
+}
 ```
 
 During a multi-repo run, stderr shows one line when each approved repo starts, one outcome line
@@ -656,8 +679,8 @@ Outputs land under `--work-root`:
 - `shortlist.json` + `shortlist.md` — the review queue `shortlist` consumes; its
   `open_count` is what gates the final report.
 
-The default policy tiers live in [license-policy.md](roadmap/rpl_license-policy.md) and are
-overridable through untracked local config.
+The default policy tiers live in [license-policy.md](roadmap/rpl_license-policy.md). They
+are not runtime-configurable through local config today.
 
 ## `shortlist` — artifact proposals + grouped human approval
 

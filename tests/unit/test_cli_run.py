@@ -43,7 +43,9 @@ def _set_mtime(path: Path, timestamp: float) -> None:
 
 def _patch_common_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     work_root = tmp_path / "work"
-    monkeypatch.setattr(cli, "load_config", lambda _root, _path: object())
+    monkeypatch.setattr(
+        cli, "load_config", lambda _root, _path, **_kwargs: cli.Config(values={}, sources=())
+    )
     monkeypatch.setattr(cli, "run_discover", lambda **_kwargs: _discover_result(work_root))
     monkeypatch.setattr(
         cli,
@@ -125,7 +127,9 @@ def test_report_command_defaults_out_dir_under_work_root(
         "sentinel-alpha",
         [{**resolved_record, "repo": "sentinel-alpha"}],
     )
-    monkeypatch.setattr(cli, "load_config", lambda _root, _path: Config(values={}, sources=()))
+    monkeypatch.setattr(
+        cli, "load_config", lambda _root, _path, **_kwargs: Config(values={}, sources=())
+    )
 
     code = cli.main(["report", "--work-root", str(work_root)])
 
@@ -177,7 +181,7 @@ def test_run_yes_no_header_skips_docx_via_report_stage(
         return cli.CommandResult(cli.CommandStatus.SUCCESS, "settled")
 
     stderr = io.StringIO()
-    monkeypatch.setattr(cli, "load_config", lambda _root, _path: config)
+    monkeypatch.setattr(cli, "load_config", lambda _root, _path, **_kwargs: config)
     monkeypatch.setattr(cli, "run_discover", lambda **_kwargs: _discover_result(work_root))
     monkeypatch.setattr(cli, "_run_scan_stage", lambda _args: None)
     monkeypatch.setattr(cli, "_run_resolve_stage", lambda _args, _summary: {"sentinel-alpha"})
@@ -1074,11 +1078,13 @@ def test_partial_scan_failure_reports_successes_and_exits_nonzero(
 def test_run_config_after_subcommand_is_loaded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    config_path = tmp_path / "repolens.local.toml"
+    config_path = tmp_path / "repolens.local.json"
     config_path.write_text("", encoding="utf-8")
     seen: list[Path | None] = []
 
-    monkeypatch.setattr(cli, "load_config", lambda _root, path: seen.append(path) or object())
+    monkeypatch.setattr(
+        cli, "load_config", lambda _root, path, **_kwargs: seen.append(path) or object()
+    )
     monkeypatch.setattr(
         cli,
         "_run_command",
@@ -1105,11 +1111,13 @@ def test_run_config_after_subcommand_is_loaded(
 def test_global_config_before_run_is_loaded(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    config_path = tmp_path / "repolens.local.toml"
+    config_path = tmp_path / "repolens.local.json"
     config_path.write_text("", encoding="utf-8")
     seen: list[Path | None] = []
 
-    monkeypatch.setattr(cli, "load_config", lambda _root, path: seen.append(path) or object())
+    monkeypatch.setattr(
+        cli, "load_config", lambda _root, path, **_kwargs: seen.append(path) or object()
+    )
     monkeypatch.setattr(
         cli,
         "_run_command",

@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repolens.local/schemas/local_config.schema.json",
+  "title": "RepoLens local runtime config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "discover": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "taxonomy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "default_category": {
+              "type": "string",
+              "minLength": 1
+            },
+            "explicit": {
+              "$ref": "#/$defs/stringMap"
+            },
+            "patterns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["glob", "category"],
+                "properties": {
+                  "glob": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "category": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "topics": {
+              "$ref": "#/$defs/stringMap"
+            },
+            "dead": {
+              "$ref": "#/$defs/stringMap"
+            }
+          }
+        }
+      }
+    },
+    "scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "exclude_paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "clone_timeout_seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "syft": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "catalogers": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    },
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "selection": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "include": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "header": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["org_name", "legal_text"],
+          "properties": {
+            "org_name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "legal_text": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "stringMap": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

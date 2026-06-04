@@ -30,8 +30,9 @@
 
 - `<OWNER>` (runtime parameter / env, never committed).
 - A read-scoped, fine-grained GitHub token (held by the orchestrator only).
-- Config: category taxonomy, license policy, report selection, report header
-  (all in untracked local config).
+- Config: category taxonomy, report selection, report header, and scan options
+  in untracked local JSON config. License policy is packaged behavior today,
+  not runtime-configurable local config.
 - Name-hygiene denylist: private names in gitignored local config, never in public CI
   variables or committed docs.
 

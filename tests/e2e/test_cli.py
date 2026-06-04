@@ -29,9 +29,11 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         help_text = stdout.getvalue()
-        self.assertIn("Put global options before the stage name", help_text)
-        self.assertIn("repolens --config ./repolens.local.toml discover --owner <OWNER>", help_text)
-        self.assertIn("Config files hold local taxonomy, policy, and report settings", help_text)
+        self.assertIn("Put global options before the command name", help_text)
+        self.assertIn(
+            "repolens --config ./.repolens.local.json discover --owner <OWNER>", help_text
+        )
+        self.assertIn("JSON config files hold local taxonomy, scan, and report settings", help_text)
         self.assertIn("Use stage options such as --work-root for output directories", help_text)
         self.assertIn("repolens resolve --work-root work", help_text)
 
