@@ -1,0 +1,163 @@
+tests/fixtures/synthetic/fixture_manifest.json
+  s_37d7baaa06722d::t_537fd4ed273205 70-104
+tests/unit/test_supported_ecosystems_docs.py
+  s_37d7baaa06722d::t_76549a85b50445 1-4,13-26,47-70
+  s_3bb5a00ca9d82e::t_962afe6ad0cd0d 5-12,27-36,38,40-46
+  s_3bb5a00ca9d82e::t_2d9b83b918ee94 37
+  s_7a40f252ed63ef::t_494c7a0086ccc0 39
+src/repolens/scan/runner.py
+  s_37d7baaa06722d::t_29b0871ac5449e 414-416
+  s_16f9e4e156d3b2::t_eec9ce50a661f3 285,441,461,478,481,483-491,493,504
+  s_2df20a9e9142cc::t_3cb2209b376cae 495-497,501-503
+  s_37d7baaa06722d::t_60f4f2783f9961 349,354-380
+  s_37d7baaa06722d::t_7ce7769fb6b0d8 22,58-65,277-284,286-348,350-353,381-404,410-413,417-440,442-460,462-476,482,492,494,498-500,505-506,513,515,539-540,585,593-597,748-749,819-820
+  s_c04de871a6f6bf::t_9ae606c8b48cc8 27,30,405-409,477,479-480
+src/repolens/resolve/stage.py
+  s_c549f1b7e80094::t_cb3da6ebd634ca 197-202
+  s_c549f1b7e80094::t_b72ecd6546990e 196,203-226
+  s_37d7baaa06722d::t_457ca691188e0b 17,52-56,227-232,423,428-431
+src/repolens/resolve/adapters.py
+  s_37d7baaa06722d::t_55c4e03e31f2e2 11,97-98
+tests/fixtures/synthetic/sentinel_android_app/gradle.lockfile
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 1-2
+src/repolens/flag/stage.py
+  s_c04de871a6f6bf::t_9ae606c8b48cc8 103
+  s_37d7baaa06722d::t_254d6c8c08ea37 104
+tests/unit/scan/test_runner.py
+  s_c04de871a6f6bf::t_9ae606c8b48cc8 390-392
+  s_16f9e4e156d3b2::t_bd5c2b64b586df 323-382
+  s_37d7baaa06722d::t_37f9ba9bcfa68e 50-58,92-243,274-294,321-322,383-389,393-408
+  s_2df20a9e9142cc::t_3cb2209b376cae 244-273,295-320
+tests/fixtures/synthetic/sentinel_ios_client/Podfile
+  s_37d7baaa06722d::t_537fd4ed273205 1-5
+tests/unit/flag/test_flag_policy.py
+  s_37d7baaa06722d::t_8c1e35bcb96e29 3,5,52-67,69-97
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 68
+src/repolens/resolve/ecosystems.py
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 27-39,52-66,68-79
+  s_37d7baaa06722d::t_2694b60e6f4831 1-26,40-51,80-89
+  s_7a40f252ed63ef::t_494c7a0086ccc0 67
+tests/integration/test_m1_fixture_e2e.py
+  s_37d7baaa06722d::t_56aee639fec201 33-35,37-38
+  s_107fde8657826c::t_0845787efaf8b7 16,22,47-48,50-53
+  s_107fde8657826c::t_d94c0b3a3ae2fe 49,54-55
+  s_7a40f252ed63ef::t_494c7a0086ccc0 58
+  s_3bb5a00ca9d82e::t_962afe6ad0cd0d 56-57,59-65
+tests/unit/test_cli_run.py
+  s_2df20a9e9142cc::t_3cb2209b376cae 203-250
+docs/usage.md
+  s_37d7baaa06722d::t_745d6fffcb0c9b 312
+  s_37d7baaa06722d::t_8f4906907be75d 647-649
+  s_37d7baaa06722d::t_30d8d0ec31a2b6 467-489
+  s_37d7baaa06722d::t_6a91f20e46b7a8 307-311,313-333
+src/repolens/report/categories.py
+  s_37d7baaa06722d::t_ceeb64793b407c 12,94-98
+tests/integration/test_fixture_manifest.py
+  s_3bb5a00ca9d82e::t_5a394a8ec9f123 29-32
+  s_3bb5a00ca9d82e::t_962afe6ad0cd0d 58-66
+  s_107fde8657826c::t_0845787efaf8b7 49-57
+  s_7a40f252ed63ef::t_494c7a0086ccc0 67
+  s_37d7baaa06722d::t_838dcfe870e1e1 19,21
+tests/fixtures/synthetic/sentinel_android_app/settings.gradle
+  s_37d7baaa06722d::t_537fd4ed273205 1-2
+tests/unit/test_report_categories.py
+  s_37d7baaa06722d::t_14dbdd305be379 94-107,136-142,149
+tests/fixtures/synthetic/sentinel_android_app/build.gradle
+  s_37d7baaa06722d::t_537fd4ed273205 1,3-7
+  s_3bb5a00ca9d82e::t_d38afdc734e099 2
+tests/fixtures/synthetic/sentinel_ios_client/Package.swift
+  s_37d7baaa06722d::t_537fd4ed273205 1-18
+scripts/m1_fixture_e2e.py
+  s_107fde8657826c::t_0845787efaf8b7 248,250
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 246
+  s_37d7baaa06722d::t_0b4e2bdee9b440 213,217,219-220,234,237-240,244-245,247,249,257,367-368
+tests/unit/test_resolve_stage.py
+  s_37d7baaa06722d::t_aac1443733fba8 76-88,90-94,313-338,393-423,426,428-440
+  s_3bb5a00ca9d82e::t_485d8886125e53 89
+  s_c549f1b7e80094::t_cb3da6ebd634ca 359
+  s_3bb5a00ca9d82e::t_e1fe5a2c924cbd 424-425,427
+  s_c549f1b7e80094::t_8e5b0ef6443a60 339-358,360-392
+tests/unit/test_report_main.py
+  s_3bb5a00ca9d82e::t_2d9b83b918ee94 349,352
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 357
+  s_37d7baaa06722d::t_6f4d9c20fbf545 4,330-335,343-346,348,350-351,353-356,358-381
+  s_3bb5a00ca9d82e::t_ddebb2575095e3 336-342,347
+src/repolens/cli.py
+  s_2df20a9e9142cc::t_3cb2209b376cae 736-737
+tests/unit/test_resolve_adapters.py
+  s_37d7baaa06722d::t_efac88c95d54bc 94-156
+tests/fixtures/synthetic/sentinel_ios_client/Package.resolved
+  s_107fde8657826c::t_0845787efaf8b7 1-15
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "d1515da05e55e614c13018370433eabd242129ee",
+  "prompts": {},
+  "sessions": {
+    "s_107fde8657826c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9145-4f23-7e81-ac90-238c78e8cec4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_16f9e4e156d3b2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9125-cec1-7222-b8fd-2d4045ba8982",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_2df20a9e9142cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9135-57c9-7340-ba17-c99af531d9bc",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_37d7baaa06722d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9100-b84c-7133-b056-71fad0b73f4b",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    },
+    "s_3bb5a00ca9d82e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9154-4212-7ee1-944b-136f1ea2c85b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_7a40f252ed63ef": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019e9154-4212-7ee1-944b-136f1ea2c85b",
+        "model": "unknown"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_c04de871a6f6bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019e9100-b84c-7133-b056-71fad0b73f4b",
+        "model": "unknown"
+      },
+      "human_author": null
+    },
+    "s_c549f1b7e80094": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9142-0847-7bb2-aa4c-c038f964e255",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
