@@ -1,0 +1,41 @@
+README.md
+  s_03eb8fd35b12fb::t_50717b6e9830c8 18,22-23,76,79,82-85,87-98,106
+tests/unit/test_cli_run.py
+  s_03eb8fd35b12fb::t_0252316dc6740d 300-339
+  s_03eb8fd35b12fb::t_8a18334dbd6034 513-516,547-548,550-557
+  s_03eb8fd35b12fb::t_6200a9f8559a34 104-114,165-179,181-195,364,442
+  s_03eb8fd35b12fb::t_d698e88e2f0395 41,341,344,346,361
+  s_03eb8fd35b12fb::t_d22d45367ff5dd 1-40,42-103,115-164,196-197,340,342-343,345,347-360,362-363,365-381,408-441,443-512,558-583
+  s_03eb8fd35b12fb::t_9917ed67e03b8f 180
+  s_03eb8fd35b12fb::t_a297b1a7eb0250 198-299,382-407,517-546,549
+src/repolens/cli.py
+  s_03eb8fd35b12fb::t_ba150277d974e3 866-869
+  s_03eb8fd35b12fb::t_c67d8e99d125dc 375-436
+  s_03eb8fd35b12fb::t_9ab0c93cec7234 654,859-865,870-888
+  s_03eb8fd35b12fb::t_abd66b5b0a8d66 88-91
+  s_03eb8fd35b12fb::t_e72751e68b7fe3 632-637,713-714
+  s_03eb8fd35b12fb::t_f5cd26fb23d094 9,13,57-77
+  s_03eb8fd35b12fb::t_864244f807ae1a 952-961
+  s_03eb8fd35b12fb::t_59453154fe3d81 596-604,608,613-631,638-653,656-712,715-858,889-947,966-998
+  s_03eb8fd35b12fb::t_cf83340bb91340 522-523
+  s_03eb8fd35b12fb::t_637d8ef42cd284 180-181,193-196,246-261
+  s_03eb8fd35b12fb::t_6fd995952338da 605-607,609-612,655,948-951,962-965
+docs/usage.md
+  s_03eb8fd35b12fb::t_434664955777cf 3-6,248-291,294-297,307
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "6c3a5d733e4b3e5b4c869940c878d2575c2e45de",
+  "prompts": {},
+  "sessions": {
+    "s_03eb8fd35b12fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e90c6-a567-70f0-aa61-01dfa4805b93",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
