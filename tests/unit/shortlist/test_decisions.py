@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from repolens.shortlist.decisions import apply_decisions, parse_checkbox_decisions
+from repolens.shortlist.contexts import ShortlistMetadata
+from repolens.shortlist.decisions import (
+    apply_decisions,
+    parse_checkbox_decisions,
+    parse_review_decisions,
+)
+from repolens.shortlist.grouping import build_groups, group_membership_by_ref
 from repolens.shortlist.render import encode_component_ref, render_shortlist_markdown
 
 
@@ -14,6 +20,18 @@ def _tick(markdown: str, component_ref: str, mark: str) -> str:
             line = line.replace("- [ ] ", f"- [{mark}] ", 1)
         out.append(line)
     return "\n".join(out) + "\n"
+
+
+def _tick_first_group(markdown: str, mark: str) -> str:
+    out = []
+    for line in markdown.splitlines():
+        if "rpl:group=" in line and "- [ ] " in line:
+            line = line.replace("- [ ] ", f"- [{mark}] ", 1)
+            out.append(line)
+            out.extend(markdown.splitlines()[len(out) :])
+            return "\n".join(out) + "\n"
+        out.append(line)
+    return markdown
 
 
 def _items() -> list[dict[str, object]]:
@@ -37,6 +55,33 @@ def _items() -> list[dict[str, object]]:
             "decided_by": None,
             "decided_at": None,
             "note": None,
+        },
+    ]
+
+
+def _needs_judgment_items() -> list[dict[str, object]]:
+    return [
+        {
+            "component_ref": "acme-tool|GPL-3.0-only",
+            "reason": "BLOCK",
+            "evidence": {"source_layer": "api", "anchor": "GPL-3.0-only"},
+            "candidate_spdx": "GPL-3.0-only",
+            "status": "open",
+            "decided_by": None,
+            "decided_at": None,
+            "note": "agent:verified_awaiting_human",
+            "ai_suggestion": {"disposition": "block", "confidence": 0.95},
+        },
+        {
+            "component_ref": "acme-core|GPL-3.0-or-later",
+            "reason": "BLOCK",
+            "evidence": {"source_layer": "api", "anchor": "GPL-3.0-or-later"},
+            "candidate_spdx": "GPL-3.0-or-later",
+            "status": "open",
+            "decided_by": None,
+            "decided_at": None,
+            "note": "agent:verified_awaiting_human",
+            "ai_suggestion": {"disposition": "block", "confidence": 0.95},
         },
     ]
 
@@ -92,3 +137,115 @@ def test_apply_decisions_records_decided_fields_only_on_open_items() -> None:
     untouched = next(item for item in updated if item["component_ref"] == "acme-tool|GPL-3.0-only")
     assert untouched["status"] == "open"
     assert untouched["decided_by"] is None
+
+
+def test_group_accept_applies_to_members_with_provenance() -> None:
+    items = [_items()[0]]
+    metadata = ShortlistMetadata(triage_by_ref={})
+    markdown = _tick_first_group(render_shortlist_markdown(items, metadata=metadata), "x")
+    parsed = parse_review_decisions(markdown)
+    groups = build_groups(items, metadata)
+
+    updated = apply_decisions(
+        items,
+        parsed.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+        group_decisions=parsed.group_decisions,
+        group_membership=group_membership_by_ref(groups),
+    )
+
+    item = updated[0]
+    assert item["status"] == "approved"
+    assert item["decided_via"] == "group"
+    assert item["decision_provenance"]["component_refs"] == ["acme-lib|MIT"]
+
+
+def test_item_ref_overrides_group_decision() -> None:
+    items = [_items()[0]]
+    metadata = ShortlistMetadata(triage_by_ref={})
+    markdown = render_shortlist_markdown(items, metadata=metadata)
+    markdown = _tick_first_group(markdown, "x")
+    markdown = _tick(markdown, "acme-lib|MIT", "r")
+    parsed = parse_review_decisions(markdown)
+    groups = build_groups(items, metadata)
+
+    updated = apply_decisions(
+        items,
+        parsed.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+        group_decisions=parsed.group_decisions,
+        group_membership=group_membership_by_ref(groups),
+    )
+
+    assert updated[0]["status"] == "rejected"
+    assert updated[0]["decided_via"] == "item"
+    assert "decision_provenance" not in updated[0]
+
+
+def test_malformed_group_marker_is_ignored() -> None:
+    items = [_items()[0]]
+    metadata = ShortlistMetadata(triage_by_ref={})
+    markdown = _tick_first_group(render_shortlist_markdown(items, metadata=metadata), "x")
+    corrupted = markdown.replace("rpl:group=", "rpl:group=!!!")
+
+    parsed = parse_review_decisions(corrupted)
+
+    assert parsed.group_decisions == {}
+
+
+def test_needs_judgment_group_decision_applies_to_members() -> None:
+    items = _needs_judgment_items()
+    metadata = ShortlistMetadata(triage_by_ref={})
+    groups = build_groups(items, metadata)
+    markdown = render_shortlist_markdown(items, metadata=metadata)
+
+    approved = parse_review_decisions(_tick_first_group(markdown, "x"))
+    approved_items = apply_decisions(
+        items,
+        approved.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+        group_decisions=approved.group_decisions,
+        group_membership=group_membership_by_ref(groups),
+    )
+    rejected = parse_review_decisions(_tick_first_group(markdown, "r"))
+    rejected_items = apply_decisions(
+        items,
+        rejected.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+        group_decisions=rejected.group_decisions,
+        group_membership=group_membership_by_ref(groups),
+    )
+
+    assert {item["status"] for item in approved_items} == {"approved"}
+    assert {item["decided_via"] for item in approved_items} == {"group"}
+    assert {item["status"] for item in rejected_items} == {"rejected"}
+    assert {item["decided_via"] for item in rejected_items} == {"group"}
+
+
+def test_needs_judgment_item_ref_overrides_group_decision() -> None:
+    items = _needs_judgment_items()
+    metadata = ShortlistMetadata(triage_by_ref={})
+    markdown = render_shortlist_markdown(items, metadata=metadata)
+    markdown = _tick_first_group(markdown, "x")
+    markdown = _tick(markdown, "acme-tool|GPL-3.0-only", "r")
+    parsed = parse_review_decisions(markdown)
+    groups = build_groups(items, metadata)
+
+    updated = apply_decisions(
+        items,
+        parsed.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+        group_decisions=parsed.group_decisions,
+        group_membership=group_membership_by_ref(groups),
+    )
+
+    by_ref = {str(item["component_ref"]): item for item in updated}
+    assert by_ref["acme-tool|GPL-3.0-only"]["status"] == "rejected"
+    assert by_ref["acme-tool|GPL-3.0-only"]["decided_via"] == "item"
+    assert by_ref["acme-core|GPL-3.0-or-later"]["status"] == "approved"
+    assert by_ref["acme-core|GPL-3.0-or-later"]["decided_via"] == "group"

@@ -134,6 +134,41 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertEqual(run_shortlist.call_args.kwargs["identity"], "reviewer-sentinel")
 
+    def test_shortlist_accepts_emit_contexts_and_proposals_flags(self) -> None:
+        config = cli.load_config(".", None)
+        with (
+            mock.patch("repolens.cli.load_config", return_value=config),
+            mock.patch("repolens.shortlist.run_shortlist") as run_shortlist,
+        ):
+            run_shortlist.return_value = mock.Mock(
+                open_count=1,
+                item_count=2,
+                shortlist_json_path=Path("work/shortlist.json"),
+                shortlist_md_path=Path("work/shortlist.md"),
+                contexts_path=Path("work/shortlist.contexts.json"),
+            )
+            code = cli.main(
+                [
+                    "shortlist",
+                    "--work-root",
+                    "work",
+                    "--emit-contexts",
+                    "work/shortlist.contexts.json",
+                    "--proposals",
+                    "work/shortlist.proposals.json",
+                ]
+            )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            run_shortlist.call_args.kwargs["emit_contexts_path"],
+            Path("work/shortlist.contexts.json"),
+        )
+        self.assertEqual(
+            run_shortlist.call_args.kwargs["proposals_path"],
+            Path("work/shortlist.proposals.json"),
+        )
+
     def test_discover_requires_owner(self) -> None:
         self.assertEqual(cli.main(["discover"]), 2)
 

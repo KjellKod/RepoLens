@@ -155,13 +155,17 @@ _STAGE_HELP = {
         ),
     ),
     "shortlist": StageHelp(
-        help="Resolve the flagged items with anchored evidence and your approval.",
-        description=("Stage 5/6 — settle flagged items with anchored evidence and your approval."),
+        help="Settle grouped flagged items with verified proposals and your approval.",
+        description=(
+            "Stage 5/6 — emit proposal contexts, verify proposal artifacts, and settle "
+            "grouped flagged items with your approval."
+        ),
         epilog=_stage_epilog(
             "shortlist.json + shortlist.md from flag under <WORK>.",
-            "repolens shortlist --work-root work [--identity <REVIEWER>]",
-            "shortlist.json + shortlist.md rewritten with settled statuses, candidate "
-            "evidence, and your recorded approvals; exits 1 while any item is still open.",
+            "repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json",
+            "shortlist.contexts.json when requested; shortlist.json + grouped shortlist.md "
+            "rewritten with verified candidates and recorded human approvals; exits 1 "
+            "while any item is still open.",
             "once nothing is open, `repolens report`.",
         ),
     ),
@@ -505,6 +509,24 @@ def _configure_shortlist_parser(subparser: argparse.ArgumentParser) -> None:
             "never an owner/repo literal."
         ),
     )
+    subparser.add_argument(
+        "--emit-contexts",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "Write model-free external proposal contexts for open items; RepoLens does "
+            "not invoke a model."
+        ),
+    )
+    subparser.add_argument(
+        "--proposals",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "Read external AI proposal JSON and re-fetch/verify every citation before "
+            "recording candidates."
+        ),
+    )
     subparser.set_defaults(handler=_shortlist_stage)
 
 
@@ -680,23 +702,9 @@ def _run_command(args: argparse.Namespace) -> CommandResult:
         _run_banner(args, "flag", _first_line(flag_result.message))
     _run_step_pause(args, "flag")
 
-    while True:
-        _shortlist_stage(_stage_args(args, work_root=work_root))
-        open_count = _shortlist_open_count(work_root)
-        _run_banner(args, "shortlist", f"{open_count} open item(s)")
-        if open_count == 0:
-            break
-        instruction = (
-            f"{open_count} items need a decision in {work_root / 'shortlist.md'} "
-            "([x] approve / [r] reject), then press Enter."
-        )
-        if not interactive:
-            print(
-                f"{open_count} items still need review in {work_root / 'shortlist.md'}",
-                file=sys.stderr,
-            )
-            return CommandResult(CommandStatus.FINDINGS_OPEN, instruction)
-        _run_pause(instruction, interactive=True)
+    shortlist_result = _run_shortlist_loop(args, work_root, interactive=interactive)
+    if shortlist_result is not None:
+        return shortlist_result
 
     _run_step_pause(args, "shortlist")
 
@@ -780,6 +788,8 @@ def _stage_args(
     *,
     work_root: Path,
     out_dir: Path | None = None,
+    emit_contexts_path: Path | None = None,
+    proposals_path: Path | None = None,
 ) -> argparse.Namespace:
     return argparse.Namespace(
         work_root=work_root,
@@ -794,6 +804,8 @@ def _stage_args(
         source_root=None,
         enable_mobile_native=False,
         identity=None,
+        emit_contexts=emit_contexts_path,
+        proposals=proposals_path,
     )
 
 
@@ -821,6 +833,75 @@ def _run_step_pause(args: argparse.Namespace, stage: str) -> None:
     if not args.step or not _run_interactive(args):
         return
     _run_pause(f"Review artifacts after {stage}, then press Enter to continue.", interactive=True)
+
+
+def _run_shortlist_loop(
+    args: argparse.Namespace,
+    work_root: Path,
+    *,
+    interactive: bool,
+) -> CommandResult | None:
+    contexts_path = work_root / "shortlist.contexts.json"
+    proposals_path = work_root / "shortlist.proposals.json"
+
+    while True:
+        _shortlist_stage(_stage_args(args, work_root=work_root, emit_contexts_path=contexts_path))
+        open_count = _shortlist_open_count(work_root)
+        _run_banner(args, "shortlist", f"{open_count} open item(s); contexts at {contexts_path}")
+        if open_count == 0:
+            return None
+
+        if not interactive:
+            instruction = _shortlist_artifact_instruction(
+                open_count,
+                work_root,
+                contexts_path,
+                proposals_path,
+            )
+            print(instruction, file=sys.stderr)
+            return CommandResult(CommandStatus.FINDINGS_OPEN, instruction)
+
+        _run_pause(
+            "External proposal step: use the `.skills/repolens` runbook to review "
+            f"{contexts_path} and write optional proposals to {proposals_path}, then "
+            "press Enter.",
+            interactive=True,
+        )
+        if proposals_path.exists():
+            _shortlist_stage(_stage_args(args, work_root=work_root, proposals_path=proposals_path))
+            open_count = _shortlist_open_count(work_root)
+            _run_banner(args, "shortlist", f"{open_count} open item(s) after proposals")
+            if open_count == 0:
+                return None
+
+        _run_pause(
+            f"Review grouped decisions in {work_root / 'shortlist.md'} "
+            "([x] approve / [r] reject available groups or items), then press Enter.",
+            interactive=True,
+        )
+        _shortlist_stage(_stage_args(args, work_root=work_root))
+        open_count = _shortlist_open_count(work_root)
+        _run_banner(args, "shortlist", f"{open_count} open item(s) after human decisions")
+        if open_count == 0:
+            return None
+
+
+def _shortlist_artifact_instruction(
+    open_count: int,
+    work_root: Path,
+    contexts_path: Path,
+    proposals_path: Path,
+) -> str:
+    return (
+        f"{open_count} items still need review; report is halted before disclosure.\n"
+        f"Contexts: {contexts_path}\n"
+        f"Optional proposals: {proposals_path}\n"
+        f"Grouped human review: {work_root / 'shortlist.md'}\n"
+        "Next: create proposals outside RepoLens if useful, then run "
+        f"`repolens shortlist --work-root {shlex.quote(str(work_root))} "
+        f"--proposals {shlex.quote(str(proposals_path))}` and approve/reject groups "
+        "or items in shortlist.md."
+    )
 
 
 def _discover_artifacts_exist(work_root: Path) -> bool:
@@ -1617,10 +1698,9 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.shortlist import run_shortlist
     from repolens.shortlist.agent import AgentRequest, AgentResponse
 
-    # The default offline agent abstains: the production model is wired behind the
-    # AgentClient boundary and exercised only by the scheduled live-smoke lane (plan A1).
-    # Abstaining keeps the offline CLI from reaching any model while still exercising the
-    # pre-screen / decision-ingest / write-back paths.
+    # The default offline agent abstains. RepoLens itself never invokes a model; artifact
+    # proposal workflows run outside RepoLens, then this stage re-fetches and verifies
+    # citations before recording candidates.
     class _AbstainingAgent:
         def resolve(self, request: AgentRequest) -> AgentResponse:
             from repolens.shortlist.agent import Abstain
@@ -1632,19 +1712,26 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
         args.work_root,
         agent_client=_AbstainingAgent(),
         identity=args.identity,
+        emit_contexts_path=args.emit_contexts,
+        proposals_path=args.proposals,
     )
     summary = (
         f"settled shortlist: {result.open_count} open item(s) of {result.item_count}; "
         f"wrote {result.shortlist_json_path.name}, {result.shortlist_md_path.name}"
     )
+    contexts_path = getattr(result, "contexts_path", None)
+    if contexts_path is not None:
+        summary = f"{summary}; emitted contexts {contexts_path}"
+    if args.proposals is not None:
+        summary = f"{summary}; ingested proposals {args.proposals}"
     if result.open_count > 0:
         rerun_command = f"repolens shortlist --work-root {shlex.quote(str(args.work_root))}"
         return CommandResult(
             CommandStatus.FINDINGS_OPEN,
             (
                 f"{summary}\n"
-                f"Manual step: resolve open items in {result.shortlist_md_path}, then rerun "
-                f"`{rerun_command}`."
+                f"Manual step: resolve open items in grouped {result.shortlist_md_path}, then "
+                f"rerun `{rerun_command}`."
             ),
         )
     report_command = (

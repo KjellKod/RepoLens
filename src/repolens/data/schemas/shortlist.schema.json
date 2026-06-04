@@ -34,6 +34,60 @@
           "status": {"type": "string", "enum": ["open", "approved", "rejected"]},
           "decided_by": {"type": ["string", "null"]},
           "decided_at": {"type": ["string", "null"]},
+          "decided_via": {"type": ["string", "null"], "enum": ["group", "item", null]},
+          "decision_provenance": {
+            "type": "object",
+            "required": ["component_refs", "found_in", "group"],
+            "properties": {
+              "component_refs": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              },
+              "found_in": {"type": "array", "items": {"type": "string"}},
+              "group": {
+                "type": "object",
+                "required": ["spdx_family", "distribution", "scope"],
+                "properties": {
+                  "spdx_family": {"type": "string", "minLength": 1},
+                  "distribution": {"type": "string", "minLength": 1},
+                  "scope": {"type": "string", "minLength": 1}
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "ai_suggestion": {
+            "type": "object",
+            "required": [
+              "component_ref",
+              "spdx_id",
+              "evidence_url",
+              "evidence_anchor",
+              "disposition",
+              "confidence",
+              "rationale",
+              "sanity_check",
+              "abstain",
+              "reason",
+              "invalid_reason"
+            ],
+            "properties": {
+              "component_ref": {"type": "string"},
+              "spdx_id": {"type": ["string", "null"]},
+              "evidence_url": {"type": ["string", "null"]},
+              "evidence_anchor": {"type": ["string", "null"]},
+              "disposition": {"type": ["string", "null"]},
+              "confidence": {"type": ["string", "number", "null"]},
+              "rationale": {"type": ["string", "null"]},
+              "sanity_check": {"type": ["string", "null"]},
+              "abstain": {"type": "boolean"},
+              "reason": {"type": ["string", "null"]},
+              "invalid_reason": {"type": ["string", "null"]}
+            },
+            "additionalProperties": false
+          },
+          "verify_reason": {"type": ["string", "null"]},
           "note": {"type": ["string", "null"]}
         },
         "additionalProperties": false

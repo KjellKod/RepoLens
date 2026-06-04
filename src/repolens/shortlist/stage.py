@@ -1,17 +1,16 @@
-"""Shortlist stage orchestration: ingest human ticks, run the agent, verify, write back.
+"""Shortlist stage orchestration: ingest ticks, emit contexts, verify proposals, write back.
 
 This is the one home for the P5 ``shortlist`` stage. Per run it:
 
 1. Reads the schema-validated ``shortlist.json`` ``flag`` produced (``data.store``).
 2. Ingests human checkbox decisions from the existing ``shortlist.md`` and records
    ``status`` / ``decided_by`` / ``decided_at`` on the matching ``open`` items (A2, AC 6).
-3. For each still-``open`` item: pre-screens its content (cap/normalize/screen/wrap); a
-   flagged item routes to the human queue and the agent is **never invoked** (AC 4). Clean
-   content goes to the injected ``AgentClient`` (one isolated invocation per item, AC 3).
-4. Verifies any agent proposal by re-fetching the cited evidence URL through the SSRF-guarded
+3. In artifact mode, emits clean, wrapped contexts for external proposal tooling without
+   invoking a model. Proposal artifacts are read back as untrusted input.
+4. Verifies every proposal by re-fetching the cited evidence URL through the SSRF-guarded
    client and confirming the exact SPDX anchor (AC 2). A verified proposal sets
    ``candidate_spdx`` + ``evidence.source_layer="agent"`` but **stays ``open`` until a human
-   ticks it** — the agent proposes, the human disposes (ratified decision A5).
+   ticks it** — the external proposal suggests, the human disposes (ratified decision A5).
 5. Recomputes ``open_count`` and writes ``shortlist.json`` (token-redacted by the store) and
    ``shortlist.md`` (token-redacted before the byte write), then reports the open count so the
    CLI maps ``open_count > 0`` to ``FINDINGS_OPEN`` (AC 1).
@@ -38,9 +37,16 @@ from repolens.resolve.models import FetchFunction
 from repolens.security.http_client import Resolver, fetch_url
 from repolens.security.limits import DEFAULT_LIMITS, SecurityLimits
 from repolens.security.redaction import redact_tokens
-from repolens.shortlist.agent import AgentClient, AgentRequest, Resolution
-from repolens.shortlist.decisions import apply_decisions, parse_checkbox_decisions
-from repolens.shortlist.prescreen import ItemContent, prescreen_item
+from repolens.shortlist.agent import AgentClient, Resolution
+from repolens.shortlist.contexts import (
+    build_agent_request,
+    emit_contexts,
+    load_shortlist_metadata,
+)
+from repolens.shortlist.decisions import apply_decisions, parse_review_decisions
+from repolens.shortlist.grouping import build_groups, group_membership_by_ref
+from repolens.shortlist.prescreen import ItemContent
+from repolens.shortlist.proposals import apply_proposals
 from repolens.shortlist.render import render_shortlist_markdown
 from repolens.shortlist.verify import verify_agent_resolution
 
@@ -57,6 +63,7 @@ class ShortlistResult:
     open_count: int
     item_count: int
     agent_invocations: int
+    contexts_path: Path | None = None
 
 
 def _evidence_content_loader(item: Mapping[str, Any]) -> ItemContent:
@@ -79,6 +86,8 @@ def run_shortlist(
     identity: str | None = None,
     limits: SecurityLimits = DEFAULT_LIMITS,
     now: str | None = None,
+    emit_contexts_path: str | Path | None = None,
+    proposals_path: str | Path | None = None,
 ) -> ShortlistResult:
     """Settle the flagged items in ``work_root`` and write the artifacts back."""
 
@@ -87,16 +96,39 @@ def run_shortlist(
     raw_items = document.get("items", [])
     items: Sequence[Mapping[str, Any]] = raw_items if isinstance(raw_items, list) else []
     timestamp = now or _utc_now()
+    metadata = load_shortlist_metadata(root)
 
-    # 1. Ingest any human ticks from the existing shortlist.md before touching the agent.
-    settled_items = _ingest_human_decisions(root, items, identity=identity, now=timestamp)
+    # 1. Ingest any human ticks from the existing shortlist.md before proposal handling.
+    settled_items = _ingest_human_decisions(
+        root, items, identity=identity, now=timestamp, metadata=metadata
+    )
 
-    # 2. Run the agent path for items still open.
+    written_contexts_path: Path | None = None
+    if emit_contexts_path is not None:
+        written_contexts_path = emit_contexts(
+            Path(emit_contexts_path),
+            settled_items,
+            metadata=metadata,
+            content_loader=content_loader,
+            limits=limits,
+        )
+
+    if proposals_path is not None:
+        settled_items = apply_proposals(
+            settled_items,
+            Path(proposals_path),
+            fetcher=fetcher,
+            evidence_resolver=evidence_resolver,
+        )
+
+    # 2. Run the injected agent path only for the legacy no-artifact mode. The new
+    # artifact modes are model-free: context emission writes a file, proposal ingestion
+    # verifies citations, and neither calls ``agent_client.resolve``.
     resolved_items: list[dict[str, Any]] = []
     agent_invocations = 0
     for item in settled_items:
         record = dict(item)
-        if record.get("status") == "open":
+        if emit_contexts_path is None and proposals_path is None and record.get("status") == "open":
             agent_invocations += _resolve_open_item(
                 record,
                 agent_client=agent_client,
@@ -116,7 +148,7 @@ def run_shortlist(
     }
 
     shortlist_json_path = store.write_shortlist(root, out_document)
-    markdown = redact_tokens(render_shortlist_markdown(resolved_items))
+    markdown = redact_tokens(render_shortlist_markdown(resolved_items, metadata=metadata))
     shortlist_md_path = root / "shortlist.md"
     store.atomic_write_bytes(shortlist_md_path, markdown.encode("utf-8"))
 
@@ -126,6 +158,7 @@ def run_shortlist(
         open_count=open_count,
         item_count=len(resolved_items),
         agent_invocations=agent_invocations,
+        contexts_path=written_contexts_path,
     )
 
 
@@ -135,13 +168,23 @@ def _ingest_human_decisions(
     *,
     identity: str | None,
     now: str,
+    metadata,
 ) -> list[dict[str, Any]]:
     markdown_path = root / "shortlist.md"
     if not markdown_path.exists():
         return [dict(item) for item in items]
     markdown = markdown_path.read_text(encoding="utf-8", errors="replace")
-    decisions = parse_checkbox_decisions(markdown)
-    return apply_decisions(items, decisions, identity=identity, now=now)
+    parsed = parse_review_decisions(markdown)
+    groups = build_groups(items, metadata)
+    memberships = group_membership_by_ref(groups)
+    return apply_decisions(
+        items,
+        parsed.item_decisions,
+        identity=identity,
+        now=now,
+        group_decisions=parsed.group_decisions,
+        group_membership=memberships,
+    )
 
 
 def _resolve_open_item(
@@ -161,15 +204,13 @@ def _resolve_open_item(
     invoked at most once and never for flagged content.
     """
 
-    component_ref = str(record.get("component_ref", ""))
-    content = content_loader(record)
-    outcome = prescreen_item(content, source="shortlist", path=component_ref, limits=limits)
-    if not outcome.routed_to_agent:
-        record["note"] = outcome.human_reason
+    request, human_reason = build_agent_request(
+        record, content_loader=content_loader, limits=limits
+    )
+    if request is None:
+        record["note"] = human_reason
         return 0
 
-    assert outcome.wrapped_context is not None  # routed_to_agent guarantees this
-    request = AgentRequest(component_ref=component_ref, wrapped_context=outcome.wrapped_context)
     response = agent_client.resolve(request)
     if not isinstance(response, Resolution):
         record["note"] = "agent:abstained"
