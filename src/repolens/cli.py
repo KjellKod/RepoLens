@@ -16,7 +16,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, TextIO
+from typing import TYPE_CHECKING, Protocol, TextIO, TypeVar
 from urllib.parse import unquote
 
 from repolens.bootstrap.cache import (
@@ -44,6 +44,8 @@ from .data.errors import ArtifactError
 from .discovery.gh import DEFAULT_GH_LIMIT, MAX_GH_LIMIT, parse_repos_option
 from .discovery.pipeline import run_discover
 from .exit_codes import ExitCode, InputError, InternalError
+
+_ParsedPromptValue = TypeVar("_ParsedPromptValue")
 
 PATH_PATTERN = re.compile(r"(?<![:/])(?:/[^\s:/]+)+")
 
@@ -208,16 +210,6 @@ _DESCRIPTION = (
 )
 
 _EPILOG = (
-    "global options:\n"
-    "  Put global options before the command name, e.g.\n"
-    "    repolens --config ./.repolens.local.json discover --owner <OWNER>\n"
-    "  JSON config files hold local taxonomy, scan, and report settings; owner is\n"
-    "  still supplied at runtime with --owner.\n"
-    "  Use stage options such as --work-root for output directories; --config is\n"
-    "  only for local config files.\n"
-    "  Use `repolens config init`, `repolens config schema`, and\n"
-    "  `repolens config validate <path>` for local config workflows.\n"
-    "\n"
     "recommended:\n"
     "  repolens run --work-root work --owner <OWNER>\n"
     "\n"
@@ -228,6 +220,27 @@ _EPILOG = (
     "  4. repolens flag --work-root work                        flag risk / unknowns\n"
     "  5. repolens shortlist --work-root work                   settle the flags + approve\n"
     "  6. repolens report --work-root work                      build the main disclosure\n"
+    "\n"
+    "global options:\n"
+    "  Put global options before the command name, e.g.\n"
+    "    `repolens --config ./.repolens.local.json discover --owner <OWNER>`\n"
+    "\n"
+    "  JSON config files hold local taxonomy, scan, and report settings; owner is still "
+    "supplied at runtime with --owner.\n"
+    "\n"
+    "  Use stage options such as --work-root for output directories; --config is only "
+    "for local config files.\n"
+    "\n"
+    "  Use `repolens config init`, `repolens config schema`, and `repolens config "
+    "validate <path>` for local config workflows.\n"
+    "\n"
+    "  Common local config commands:\n"
+    "    `repolens config init --work-root work`\n"
+    "    `repolens config schema`\n"
+    "    `repolens config validate ./.repolens.local.json`\n"
+    "\n"
+    "  Use a config with the full run:\n"
+    "    `repolens run --work-root work --owner <OWNER> --config ./.repolens.local.json`\n"
     "\n"
     "Scan auto-acquires and verifies RepoLens's pinned Syft into a shared cache on\n"
     "first use; `repolens bootstrap` pre-seeds it for offline runs. Run\n"
@@ -246,10 +259,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         type=Path,
         metavar="PATH",
-        help=(
-            "Global option before <command>: path to an untracked local config file "
-            "(JSON only: taxonomy, scan, and report settings)."
-        ),
+        help="JSON local config path; use before <command>.",
     )
     subparsers = parser.add_subparsers(
         dest="command",
@@ -276,9 +286,17 @@ def build_parser() -> argparse.ArgumentParser:
         help="Initialize, validate, and display JSON-only local runtime config.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=(
-            "Manage RepoLens JSON-only local runtime config. Local config can set "
-            "discover taxonomy, scan options, and report options; owner/repo inputs "
-            "remain runtime CLI inputs."
+            "Manage RepoLens JSON-only local runtime config.\n"
+            "Local config can set discover taxonomy, scan options, and report options.\n"
+            "Owner/repo inputs remain runtime CLI inputs."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  repolens config init --work-root work\n"
+            "  repolens config schema\n"
+            "  repolens config validate ./.repolens.local.json\n"
+            "\n"
+            "Run `repolens config <action> --help` for action-specific options."
         ),
     )
     _configure_config_parser(config_parser)
@@ -374,31 +392,42 @@ def _configure_config_parser(subparser: argparse.ArgumentParser) -> None:
         dest="config_action",
         metavar="<action>",
         title="config actions",
-        required=True,
+        required=False,
     )
+    subparser.set_defaults(handler=_parser_help_command(subparser))
     init_parser = actions.add_parser(
         "init",
-        help="Guided creation of a minimal JSON local config file.",
+        help="Generate a minimal JSON local config through guided prompts.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Create a minimal JSON local config file through guided prompts.",
+        description=(
+            "Generate a minimal JSON local config file through guided prompts.\n"
+            "RepoLens asks where to save the file, explains each section, and writes\n"
+            "only the fields you select.\n"
+            "\n"
+            "Prompt entries use key=value, for example owner/repo=production or\n"
+            "obsolete-*=retired. At the interactive prompt, do not add shell quotes\n"
+            "around glob patterns; type obsolete-*=retired."
+        ),
         epilog=(
             "Examples:\n"
             "  repolens config init\n"
             "  repolens config init --work-root work\n"
-            "  repolens config init --out ./.repolens.local.json"
+            "  repolens config init --out ./.repolens.local.json\n"
+            "\n"
+            "During init, invalid entries are explained and re-prompted."
         ),
     )
     init_parser.add_argument(
         "--work-root",
         type=Path,
         metavar="DIR",
-        help=("Use DIR/.repolens.local.json as the default save path and in next-step commands."),
+        help="Default save path is DIR/.repolens.local.json; next commands use DIR.",
     )
     init_parser.add_argument(
         "--out",
         type=Path,
         metavar="PATH",
-        help="Default save path for the new JSON config file.",
+        help="Exact .json path to write.",
     )
     init_parser.add_argument(
         "--force",
@@ -411,7 +440,11 @@ def _configure_config_parser(subparser: argparse.ArgumentParser) -> None:
         "schema",
         help="Show supported local config keys and operational impact.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Show the RepoLens local config schema in readable form.",
+        description=(
+            "Show supported local config keys, types, defaults, and operational impact.\n"
+            "Use this before writing .repolens.local.json by hand."
+        ),
+        epilog=("Examples:\n  repolens config schema\n  repolens config schema --json"),
     )
     schema_parser.add_argument(
         "--json",
@@ -424,10 +457,35 @@ def _configure_config_parser(subparser: argparse.ArgumentParser) -> None:
         "validate",
         help="Validate one JSON local config file and summarize it.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Validate exactly one JSON local config file, without discovery or merging.",
+        description=(
+            "Validate exactly one JSON local config file, without discovery or merging.\n"
+            "Use this after writing .repolens.local.json by hand."
+        ),
+        epilog=(
+            "Examples:\n"
+            "  repolens config validate ./.repolens.local.json\n"
+            "  repolens config validate work/.repolens.local.json\n"
+            "\n"
+            "Validation rejects unknown keys and prints a readable summary of the file."
+        ),
     )
-    validate_parser.add_argument("path", type=Path, metavar="PATH")
+    validate_parser.add_argument(
+        "path",
+        type=Path,
+        metavar="PATH",
+        help="JSON local config file to validate.",
+    )
     validate_parser.set_defaults(handler=_config_validate_command)
+
+
+def _parser_help_command(
+    parser: argparse.ArgumentParser,
+) -> Callable[[argparse.Namespace], CommandResult]:
+    def command(_args: argparse.Namespace) -> CommandResult:
+        parser.print_help()
+        return CommandResult(CommandStatus.SUCCESS, "")
+
+    return command
 
 
 def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
@@ -654,9 +712,22 @@ def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.set_defaults(handler=_report)
 
 
+def _global_config_help_requested(argv: Sequence[str]) -> bool:
+    help_flags = {"-h", "--help"}
+    return any(
+        arg == "--config" and index + 1 < len(argv) and argv[index + 1] in help_flags
+        for index, arg in enumerate(argv)
+    )
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
+    argv = sys.argv[1:] if argv is None else argv
     try:
+        if _global_config_help_requested(argv):
+            parser.print_help()
+            return int(ExitCode.SUCCESS)
+
         args = parser.parse_args(argv)
         if args.command is None:
             parser.print_help()
@@ -729,12 +800,12 @@ def _config_validate_command(args: argparse.Namespace) -> CommandResult:
 
 
 def _config_init_command(args: argparse.Namespace) -> CommandResult:
-    path = _prompt_config_path(args, input_stream=sys.stdin, output_stream=sys.stdout)
-    if path.suffix.lower() != ".json":
+    if args.out is not None and args.out.suffix.lower() != ".json":
         raise InputError(
-            f"Config output path must end in .json: {path}. "
+            f"Config output path must end in .json: {args.out}. "
             "RepoLens local runtime config is JSON-only; use .repolens.local.json."
         )
+    path = _prompt_config_path(args, input_stream=sys.stdin, output_stream=sys.stdout)
     if (
         path.exists()
         and not args.force
@@ -788,13 +859,20 @@ def _prompt_config_path(
         default = args.work_root / ".repolens.local.json"
     else:
         default = Path(".repolens.local.json")
-    answer = _prompt(
-        "Where should RepoLens save the JSON local config?",
-        default=str(default),
-        input_stream=input_stream,
-        output_stream=output_stream,
-    )
-    return Path(answer)
+    while True:
+        answer = _prompt(
+            "Where should RepoLens save the JSON local config?",
+            default=str(default),
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
+        path = Path(answer)
+        if path.suffix.lower() == ".json":
+            return path
+        print(
+            "Invalid input: config output path must end in .json. Try again.",
+            file=output_stream,
+        )
 
 
 def _prompt_config_values(*, input_stream: TextIO, output_stream: TextIO) -> dict[str, object]:
@@ -835,29 +913,32 @@ def _prompt_taxonomy(*, input_stream: TextIO, output_stream: TextIO) -> dict[str
         "\nExplicit repos are exact repo or owner/repo category matches.",
         file=output_stream,
     )
-    explicit = _parse_mapping(
-        _prompt(
-            "Explicit repo categories, comma-separated owner/repo=category pairs",
-            default="",
-            input_stream=input_stream,
-            output_stream=output_stream,
+    explicit = _prompt_parsed(
+        "Explicit repo categories (example owner/repo=production)",
+        parser=lambda value: _parse_mapping(value, label="explicit repo category"),
+        retry_hint=(
+            "Use owner/repo=category pairs such as owner/repo=production. Press Enter to skip."
         ),
-        label="explicit repo category",
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
     if explicit:
         taxonomy["explicit"] = explicit
 
     print(
-        "\nPatterns are glob rules checked after explicit repo matches.",
+        "\nPatterns are glob rules checked after explicit repo matches. At this prompt, "
+        "type glob patterns without shell quotes, for example obsolete-*=retired.",
         file=output_stream,
     )
-    patterns = _parse_patterns(
-        _prompt(
-            "Pattern categories, comma-separated glob=category pairs",
-            default="",
-            input_stream=input_stream,
-            output_stream=output_stream,
-        )
+    patterns = _prompt_parsed(
+        "Pattern categories (example obsolete-*=retired)",
+        parser=_parse_patterns,
+        retry_hint=(
+            "Use glob=category pairs such as obsolete-*=retired. Do not add quotes in "
+            "the prompt. Press Enter to skip."
+        ),
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
     if patterns:
         taxonomy["patterns"] = patterns
@@ -867,14 +948,12 @@ def _prompt_taxonomy(*, input_stream: TextIO, output_stream: TextIO) -> dict[str
         "checked with `gh repo view OWNER/REPO --json repositoryTopics`.",
         file=output_stream,
     )
-    topics = _parse_mapping(
-        _prompt(
-            "Topic categories, comma-separated topic=category pairs",
-            default="",
-            input_stream=input_stream,
-            output_stream=output_stream,
-        ),
-        label="topic category",
+    topics = _prompt_parsed(
+        "Topic categories (example mobile=apps)",
+        parser=lambda value: _parse_mapping(value, label="topic category"),
+        retry_hint="Use topic=category pairs such as mobile=apps. Press Enter to skip.",
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
     if topics:
         taxonomy["topics"] = topics
@@ -884,14 +963,12 @@ def _prompt_taxonomy(*, input_stream: TextIO, output_stream: TextIO) -> dict[str
         "for retired/dead repos.",
         file=output_stream,
     )
-    dead = _parse_mapping(
-        _prompt(
-            "Dead repos, comma-separated owner/repo=reason pairs",
-            default="",
-            input_stream=input_stream,
-            output_stream=output_stream,
-        ),
-        label="dead repo",
+    dead = _prompt_parsed(
+        "Dead repos (example owner/repo=retired)",
+        parser=lambda value: _parse_mapping(value, label="dead repo"),
+        retry_hint="Use owner/repo=reason pairs such as owner/repo=retired. Press Enter to skip.",
+        input_stream=input_stream,
+        output_stream=output_stream,
     )
     if dead:
         taxonomy["dead"] = dead
@@ -918,20 +995,15 @@ def _prompt_scan_config(*, input_stream: TextIO, output_stream: TextIO) -> dict[
         scan["exclude_paths"] = exclude_paths
 
     print("\nscan.clone_timeout_seconds is a positive clone timeout.", file=output_stream)
-    clone_timeout = _prompt(
+    clone_timeout = _prompt_parsed(
         "Clone timeout seconds",
-        default="",
+        parser=_parse_optional_positive_timeout,
+        retry_hint="Use a positive number such as 300, or press Enter to skip.",
         input_stream=input_stream,
         output_stream=output_stream,
     )
-    if clone_timeout:
-        try:
-            value = float(clone_timeout)
-        except ValueError as exc:
-            raise InputError("scan.clone_timeout_seconds must be a positive number") from exc
-        if not math.isfinite(value) or value <= 0:
-            raise InputError("scan.clone_timeout_seconds must be a positive number")
-        scan["clone_timeout_seconds"] = int(value) if value.is_integer() else value
+    if clone_timeout is not None:
+        scan["clone_timeout_seconds"] = clone_timeout
 
     print(
         "\nscan.syft.catalogers is an optional restricted cataloger list; RepoLens still "
@@ -944,7 +1016,7 @@ def _prompt_scan_config(*, input_stream: TextIO, output_stream: TextIO) -> dict[
             default="",
             input_stream=input_stream,
             output_stream=output_stream,
-        )
+        ),
     )
     if catalogers:
         scan["syft"] = {"catalogers": catalogers}
@@ -1019,6 +1091,28 @@ def _confirm(label: str, *, input_stream: TextIO, output_stream: TextIO) -> bool
     return raw.strip().lower() in {"y", "yes"}
 
 
+def _prompt_parsed(
+    label: str,
+    *,
+    parser: Callable[[str], _ParsedPromptValue],
+    retry_hint: str,
+    input_stream: TextIO,
+    output_stream: TextIO,
+) -> _ParsedPromptValue:
+    while True:
+        value = _prompt(
+            label,
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
+        try:
+            return parser(value)
+        except InputError as exc:
+            print(f"Invalid input: {exc}", file=output_stream)
+            print(f"Try again. {retry_hint}", file=output_stream)
+
+
 def _parse_csv_values(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
@@ -1038,6 +1132,18 @@ def _parse_patterns(value: str) -> list[dict[str, str]]:
         {"glob": glob, "category": category}
         for glob, category in _parse_mapping(value, label="pattern category").items()
     ]
+
+
+def _parse_optional_positive_timeout(value: str) -> int | float | None:
+    if not value:
+        return None
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise InputError("scan.clone_timeout_seconds must be a positive number") from exc
+    if not math.isfinite(parsed) or parsed <= 0:
+        raise InputError("scan.clone_timeout_seconds must be a positive number")
+    return int(parsed) if parsed.is_integer() else parsed
 
 
 def _discover_command(args: argparse.Namespace) -> CommandResult:

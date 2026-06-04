@@ -29,13 +29,52 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         help_text = stdout.getvalue()
-        self.assertIn("Put global options before the command name", help_text)
+        self.assertIn("global options:", help_text)
         self.assertIn(
-            "repolens --config ./.repolens.local.json discover --owner <OWNER>", help_text
+            "`repolens --config ./.repolens.local.json discover --owner <OWNER>`",
+            help_text,
         )
-        self.assertIn("JSON config files hold local taxonomy, scan, and report settings", help_text)
-        self.assertIn("Use stage options such as --work-root for output directories", help_text)
+        self.assertIn("owner is still supplied at runtime with --owner", help_text)
+        self.assertIn("Use stage options such as --work-root", help_text)
+        self.assertIn("Common local config commands:", help_text)
+        self.assertIn("`repolens config init --work-root work`", help_text)
+        self.assertIn("`repolens config schema`", help_text)
+        self.assertIn("`repolens config validate ./.repolens.local.json`", help_text)
         self.assertIn("repolens resolve --work-root work", help_text)
+
+    def test_config_without_action_prints_help(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = cli.main(["config"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr.getvalue(), "")
+        help_text = stdout.getvalue()
+        self.assertIn("usage: repolens config", help_text)
+        self.assertIn("repolens config init", help_text)
+        self.assertIn("repolens config schema", help_text)
+        self.assertIn("repolens config validate", help_text)
+
+    def test_config_help_after_missing_path_returns_root_help(self) -> None:
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with redirect_stdout(stdout), redirect_stderr(stderr):
+            code = cli.main(["--config", "--help"])
+
+        self.assertEqual(code, 0)
+        self.assertEqual(stderr.getvalue(), "")
+        help_text = stdout.getvalue()
+        self.assertIn("usage: repolens", help_text)
+        self.assertIn("--config PATH", help_text)
+
+    def test_config_without_path_still_errors(self) -> None:
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            code = cli.main(["--config"])
+
+        self.assertEqual(code, 2)
+        self.assertIn("argument --config: expected one argument", stderr.getvalue())
 
     def test_each_stage_help_is_actionable(self) -> None:
         expected_stages = {

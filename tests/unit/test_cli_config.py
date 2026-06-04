@@ -23,6 +23,16 @@ def test_config_schema_human_and_json_output(capsys: pytest.CaptureFixture[str])
     assert schema["additionalProperties"] is False
 
 
+def test_config_init_help_explains_pattern_input(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["config", "init", "--help"]) == 0
+
+    out = capsys.readouterr().out
+    assert "owner/repo=production" in out
+    assert "obsolete-*=retired" in out
+    assert "do not add shell quotes" in out
+    assert "invalid entries are explained and re-prompted" in out
+
+
 def test_config_validate_summarizes_exact_file(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -73,23 +83,26 @@ def test_config_init_writes_selected_fields_and_next_commands(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     path = tmp_path / ".repolens.local.json"
-    answers = "\n".join(
-        [
-            "",
-            "runtime",
-            "sentinel-owner/sentinel-alpha=runtime",
-            "tool-*=tools",
-            "mobile=apps",
-            "sentinel-retired=retired",
-            "fixtures/, vendor/",
-            "45",
-            "python-package-cataloger",
-            "runtime, apps",
-            "y",
-            "Sentinel",
-            "Internal only",
-            "",
-        ]
+    answers = (
+        "\n".join(
+            [
+                "",
+                "runtime",
+                "sentinel-owner/sentinel-alpha=runtime",
+                "tool-*=tools",
+                "mobile=apps",
+                "sentinel-retired=retired",
+                "fixtures/, vendor/",
+                "45",
+                "python-package-cataloger",
+                "runtime, apps",
+                "y",
+                "Sentinel",
+                "Internal only",
+                "",
+            ]
+        )
+        + "\n"
     )
     monkeypatch.setattr("sys.stdin", io.StringIO(answers))
 
@@ -124,6 +137,81 @@ def test_config_init_writes_selected_fields_and_next_commands(
     assert (
         f"repolens --config {path} discover --owner <OWNER> --work-root {tmp_path / 'work'}"
     ) in out
+
+
+def test_config_init_reprompts_invalid_pattern_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / ".repolens.local.json"
+    answers = (
+        "\n".join(
+            [
+                "",
+                "PRODUCTION",
+                "",
+                "obsolete-*",
+                "obsolete-*=retired",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+        + "\n"
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO(answers))
+
+    assert cli.main(["config", "init", "--out", str(path)]) == 0
+
+    values = json.loads(path.read_text(encoding="utf-8"))
+    assert values["discover"]["taxonomy"]["patterns"] == [
+        {"category": "retired", "glob": "obsolete-*"}
+    ]
+    out = capsys.readouterr().out
+    assert "Invalid input: pattern category entries must use key=value" in out
+    assert "Use glob=category pairs such as obsolete-*=retired" in out
+    assert "Do not add quotes in the prompt" in out
+
+
+def test_config_init_reprompts_invalid_clone_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / ".repolens.local.json"
+    answers = (
+        "\n".join(
+            [
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "not-a-number",
+                "300",
+                "",
+                "",
+                "",
+            ]
+        )
+        + "\n"
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO(answers))
+
+    assert cli.main(["config", "init", "--out", str(path)]) == 0
+
+    values = json.loads(path.read_text(encoding="utf-8"))
+    assert values["scan"]["clone_timeout_seconds"] == 300
+    out = capsys.readouterr().out
+    assert "Invalid input: scan.clone_timeout_seconds must be a positive number" in out
+    assert "Use a positive number such as 300" in out
 
 
 def test_config_init_refuses_overwrite_without_confirmation(
