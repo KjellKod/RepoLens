@@ -1,0 +1,99 @@
+.skills/repolens/reference/proposal-schema.md
+  s_a5507ba659a071::t_241b61f9a2f561 1-36
+docs/data-model.md
+  s_a5507ba659a071::t_98b386d0a2fdb2 30-41
+src/repolens/shortlist/stage.py
+  s_a5507ba659a071::t_dd70fe67309bd2 1,8-10,13,101
+  s_a5507ba659a071::t_31f92001f761d9 40-47,49,66,89-90,99,102-104,106-126,131,151,161,171,177-187,207-211
+  s_a5507ba659a071::t_91605215332655 48
+.skills/repolens/SKILL.md
+  s_a5507ba659a071::t_241b61f9a2f561 1-59,61-85,88-124
+  s_a5507ba659a071::t_8846aa6ed9c2a7 86-87
+src/repolens/shortlist/contexts.py
+  s_a5507ba659a071::t_4252c343c4515b 1-4,6-11,13-15,17-54,56-78,80-99,101-201
+  s_a5507ba659a071::t_761d4d57a53b0d 5,16,55,79
+  s_a5507ba659a071::t_0a8b38be38d11f 12,100
+tests/unit/shortlist/test_decisions.py
+  s_a5507ba659a071::t_f6717ebf3b749f 3,9,25-36,140-195
+  s_a5507ba659a071::t_13f894609afe10 4-8,62-75,77,80-88,196-249
+  s_a5507ba659a071::t_b3bacee0c429c2 76,78-79,250-251
+tests/unit/shortlist/test_proposals.py
+  s_a5507ba659a071::t_b40043195462ff 1-6,8-157
+  s_a5507ba659a071::t_71aec9e65e7228 7
+tests/unit/test_cli_run.py
+  s_a5507ba659a071::t_1782d57dfd6cfa 587-649
+.claude/skills/repolens/SKILL.md
+  s_a5507ba659a071::t_241b61f9a2f561 1-8
+src/repolens/data/schemas/shortlist.schema.json
+  s_a5507ba659a071::t_6f3e08a43ed046 37-90
+src/repolens/shortlist/grouping.py
+  s_a5507ba659a071::t_37c96ebb6d863a 1-44,49-151,153,156-179,186-196,202-224,226-289
+  s_a5507ba659a071::t_6ac1232a78c23a 45-48,152,154-155
+  s_a5507ba659a071::t_bc187588555005 180-185,197-201
+  s_a5507ba659a071::t_ea8079d6e9fe0b 225
+tests/canaries/security/test_injection_canaries.py
+  s_a5507ba659a071::t_d0e31114db5590 190-253
+src/repolens/shortlist/agent.py
+  s_a5507ba659a071::t_55689c3f302ad0 77-79
+  s_a5507ba659a071::t_7d5c9123c94f1e 89-94
+tests/unit/shortlist/test_grouping.py
+  s_a5507ba659a071::t_d604f84a05e6a3 1-22,24-84,116-118,124
+  s_a5507ba659a071::t_a412e944614ae2 23,85-114
+  s_a5507ba659a071::t_0543c9eac82f85 115
+  s_a5507ba659a071::t_6ac1232a78c23a 119-123
+docs/usage.md
+  s_a5507ba659a071::t_fb4f4bde625570 263-265,269,288-291,348-351
+  s_a5507ba659a071::t_ea9b78a403d3a8 266-267
+  s_a5507ba659a071::t_a0ff8e061288a0 604,606-608,611-614,617-633,636-637
+  s_a5507ba659a071::t_8846aa6ed9c2a7 634-635
+  s_a5507ba659a071::t_e4474bc940f625 710-712
+README.md
+  s_a5507ba659a071::t_41b79b6767367b 110,112,114-132,134-136,138-147,149-152,154,156,158-160,162-169,171,173,176-179,181
+  s_a5507ba659a071::t_3e7f3d2608f460 111,113,133,137,148,153,155,157,161,170,172,174-175,180
+src/repolens/shortlist/proposals.py
+  s_a5507ba659a071::t_163359dd639224 1-266
+.skills/repolens/reference/triage-cheatsheet.md
+  s_a5507ba659a071::t_241b61f9a2f561 1-24
+src/repolens/shortlist/render.py
+  s_a5507ba659a071::t_4835764e05c301 24-31,40-41,61-66,68-72,82-83,85-91,97-106,109-111,114-117,126,163-164
+  s_a5507ba659a071::t_ea9b78a403d3a8 77-79
+  s_a5507ba659a071::t_6e272b681cc64d 107-108,112
+  s_a5507ba659a071::t_24cb1c191b3a06 113
+tests/canaries/security/canary_matrix.json
+  s_a5507ba659a071::t_42b180acabe53d 310-314
+tests/e2e/test_cli.py
+  s_a5507ba659a071::t_43d9efdca2070a 137-171
+tests/unit/shortlist/test_contexts.py
+  s_a5507ba659a071::t_bc173735597854 1-6,8-72,76-121
+  s_a5507ba659a071::t_8ea851c71aa18a 7,73-75
+.agents/skills/repolens/SKILL.md
+  s_a5507ba659a071::t_241b61f9a2f561 1-2,4-21,23,25-27,35,41-42,45,49,51-54,61,63,70,73-76,79,81,93-96,98,101-104,106,109-110,121-122
+  s_a5507ba659a071::t_88dee98d2fef46 3,22,24,28-34,36-40,43-44,46-48,50,55-59,62,64-69,71-72,77-78,80,82-85,88-91,97,99-100,105,107-108,111-120,123-124
+  s_a5507ba659a071::t_8846aa6ed9c2a7 86-87,92
+src/repolens/shortlist/__init__.py
+  s_a5507ba659a071::t_5df78b54cc8a09 5-7
+src/repolens/shortlist/decisions.py
+  s_a5507ba659a071::t_a9fe7dab64cc8c 19,22,29,46-61,70-77,90-97,99-100,102-103,112-113,123-124,127-133,138-150,155-162
+src/repolens/cli.py
+  s_a5507ba659a071::t_ff75ad5ad05bcf 158-162,165-168
+  s_a5507ba659a071::t_4612f56724c83d 512-529,705-707,791-792,807-808,838-847,849-870,872-878,880-904
+  s_a5507ba659a071::t_ea9b78a403d3a8 848,871,879
+  s_a5507ba659a071::t_1adc795c5fd2b5 1701-1703,1715-1716,1725-1726,1733-1734
+  s_a5507ba659a071::t_a64ef223c4921c 1722-1724
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "13bff9d4e51b87aec3a53aa7fd7ed258cd757540",
+  "prompts": {},
+  "sessions": {
+    "s_a5507ba659a071": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9110-3cda-7d22-93f2-675a84e2ac4b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
