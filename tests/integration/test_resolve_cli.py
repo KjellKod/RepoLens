@@ -37,6 +37,38 @@ def test_resolve_cli_reads_sbom_and_writes_resolved_ndjson(tmp_path: Path, repo_
     assert records[0]["evidence"]["source_layer"] == "syft"
 
 
+def test_resolve_cli_without_repo_ref_resolves_all_scanned_repos(tmp_path: Path) -> None:
+    for repo_ref in ("sentinel-alpha", "sentinel-beta"):
+        write_sbom(
+            tmp_path,
+            repo_ref,
+            {
+                "schema_version": "1.0",
+                "repo": repo_ref,
+                "generated_at": "2026-01-01T00:00:00Z",
+                "tool": {"name": "syft", "version": "1.0.0"},
+                "source": f"https://example.invalid/{repo_ref}",
+                "artifacts": [
+                    {
+                        "name": f"{repo_ref}-lib",
+                        "version": "1.2.3",
+                        "type": "python",
+                        "purl": f"pkg:pypi/{repo_ref}-lib@1.2.3",
+                        "licenses": ["MIT"],
+                    }
+                ],
+            },
+        )
+
+    code = cli.main(["resolve", "--work-root", str(tmp_path)])
+
+    assert code == 0
+    for repo_ref in ("sentinel-alpha", "sentinel-beta"):
+        records = list(iter_resolved(tmp_path / "work" / repo_ref / "resolved.ndjson"))
+        assert records[0]["name"] == f"{repo_ref}-lib"
+        assert records[0]["spdx_id"] == "MIT"
+
+
 def test_resolve_cli_accepts_source_root_and_preserves_p3a_shape(
     tmp_path: Path, repo_ref: str
 ) -> None:

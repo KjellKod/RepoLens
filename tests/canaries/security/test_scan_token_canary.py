@@ -22,8 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from repolens.exit_codes import InternalError
-from repolens.scan.runner import RepoSpec, scan_repos
+from repolens.scan.runner import RepoSpec, ScanBatchError, scan_repos
 from repolens.security.redaction import REDACTION
 
 TOKEN = "ghp_" + "A" * 36
@@ -63,7 +62,7 @@ def test_x2_scan_token_absent_from_artifacts(tmp_path: Path) -> None:
     sboms: list[dict] = []
     statuses: list[dict] = []
 
-    with pytest.raises(InternalError):
+    with pytest.raises(ScanBatchError) as exc_info:
         scan_repos(
             tmp_path / "work",
             [
@@ -80,6 +79,8 @@ def test_x2_scan_token_absent_from_artifacts(tmp_path: Path) -> None:
             write_status_fn=lambda path, value: statuses.append(value),
         )
 
+    report = exc_info.value.report
+    assert {o.repo_ref for o in report.failed} == {"acme-bad"}
     # The successful repo produced an SBOM; the failed repo produced a status error.
     assert sboms and statuses
     payloads = json.dumps(sboms) + json.dumps(statuses)

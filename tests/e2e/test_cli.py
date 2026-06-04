@@ -32,6 +32,7 @@ class CliTests(unittest.TestCase):
         self.assertIn("repolens --config ./repolens.local.toml discover --owner <OWNER>", help_text)
         self.assertIn("Config files hold local taxonomy, policy, and report settings", help_text)
         self.assertIn("Use stage options such as --work-root for output directories", help_text)
+        self.assertIn("repolens resolve --work-root work", help_text)
 
     def test_each_stage_help_is_actionable(self) -> None:
         expected_stages = {
@@ -56,6 +57,34 @@ class CliTests(unittest.TestCase):
                 self.assertIn("Example:", help_text)
                 self.assertIn("Output:", help_text)
                 self.assertIn("Next:", help_text)
+
+    def test_resolve_help_explains_all_repo_default(self) -> None:
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = cli.main(["resolve", "--help"])
+
+        self.assertEqual(code, 0)
+        help_text = stdout.getvalue()
+        self.assertIn("Syft SBOMs from scan at <WORK>/work/*/sbom.syft.json", help_text)
+        self.assertIn("omit to resolve every", help_text)
+        self.assertIn("scanned repo", help_text)
+        self.assertIn("repolens resolve --work-root <WORK>", help_text)
+
+    def test_resolve_without_repo_ref_resolves_all_scanned_repos(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            work_root = Path(temp_dir)
+            store.write_sbom(work_root, "sentinel-alpha", _repo_sbom("sentinel-alpha"))
+            store.write_sbom(work_root, "sentinel-beta", _repo_sbom("sentinel-beta"))
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main(["resolve", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 0)
+            output = stdout.getvalue()
+            self.assertIn("resolved 2 repos: sentinel-alpha, sentinel-beta", output)
+            self.assertIn(f"Next CLI stage: repolens flag --work-root {work_root}", output)
+            self.assertTrue((work_root / "work" / "sentinel-alpha" / "resolved.ndjson").exists())
+            self.assertTrue((work_root / "work" / "sentinel-beta" / "resolved.ndjson").exists())
 
     def test_console_help_returns_success(self) -> None:
         result = subprocess.run(
@@ -485,6 +514,33 @@ def _syft_document() -> dict:
     }
 
 
+def _repo_sbom(repo_ref: str) -> dict:
+    return {
+        "schema_version": "1.0",
+        "repo": repo_ref,
+        "generated_at": "2026-01-01T00:00:00Z",
+        "tool": {"name": "syft", "version": "1.18.1"},
+        "source": f"https://example.invalid/{repo_ref}",
+        "artifacts": [
+            {
+                "name": "acme-lib",
+                "version": "1.2.3",
+                "type": "python",
+                "purl": "pkg:pypi/acme-lib@1.2.3",
+                "licenses": ["MIT"],
+                "locations": ["requirements.txt"],
+            }
+        ],
+    }
+
+
+def _assert_scan_next_step(testcase: unittest.TestCase, output: str, work_root: Path) -> None:
+    testcase.assertEqual(
+        output,
+        f"Next CLI stage: repolens resolve --work-root {work_root}\n",
+    )
+
+
 class ScanCliTests(unittest.TestCase):
     def setUp(self) -> None:
         self._ensure_patch = mock.patch(
@@ -562,6 +618,24 @@ class ScanCliTests(unittest.TestCase):
         # `scan` requires --work-root; argparse errors map to exit 2.
         self.assertEqual(cli.main(["scan"]), 2)
 
+    def test_resolve_uses_checked_discover_repos_not_stale_work_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            self._discover_bridge_scaffold(work_root)
+            store.write_sbom(work_root, "sentinel-alpha", _repo_sbom("sentinel-alpha"))
+            store.write_sbom(work_root, "sentinel-stale", _repo_sbom("sentinel-stale"))
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main(["resolve", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 0)
+            output = stdout.getvalue()
+            self.assertIn("wrote resolved.ndjson", output)
+            self.assertIn(f"Next CLI stage: repolens flag --work-root {work_root}", output)
+            self.assertTrue((work_root / "work" / "sentinel-alpha" / "resolved.ndjson").exists())
+            self.assertFalse((work_root / "work" / "sentinel-stale" / "resolved.ndjson").exists())
+
     def test_scan_happy_path_persists_sbom_and_exits_zero(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work-root"
@@ -584,7 +658,7 @@ class ScanCliTests(unittest.TestCase):
                 code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
             self.assertEqual(code, 0)
-            self.assertEqual(stdout.getvalue(), "")
+            _assert_scan_next_step(self, stdout.getvalue(), work_root)
             self.assertTrue(store.is_repo_scanned(work_root, "acme-alpha"))
             progress = stderr.getvalue()
             self.assertIn("[1/1] acme-alpha — cloning…", progress)
@@ -735,10 +809,10 @@ class ScanCliTests(unittest.TestCase):
                 )
 
             self.assertEqual(code, 0)
-            self.assertEqual(stdout.getvalue(), "")
+            _assert_scan_next_step(self, stdout.getvalue(), work_root)
             self.assertEqual(stderr.getvalue(), "")
 
-    def test_scan_private_repo_reports_auth_skip_without_clone(self) -> None:
+    def test_scan_private_repo_reports_auth_failure_without_clone(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work-root"
             repos_path = self._scaffold(
@@ -759,21 +833,27 @@ class ScanCliTests(unittest.TestCase):
 
             stderr = io.StringIO()
             with (
+                mock.patch("repolens.githost.resolve_clone_credential_result", return_value=None),
                 mock.patch("repolens.scan.runner.hardened_clone", clone_spy),
                 redirect_stdout(io.StringIO()) as stdout,
                 redirect_stderr(stderr),
             ):
                 code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
-            self.assertEqual(code, 0)
+            self.assertEqual(code, 1)
             self.assertEqual(stdout.getvalue(), "")
             self.assertEqual(clone_calls, [])
             progress = stderr.getvalue()
-            self.assertIn("[1/1] acme-private 🔒 skipped (private, needs auth)", progress)
+            self.assertIn(
+                "[1/1] acme-private ✗ failed: private repo acme-private needs auth",
+                progress,
+            )
             self.assertRegex(
                 progress,
-                r"Done: 1 repos — 0 scanned, 1 skipped, 0 failed in [0-9.]+s\.",
+                r"Done: 1 repos — 0 scanned, 0 skipped, 1 failed in [0-9.]+s\.",
             )
+            self.assertIn("1 repos - 0 scanned, 0 skipped, 1 failed", progress)
+            self.assertNotIn("Internal error", progress)
 
     def test_scan_cached_repo_reports_cached_skip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -804,7 +884,7 @@ class ScanCliTests(unittest.TestCase):
                 code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
             self.assertEqual(code, 0)
-            self.assertEqual(stdout.getvalue(), "")
+            _assert_scan_next_step(self, stdout.getvalue(), work_root)
             clone.assert_not_called()
             self.assertIn("[1/1] acme-alpha ↻ skipped (cached)", stderr.getvalue())
 
@@ -831,7 +911,7 @@ class ScanCliTests(unittest.TestCase):
                 code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
             self.assertEqual(code, 0)
-            self.assertEqual(stdout.getvalue(), "")
+            _assert_scan_next_step(self, stdout.getvalue(), work_root)
             output = stderr.getvalue()
             self.assertIn("\r[1/1] acme-alpha — cloning…", output)
             self.assertIn("\r[1/1] acme-alpha ✓ 1 deps", output)

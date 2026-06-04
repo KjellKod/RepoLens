@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
+from urllib.parse import unquote
 
 from repolens.bootstrap.cache import (
     DOC_LINK,
@@ -31,7 +32,7 @@ from .discovery.gh import DEFAULT_GH_LIMIT, MAX_GH_LIMIT, parse_repos_option
 from .discovery.pipeline import run_discover
 from .exit_codes import ExitCode, InputError, InternalError
 
-PATH_PATTERN = re.compile(r"(/[^\s:]+)+")
+PATH_PATTERN = re.compile(r"(?<![:/])(?:/[^\s:/]+)+")
 
 if TYPE_CHECKING:
     from repolens.scan.runner import ScanProgressEvent, ScanReport
@@ -93,7 +94,7 @@ _STAGE_HELP = {
             "repolens scan --work-root <WORK>  (automation: --yes; offline: --offline)",
             "<WORK>/work/<repo_ref>/sbom.syft.json + scan.status.json per repo "
             "(resumable — safe to re-run).",
-            "`repolens resolve --work-root <WORK> --repo-ref <REPO_REF>`.",
+            "`repolens resolve --work-root <WORK>`.",
         ),
     ),
     "resolve": StageHelp(
@@ -102,12 +103,12 @@ _STAGE_HELP = {
             "Stage 3/6 — determine each dependency's license, cheapest trusted source first."
         ),
         epilog=_stage_epilog(
-            "a Syft SBOM from scan at <WORK>/work/<REPO_REF>/sbom.syft.json; "
+            "Syft SBOMs from scan at <WORK>/work/*/sbom.syft.json; "
+            "--repo-ref optionally narrows resolve to one repo artifact directory; "
             "--source-root may point at a read-only checkout for mobile markers and "
             "package-local ScanCode fallback.",
-            "repolens resolve --work-root <WORK> --repo-ref <REPO_REF> "
-            "--source-root <CHECKOUT> [--enable-mobile-native]",
-            "<WORK>/work/<REPO_REF>/resolved.ndjson (license + evidence + tags per "
+            "repolens resolve --work-root <WORK>",
+            "<WORK>/work/<repo_ref>/resolved.ndjson (license + evidence + tags per "
             "dependency; unresolved records stay schema-valid).",
             "`repolens flag --work-root <WORK>`.",
         ),
@@ -166,8 +167,7 @@ _EPILOG = (
     "typical run:\n"
     "  1. repolens discover --owner <OWNER>                     find + approve the repos\n"
     "  2. repolens scan --work-root work                        inventory approved dependencies\n"
-    "  3. repolens resolve --work-root work --repo-ref <REPO_REF>\n"
-    "                                                           resolve licenses\n"
+    "  3. repolens resolve --work-root work                     resolve scanned repos\n"
     "  4. repolens flag --work-root work                        flag risk / unknowns\n"
     "  5. repolens shortlist --work-root work                   settle the flags + approve\n"
     "  6. repolens report --work-root work --out-dir reports    build the main disclosure\n"
@@ -335,8 +335,11 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
     )
     subparser.add_argument(
         "--repo-ref",
-        required=True,
-        help="Runtime repository reference used for the work/<repo-ref>/ artifact dir.",
+        metavar="REPO_REF",
+        help=(
+            "Optional runtime repository reference used for one work/<repo-ref>/ "
+            "artifact dir; omit to resolve every scanned repo."
+        ),
     )
     subparser.add_argument(
         "--source-root",
@@ -484,6 +487,7 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
 def _handle_scan(args: argparse.Namespace) -> CommandResult:
     # Imported here so the rest of the CLI does not pull the scan/store stack
     # (and jsonschema) unless `scan` actually runs.
+    from repolens.githost import resolve_clone_credential_result
     from repolens.scan import runner as scan_runner
     from repolens.scan.inputs import load_discover_approved_repo_specs, load_explicit_repo_specs
 
@@ -496,9 +500,10 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     else:
         repos = load_discover_approved_repo_specs(args.work_root, scan_runner.RepoSpec)
     syft_path = _ensure_syft_for_scan(args)
-    # scan_repos persists every successful SBOM and raises InternalError (exit 1)
-    # if any repository fails; a clean run returns a report (exit 0). A None
-    # timeout lets the runner apply its default per-repo budget.
+    # scan_repos persists successful SBOMs and raises ScanBatchError only after
+    # finishing the batch when expected per-repo failures occurred. The credential
+    # provider resolves a read-only GitHub token lazily, only when a private repo
+    # is encountered. A None timeout uses the default per-repo budget.
     extra = {"timeout_seconds": args.timeout} if args.timeout is not None else {}
     progress = _ScanProgressPrinter(quiet=args.quiet, stream=sys.stderr)
     try:
@@ -506,15 +511,14 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
             args.work_root,
             repos,
             syft_path=syft_path,
+            credential_provider=resolve_clone_credential_result,
             progress=progress,
             **extra,
         )
     except scan_runner.ScanBatchError as exc:
         report = exc.report
     progress.finish(report)
-    if report.failed:
-        return CommandResult(CommandStatus.FINDINGS_OPEN)
-    return CommandResult(CommandStatus.SUCCESS)
+    return _scan_command_result(report, args.work_root)
 
 
 class _ScanProgressPrinter:
@@ -571,8 +575,6 @@ def _scan_outcome_line(event: ScanProgressEvent) -> str:
         deps_count = 0 if deps_count is None else deps_count
         elapsed = _format_seconds(event.elapsed_seconds)
         return f"{prefix} ✓ {deps_count} deps ({elapsed})"
-    if status == "skipped" and event.error == "private":
-        return f"{prefix} 🔒 skipped (private, needs auth)"
     if status == "skipped":
         return f"{prefix} ↻ skipped (cached)"
     reason = _sanitize(str(event.error or "unknown error"), redact_paths=True)
@@ -582,6 +584,34 @@ def _scan_outcome_line(event: ScanProgressEvent) -> str:
 def _format_seconds(value: float | None) -> str:
     seconds = 0.0 if value is None else float(value)
     return f"{seconds:.1f}s"
+
+
+def _scan_command_result(report: ScanReport, work_root: Path) -> CommandResult:
+    summary = (
+        f"{len(report.outcomes)} repos - {len(report.scanned)} scanned, "
+        f"{len(report.skipped)} skipped, {len(report.failed)} failed"
+    )
+    if report.failed:
+        # Expected per-repo failures are user-actionable: print the summary + each
+        # redacted reason to stderr and exit 1. `Internal error` is reserved for
+        # genuine crashes (brief §2) and never appears here.
+        print(summary, file=sys.stderr)
+        for outcome in report.failed:
+            reason = _sanitize(str(outcome.error or "unknown error"), redact_paths=True)
+            print(f"  - {outcome.repo_ref}: {reason}", file=sys.stderr)
+        return CommandResult(CommandStatus.FINDINGS_OPEN)
+    next_message = _scan_next_step_message(report, work_root)
+    return CommandResult(CommandStatus.SUCCESS, next_message)
+
+
+def _scan_next_step_message(report: ScanReport, work_root: Path) -> str:
+    resolvable = tuple(
+        outcome for outcome in report.outcomes if outcome.status in {"scanned", "skipped"}
+    )
+    if not resolvable:
+        return ""
+    command = f"repolens resolve --work-root {shlex.quote(str(work_root))}"
+    return f"Next CLI stage: {command}"
 
 
 def _ensure_syft_for_scan(args: argparse.Namespace) -> Path:
@@ -653,13 +683,79 @@ def _syft_declined_message(pin: SyftPinSummary, *, interactive: bool) -> str:
 def _resolve_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.resolve import run_resolve
 
-    path = run_resolve(
-        args.work_root,
-        args.repo_ref,
-        source_root=args.source_root,
-        enable_mobile_native=args.enable_mobile_native,
+    repo_refs = _resolve_repo_refs(args.work_root, args.repo_ref)
+    if args.source_root is not None and args.repo_ref is None and len(repo_refs) > 1:
+        raise InputError(
+            "resolve --source-root requires --repo-ref when multiple scanned repos exist"
+        )
+    paths = []
+    total = len(repo_refs)
+    for index, repo_ref in enumerate(repo_refs, start=1):
+        print(f"[{index}/{total}] {repo_ref} — resolving...", file=sys.stderr, flush=True)
+        path = run_resolve(
+            args.work_root,
+            repo_ref,
+            source_root=args.source_root,
+            enable_mobile_native=args.enable_mobile_native,
+        )
+        print(f"[{index}/{total}] {repo_ref} ✓ wrote {path.name}", file=sys.stderr, flush=True)
+        paths.append(path)
+    flag_command = f"repolens flag --work-root {shlex.quote(str(args.work_root))}"
+    if len(paths) == 1:
+        write_summary = f"wrote {paths[0].name}"
+    else:
+        preview = ", ".join(repo_refs[:5])
+        suffix = "" if len(repo_refs) <= 5 else ", ..."
+        write_summary = f"resolved {len(repo_refs)} repos: {preview}{suffix}"
+    return CommandResult(
+        CommandStatus.SUCCESS,
+        f"{write_summary}\nNext CLI stage: {flag_command}",
     )
-    return CommandResult(CommandStatus.SUCCESS, f"wrote {path.name}")
+
+
+def _resolve_repo_refs(work_root: Path, repo_ref: str | None) -> tuple[str, ...]:
+    if repo_ref:
+        return (repo_ref,)
+    work_dir = Path(work_root) / "work"
+    command = f"repolens scan --work-root {shlex.quote(str(work_root))}"
+    approved_refs = _approved_resolve_repo_refs(work_root)
+    if approved_refs:
+        from repolens.data.store import repo_dir
+
+        missing = tuple(
+            candidate
+            for candidate in approved_refs
+            if not (repo_dir(work_root, candidate) / "sbom.syft.json").is_file()
+        )
+        if missing:
+            preview = ", ".join(missing[:5])
+            suffix = "" if len(missing) <= 5 else ", ..."
+            raise InputError(
+                f"resolve is missing SBOMs for checked repos: {preview}{suffix}; "
+                f"run `{command}` first."
+            )
+        return approved_refs
+    if not work_dir.is_dir():
+        raise InputError(f"resolve found no scanned repos under {work_dir}; run `{command}` first.")
+    repo_refs = tuple(
+        unquote(path.name)
+        for path in sorted(work_dir.iterdir(), key=lambda item: item.name.casefold())
+        if path.is_dir() and (path / "sbom.syft.json").is_file()
+    )
+    if not repo_refs:
+        raise InputError(f"resolve found no SBOMs under {work_dir}; run `{command}` first.")
+    return repo_refs
+
+
+def _approved_resolve_repo_refs(work_root: Path) -> tuple[str, ...]:
+    root = Path(work_root)
+    if not (root / "discovered.json").exists() or not (root / "repos.candidate.md").exists():
+        return ()
+    from repolens.scan import runner as scan_runner
+    from repolens.scan.inputs import load_discover_approved_repo_specs
+
+    specs = load_discover_approved_repo_specs(root, scan_runner.RepoSpec)
+    return tuple(spec.repo_ref for spec in specs)
 
 
 def _flag_stage(args: argparse.Namespace) -> CommandResult:
@@ -671,6 +767,8 @@ def _flag_stage(args: argparse.Namespace) -> CommandResult:
         f"component(s); wrote {result.inventory_path.name}, "
         f"{result.shortlist_json_path.name}, {result.shortlist_md_path.name}"
     )
+    shortlist_command = f"repolens shortlist --work-root {shlex.quote(str(args.work_root))}"
+    summary = f"{summary}\nNext CLI stage: {shortlist_command}"
     if result.open_count > 0:
         return CommandResult(CommandStatus.FINDINGS_OPEN, summary)
     return CommandResult(CommandStatus.SUCCESS, summary)
@@ -701,8 +799,19 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
         f"wrote {result.shortlist_json_path.name}, {result.shortlist_md_path.name}"
     )
     if result.open_count > 0:
-        return CommandResult(CommandStatus.FINDINGS_OPEN, summary)
-    return CommandResult(CommandStatus.SUCCESS, summary)
+        rerun_command = f"repolens shortlist --work-root {shlex.quote(str(args.work_root))}"
+        return CommandResult(
+            CommandStatus.FINDINGS_OPEN,
+            (
+                f"{summary}\n"
+                f"Manual step: resolve open items in {result.shortlist_md_path}, then rerun "
+                f"`{rerun_command}`."
+            ),
+        )
+    report_command = (
+        f"repolens report --work-root {shlex.quote(str(args.work_root))} --out-dir reports"
+    )
+    return CommandResult(CommandStatus.SUCCESS, f"{summary}\nNext CLI stage: {report_command}")
 
 
 def _report(args: argparse.Namespace) -> CommandResult:

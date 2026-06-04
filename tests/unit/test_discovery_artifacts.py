@@ -19,6 +19,7 @@ def categorized(
     description: str = "",
     topics: tuple[str, ...] = (),
     archived: bool = False,
+    private: bool = False,
     reason: str | None = None,
 ) -> CategorizedRepository:
     return CategorizedRepository(
@@ -29,12 +30,47 @@ def categorized(
             description=description,
             topics=topics,
             archived=archived,
-            private=False,
+            private=private,
         ),
         category=category,
         category_source="default",
         hard_exclusion_reason=reason,
     )
+
+
+def test_candidate_markdown_marks_private_repos_only() -> None:
+    markdown = render_repos_candidate_markdown(
+        "sentinel-owner",
+        [
+            categorized("sentinel-private", private=True),
+            categorized("sentinel-public", private=False),
+        ],
+        generated_at="2026-01-01T00:00:00Z",
+    )
+
+    private_line = next(
+        line for line in markdown.splitlines() if "sentinel-owner/sentinel-private" in line
+    )
+    public_line = next(
+        line for line in markdown.splitlines() if "sentinel-owner/sentinel-public" in line
+    )
+    assert "private - needs auth to clone" in private_line
+    assert "private - needs auth to clone" not in public_line
+
+
+def test_private_marker_round_trips_through_candidate_parser(tmp_path: Path) -> None:
+    from repolens.scan.inputs import _checked_candidate_names
+
+    markdown = render_repos_candidate_markdown(
+        "sentinel-owner",
+        [categorized("sentinel-private", private=True)],
+        generated_at="2026-01-01T00:00:00Z",
+    )
+    candidate_path = tmp_path / "repos.candidate.md"
+    candidate_path.write_text(markdown, encoding="utf-8")
+
+    # The marker after the source fence must not break the strict checkbox regex.
+    assert _checked_candidate_names(candidate_path) == ["sentinel-owner/sentinel-private"]
 
 
 def test_discovered_payload_validates_counts() -> None:

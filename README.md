@@ -11,7 +11,7 @@ them**, and adds the workflow, policy, evidence, and reporting on top.
 > **[docs/usage.md](docs/usage.md)** for how to run it, and
 > **[docs/roadmap](docs/roadmap/rpl_README.md)** for the design, decisions, and security model.
 
-## Quickstart
+## Install
 
 ```bash
 pip install -e .                                       # install the `repolens` command (editable)
@@ -22,6 +22,18 @@ python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene 
 `repolens --help` shows the full pipeline (`discover → scan → resolve → flag → shortlist
 → report`), and each stage's own `--help` explains what to run before it, an example, its
 output, and the next step. All six stages run real orchestration today.
+
+## Requirements
+
+- `git` ≥ 2.45 and `python3` — the hardened clone primitive requires a current, patched git.
+- `gh` (the GitHub CLI), authenticated via `gh auth login`, **or** a `GH_TOKEN` /
+  `GITHUB_TOKEN` in the environment. RepoLens uses this read-only credential to discover
+  repositories and to clone **private** ones; **public repositories need no credential**.
+  The credential is used for the fetch only and never lands in any artifact or log — see
+  [docs/usage.md](docs/usage.md#authentication--private-repos).
+- `syft` is acquired and integrity-verified into a shared cache by `scan` on first use, or
+  pre-seeded with `repolens bootstrap` for offline runs; RepoLens never trusts a tool
+  already on the machine.
 
 ## What you get
 
@@ -68,7 +80,7 @@ is just the stages in order:
 ```
 repolens discover --owner <OWNER> --work-root work   # find + categorize repos -> approval checklist
 repolens scan      --work-root work                  # verify/cache pinned Syft, then inventory checked repos
-repolens resolve   --work-root work --repo-ref <REPO_REF>   # resolve licenses cheapest-source-first
+repolens resolve   --work-root work                  # resolve scanned repos cheapest-source-first
 repolens flag      --work-root work                  # apply policy, flag risk/unknowns -> shortlist queue
 repolens shortlist --work-root work                  # settle flagged items with evidence + your approval
 repolens report    --work-root work --out-dir reports # assemble the gated disclosure (md/csv/docx)
@@ -82,7 +94,7 @@ Concrete example — scan a few specific repos under an owner and build the repo
 repolens discover --owner <OWNER> --repos "sentinel-alpha, sentinel-beta" --work-root work
 #  edit work/repos.candidate.md — untick anything you don't want scanned
 repolens scan    --work-root work
-repolens resolve --work-root work --repo-ref sentinel-alpha
+repolens resolve --work-root work
 repolens flag    --work-root work
 repolens report  --work-root work --out-dir reports
 ```
@@ -131,7 +143,7 @@ matches case-insensitively and discovers the file from the scan root upward; whe
 running inside a linked git worktree, it also checks the main checkout that owns the
 shared `.git` directory.
 
-Run the check locally (after `pip install -e .` — see [Quickstart](#quickstart)). It
+Run the check locally (after `pip install -e .` — see [Install](#install)). It
 auto-discovers `.name-hygiene.local.json` and scans the tracked tree:
 
 ```bash

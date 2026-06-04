@@ -137,6 +137,8 @@ def test_mixed_run_returns_failure_report_and_persists_successes(tmp_path: Path)
 
     report = exc_info.value.report
     assert [o.status for o in report.outcomes] == ["scanned", "failed"]
+    assert {o.repo_ref for o in report.scanned} == {"acme-ok"}
+    assert {o.repo_ref for o in report.failed} == {"acme-bad"}
     # The good repo's SBOM is persisted despite the sibling failure.
     assert store.is_repo_scanned(work_root, "acme-ok")
     assert not store.is_repo_scanned(work_root, "acme-bad")
@@ -170,7 +172,7 @@ def test_progress_events_include_start_outcomes_and_dependency_counts(tmp_path: 
     assert events[1].elapsed_seconds is not None
 
 
-def test_private_repo_skips_without_clone(tmp_path: Path) -> None:
+def test_private_repo_fails_without_clone_when_auth_missing(tmp_path: Path) -> None:
     work_root = tmp_path / "work-root"
     clone_calls: list = []
     events = []
@@ -179,20 +181,22 @@ def test_private_repo_skips_without_clone(tmp_path: Path) -> None:
         clone_calls.append(options)
         return _clone_into(options)
 
-    report = scan_repos(
-        work_root,
-        [RepoSpec("acme-private", CLONE_URL, private=True)],
-        syft_path=tmp_path / "tools" / "syft",
-        clone=clone_spy,
-        command_runner=_syft_ok(_syft_document()),
-        progress=events.append,
-    )
+    with pytest.raises(ScanBatchError) as exc_info:
+        scan_repos(
+            work_root,
+            [RepoSpec("acme-private", CLONE_URL, private=True)],
+            syft_path=tmp_path / "tools" / "syft",
+            clone=clone_spy,
+            command_runner=_syft_ok(_syft_document()),
+            progress=events.append,
+        )
 
-    assert [o.status for o in report.outcomes] == ["skipped"]
-    assert report.outcomes[0].skipped_reason == "private"
+    report = exc_info.value.report
+    assert [o.status for o in report.outcomes] == ["failed"]
+    assert "needs auth" in str(report.outcomes[0].error)
     assert clone_calls == []
-    assert events[-1].status == "skipped"
-    assert events[-1].error == "private"
+    assert events[-1].status == "failed"
+    assert "needs auth" in str(events[-1].error)
 
 
 def test_ephemeral_workdir_cleaned_up(tmp_path: Path) -> None:
@@ -228,6 +232,7 @@ def test_status_file_redacts_token_in_error(tmp_path: Path) -> None:
 
     report = exc_info.value.report
     assert [o.status for o in report.outcomes] == ["failed"]
+    assert {o.repo_ref for o in report.failed} == {"acme-alpha"}
     status_text = (store.repo_dir(work_root, "acme-alpha") / "scan.status.json").read_text(
         encoding="utf-8"
     )
@@ -254,4 +259,5 @@ def test_timeout_records_failure_without_sbom(tmp_path: Path) -> None:
 
     report = exc_info.value.report
     assert [o.status for o in report.outcomes] == ["failed"]
+    assert {o.repo_ref for o in report.failed} == {"acme-alpha"}
     assert not store.is_repo_scanned(work_root, "acme-alpha")

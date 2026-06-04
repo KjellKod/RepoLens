@@ -281,6 +281,58 @@ def test_invalid_discovered_repo_name_is_rejected_before_clone_url_derivation(
         load_discover_approved_repo_specs(tmp_path, RepoSpec)
 
 
+def test_load_discover_approved_marks_private_repo(tmp_path: Path) -> None:
+    # The real discover->scan path: private must survive load_discover_approved_repo_specs,
+    # not just the inner repo_specs_from_records constructor.
+    _write_discovered(
+        tmp_path,
+        [
+            _repo("sentinel-private", private=True),
+            _repo("sentinel-public", private=False),
+        ],
+    )
+    _write_candidates(
+        tmp_path,
+        [
+            "- [x] `sentinel-owner/sentinel-private` - category `runtime-bucket` (`default`)",
+            "- [x] `sentinel-owner/sentinel-public` - category `runtime-bucket` (`default`)",
+        ],
+    )
+
+    specs = load_discover_approved_repo_specs(tmp_path, RepoSpec)
+    by_ref = {spec.repo_ref: spec for spec in specs}
+
+    assert by_ref["sentinel-private"].private is True
+    assert by_ref["sentinel-public"].private is False
+
+
+def test_repo_specs_from_records_reads_private() -> None:
+    specs = repo_specs_from_records(
+        [
+            {
+                "repo_ref": "sentinel-alpha",
+                "clone_url": "https://github.com/sentinel-owner/sentinel-alpha.git",
+                "private": True,
+            }
+        ],
+        RepoSpec,
+    )
+    assert specs[0].private is True
+
+
+def test_explicit_repos_json_without_private_defaults_false() -> None:
+    specs = repo_specs_from_records(
+        [
+            {
+                "repo_ref": "sentinel-alpha",
+                "clone_url": "https://github.com/sentinel-owner/sentinel-alpha.git",
+            }
+        ],
+        RepoSpec,
+    )
+    assert specs[0].private is False
+
+
 def test_repo_spec_validation_rejects_non_https_clone_url() -> None:
     with pytest.raises(InputError, match="needs an https 'clone_url'"):
         repo_specs_from_records(
