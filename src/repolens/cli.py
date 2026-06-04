@@ -103,8 +103,10 @@ _STAGE_HELP = {
             "Stage 3/6 — determine each dependency's license, cheapest trusted source first."
         ),
         epilog=_stage_epilog(
-            "Syft SBOMs from scan at <WORK>/work/*/sbom.syft.json; "
-            "--repo-ref optionally narrows resolve to one repo artifact directory; "
+            "Syft SBOMs from scan at <WORK>/work/*/sbom.syft.json. By default, "
+            "resolve uses checked discover repos with SBOMs, then falls back to "
+            "available scanned SBOMs when no checked SBOM is present; --repo-ref "
+            "narrows resolve to one repo artifact directory; "
             "--source-root may point at a read-only checkout for mobile markers and "
             "package-local ScanCode fallback.",
             "repolens resolve --work-root <WORK>",
@@ -338,7 +340,7 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         metavar="REPO_REF",
         help=(
             "Optional runtime repository reference used for one work/<repo-ref>/ "
-            "artifact dir; omit to resolve every scanned repo."
+            "artifact dir; omit to resolve checked scan output."
         ),
     )
     subparser.add_argument(
@@ -718,24 +720,38 @@ def _resolve_repo_refs(work_root: Path, repo_ref: str | None) -> tuple[str, ...]
         return (repo_ref,)
     work_dir = Path(work_root) / "work"
     command = f"repolens scan --work-root {shlex.quote(str(work_root))}"
-    approved_refs = _approved_resolve_repo_refs(work_root)
+    approval_error = None
+    try:
+        approved_refs = _approved_resolve_repo_refs(work_root)
+    except InputError as exc:
+        approved_refs = ()
+        approval_error = exc
     if approved_refs:
         from repolens.data.store import repo_dir
 
-        missing = tuple(
+        available = tuple(
             candidate
             for candidate in approved_refs
-            if not (repo_dir(work_root, candidate) / "sbom.syft.json").is_file()
+            if (repo_dir(work_root, candidate) / "sbom.syft.json").is_file()
         )
-        if missing:
+        available_set = set(available)
+        missing = tuple(candidate for candidate in approved_refs if candidate not in available_set)
+        if available:
+            if missing:
+                _warn_missing_checked_sboms(missing, command)
+            return available
+        if missing and not work_dir.is_dir():
             preview = ", ".join(missing[:5])
             suffix = "" if len(missing) <= 5 else ", ..."
             raise InputError(
                 f"resolve is missing SBOMs for checked repos: {preview}{suffix}; "
                 f"run `{command}` first."
             )
-        return approved_refs
+        if missing:
+            _warn_missing_checked_sboms(missing, command)
     if not work_dir.is_dir():
+        if approval_error is not None:
+            raise approval_error
         raise InputError(f"resolve found no scanned repos under {work_dir}; run `{command}` first.")
     repo_refs = tuple(
         unquote(path.name)
@@ -743,8 +759,30 @@ def _resolve_repo_refs(work_root: Path, repo_ref: str | None) -> tuple[str, ...]
         if path.is_dir() and (path / "sbom.syft.json").is_file()
     )
     if not repo_refs:
+        if approval_error is not None:
+            raise approval_error
         raise InputError(f"resolve found no SBOMs under {work_dir}; run `{command}` first.")
+    if approval_error is not None:
+        _warn_ignored_discover_approval_error(approval_error)
     return repo_refs
+
+
+def _warn_ignored_discover_approval_error(error: InputError) -> None:
+    print(
+        f"Warning: resolve could not use checked discover approvals ({error}); "
+        "resolving available scanned SBOMs instead.",
+        file=sys.stderr,
+    )
+
+
+def _warn_missing_checked_sboms(missing: tuple[str, ...], command: str) -> None:
+    preview = ", ".join(missing[:5])
+    suffix = "" if len(missing) <= 5 else ", ..."
+    print(
+        f"Warning: resolve skipped checked repos without SBOMs: {preview}{suffix}; "
+        f"run `{command}` to scan them.",
+        file=sys.stderr,
+    )
 
 
 def _approved_resolve_repo_refs(work_root: Path) -> tuple[str, ...]:
