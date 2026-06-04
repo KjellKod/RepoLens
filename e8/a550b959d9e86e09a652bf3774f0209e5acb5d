@@ -1,0 +1,60 @@
+src/repolens/data/validation.py
+  s_853eb455586efb::t_870cc3e1b703af 16-24
+src/repolens/cli.py
+  s_853eb455586efb::t_097dde47477212 747-750,927-928
+  s_853eb455586efb::t_8bdb16a6ec74f1 7,34-42
+  s_853eb455586efb::t_c84ad13f2b3492 212,234,250,256-257,395
+  s_853eb455586efb::t_885fe09ca5dd92 274-285,372-394,396-430
+  s_853eb455586efb::t_837f5eddfba021 718-732,737-739,743-746,751-926,929-1037,1039
+  s_853eb455586efb::t_91104d5cb620c9 213-214,218-219,251
+  s_853eb455586efb::t_d2a8d1a53f8546 1078,1271-1289,1291-1302,1306-1307,1309
+  s_853eb455586efb::t_ee6ddbc2b960cb 733-736,740-742,1308
+  s_853eb455586efb::t_3226fbc50ddd32 1788,2408
+  s_853eb455586efb::t_e2968309fcc5ae 1257,1290
+  s_853eb455586efb::t_680aa72b51ed4c 665-673,691-693
+tests/unit/test_cli_config.py
+  s_853eb455586efb::t_fff4b3452e8979 1-95,99-123,127-205,207-211
+  s_853eb455586efb::t_b16da19cd8bad4 96-98
+  s_853eb455586efb::t_a37ac758569624 124,126
+README.md
+  s_853eb455586efb::t_53c9a629cf72d2 43,208-211
+tests/canaries/test_f1_offline_canaries.py
+  s_853eb455586efb::t_80619934d7e6ad 75,78-79,83-84
+tests/unit/test_cli_run.py
+  s_853eb455586efb::t_5b0e04e72fa316 46-48
+  s_853eb455586efb::t_c0211bb2410b7d 130-132,184,1081,1085-1087,1114,1118-1120
+src/repolens/config.py
+  s_853eb455586efb::t_f619daa8604e76 270,276-279,300-301
+  s_853eb455586efb::t_6c2f92a9cd266d 1,6,11-14,18-21,28-31,34-40,42-44,46,48-79,88-104,107-110,113-117,120-124,127-128,131-132,135-140,145-152,155-156,158-163,165-247,261-264,271-275,280-281,284,286-289,291-294,296,321-417,421
+  s_853eb455586efb::t_6844dc88a1a50e 80-87,302-320
+  s_853eb455586efb::t_b04cc5c08aa43e 105-106,111-112,118-119,125-126,129-130,133-134,141-144,259-260,265-266
+docs/usage.md
+  s_853eb455586efb::t_aaa3825155fd2b 682-683
+  s_853eb455586efb::t_44c2a139eaae0c 165-169,172-174,177-183,185-186,188-190,192,194-196,198-213,233,256-270
+  s_853eb455586efb::t_422a01fa23a394 559-565,572-579
+tests/unit/test_config.py
+  s_853eb455586efb::t_fb47bed0ddf67e 3,8-15,20,23-26,29-30,33-35,39,41-44,46,49-54,57-73,75-90,112,114-124,146-185,187-192
+  s_853eb455586efb::t_aeae8ae6cd8ec2 125-145
+  s_853eb455586efb::t_78907523afb67b 91-92
+tests/e2e/test_cli.py
+  s_853eb455586efb::t_f6d468cd71f8e7 32,36
+  s_853eb455586efb::t_b2ceb961f47620 33-35
+src/repolens/data/schemas/local_config.schema.json
+  s_853eb455586efb::t_ac2dd764acaf75 1-129
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e8a550b959d9e86e09a652bf3774f0209e5acb5d",
+  "prompts": {},
+  "sessions": {
+    "s_853eb455586efb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e94a7-867e-7881-aa54-d0c218023533",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
