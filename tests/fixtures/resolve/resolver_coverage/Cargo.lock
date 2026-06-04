@@ -1,0 +1,14 @@
+# Trimmed resolver fixture provenance. Resolve tests consume sbom.syft.json directly.
+version = 3
+
+[[package]]
+name = "anyhow"
+version = "1.0.98"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fixture-anyhow"
+
+[[package]]
+name = "either"
+version = "1.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fixture-either"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from repolens.data.store import iter_resolved, write_sbom
@@ -9,6 +10,10 @@ from repolens.resolve.models import ApiCandidate, PackageFact, ResolveAdapter
 from repolens.resolve.stage import run_resolve
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import FetchResult, HttpFetchOptions
+
+RESOLVER_COVERAGE_FIXTURE = (
+    Path(__file__).resolve().parents[1] / "fixtures" / "resolve" / "resolver_coverage"
+)
 
 
 class FailingAdapter:
@@ -111,6 +116,169 @@ def test_api_candidate_requires_validated_matching_evidence(tmp_path: Path, repo
     assert record["spdx_id"] == "MIT"
     assert record["evidence"]["source_layer"] == "api"
     assert record["evidence"]["anchor"] == "MIT"
+
+
+def test_api_candidate_accepts_equivalent_compound_expression_evidence(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    adapter = CandidateAdapter(
+        ApiCandidate(
+            spdx_id="Apache-2.0 OR MIT",
+            evidence_url="https://api.deps.dev/v3alpha/systems/cargo/packages/anyhow/versions/1.0.98",
+            evidence_anchor="Apache-2.0 OR MIT",
+        )
+    )
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[adapter],
+        fetcher=fetcher_with_body(b'{"license":"MIT OR Apache-2.0"}'),
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == "Apache-2.0 OR MIT"
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == "Apache-2.0 OR MIT"
+
+
+def test_equivalent_compound_api_candidates_do_not_conflict(tmp_path: Path, repo_ref: str) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    first = CandidateAdapter(
+        ApiCandidate(
+            spdx_id="Apache-2.0 OR MIT",
+            evidence_url="https://api.deps.dev/v3alpha/one",
+            evidence_anchor="Apache-2.0 OR MIT",
+        )
+    )
+    second = CandidateAdapter(
+        ApiCandidate(
+            spdx_id="MIT OR Apache-2.0",
+            evidence_url="https://api.deps.dev/v3alpha/two",
+            evidence_anchor="MIT OR Apache-2.0",
+        )
+    )
+
+    def fetch(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        body = (
+            b'{"license":"Apache-2.0 OR MIT"}'
+            if url.endswith("/one")
+            else b'{"license":"MIT OR Apache-2.0"}'
+        )
+        return FetchResult(url=url, status=200, headers=(), body=body)
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[first, second],
+        fetcher=fetch,
+        evidence_resolver=public_resolver,
+        detect_conflicts=True,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == "Apache-2.0 OR MIT"
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == "Apache-2.0 OR MIT"
+
+
+def test_malformed_api_expression_lowers_unresolved_without_fetch(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    adapter = CandidateAdapter(
+        ApiCandidate(
+            spdx_id="MIT OR (Apache-2.0",
+            evidence_url="https://api.deps.dev/v3alpha/systems/cargo/packages/anyhow/versions/1.0.98",
+            evidence_anchor="MIT OR (Apache-2.0",
+        )
+    )
+    fetched: list[str] = []
+
+    def fetch(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        fetched.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"license":"MIT"}')
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[adapter],
+        fetcher=fetch,
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert fetched == []
+    assert record["spdx_id"] is None
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == "unresolved:evidence_mismatch"
+
+
+def test_unknown_with_exception_lowers_unresolved_without_fetch(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    adapter = CandidateAdapter(
+        ApiCandidate(
+            spdx_id="GPL-3.0-only WITH Unknown-exception",
+            evidence_url="https://api.deps.dev/v3alpha/systems/cargo/packages/acme-lib/versions/1.2.3",
+            evidence_anchor="GPL-3.0-only WITH Unknown-exception",
+        )
+    )
+    fetched: list[str] = []
+
+    def fetch(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        fetched.append(url)
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=b'{"license":"GPL-3.0-only WITH Unknown-exception"}',
+        )
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[adapter],
+        fetcher=fetch,
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert fetched == []
+    assert record["spdx_id"] is None
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == "unresolved:evidence_mismatch"
+
+
+def test_known_with_exception_resolves_and_verifies(tmp_path: Path, repo_ref: str) -> None:
+    expression = "GPL-3.0-only WITH Autoconf-exception-3.0"
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    adapter = CandidateAdapter(
+        ApiCandidate(
+            spdx_id=expression,
+            evidence_url="https://api.deps.dev/v3alpha/systems/cargo/packages/acme-lib/versions/1.2.3",
+            evidence_anchor=expression,
+        )
+    )
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[adapter],
+        fetcher=fetcher_with_body(b'{"license":"GPL-3.0-only WITH Autoconf-exception-3.0"}'),
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == expression
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == expression
 
 
 def test_api_candidate_lowers_mismatched_evidence(tmp_path: Path, repo_ref: str) -> None:
@@ -362,6 +530,59 @@ def test_p3b_default_path_does_not_run_scancode_without_source_root(
     assert record["spdx_id"] is None
     assert record["evidence"]["source_layer"] == "api"
     assert record["evidence"]["anchor"] == "unresolved:no_candidate"
+
+
+def test_resolver_coverage_fixture_moves_targets_from_no_candidate_to_resolved(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    sbom = json.loads((RESOLVER_COVERAGE_FIXTURE / "sbom.syft.json").read_text(encoding="utf-8"))
+    before_root = tmp_path / "before"
+    write_sbom(before_root, repo_ref, sbom)
+    run_resolve(before_root, repo_ref, adapters=[])
+    before_records = list(iter_resolved(before_root / "work" / repo_ref / "resolved.ndjson"))
+    assert all(
+        record["evidence"]["anchor"] == "unresolved:no_candidate" for record in before_records
+    )
+
+    write_sbom(tmp_path, repo_ref, sbom)
+    expected_payloads = {
+        "https://api.deps.dev/v3alpha/systems/cargo/packages/anyhow/versions/1.0.98": (
+            b'{"license":"Apache-2.0 OR MIT"}'
+        ),
+        "https://api.deps.dev/v3alpha/systems/cargo/packages/either/versions/1.15.0": (
+            b'{"licenses":["Apache-2.0 OR MIT"]}'
+        ),
+        "https://api.deps.dev/v3alpha/systems/npm/packages/"
+        "@img%2Fsharp-win32-x64/versions/0.33.5": (
+            b'{"license":"Apache-2.0 AND LGPL-3.0-or-later"}'
+        ),
+    }
+    seen: list[str] = []
+
+    def fetch(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        seen.append(url)
+        body = expected_payloads.get(url, b"{}")
+        return FetchResult(url=url, status=200, headers=(), body=body)
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        fetcher=fetch,
+        evidence_resolver=public_resolver,
+    )
+
+    records = {
+        str(record["name"]): record
+        for record in iter_resolved(tmp_path / "work" / repo_ref / "resolved.ndjson")
+    }
+    assert records["anyhow"]["spdx_id"] == "Apache-2.0 OR MIT"
+    assert records["either"]["spdx_id"] == "Apache-2.0 OR MIT"
+    assert records["@img/sharp-win32-x64"]["spdx_id"] == "Apache-2.0 AND LGPL-3.0-or-later"
+    assert all(
+        record["evidence"]["anchor"] != "unresolved:no_candidate" for record in records.values()
+    )
+    assert set(seen) == set(expected_payloads)
 
 
 def test_p3b_scancode_runs_only_for_unresolved_package_with_locations(

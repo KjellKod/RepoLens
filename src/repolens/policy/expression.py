@@ -23,6 +23,17 @@ class EvalResult:
 
 
 Token = tuple[str, str]
+LeafNormalizer = Callable[[str], str | None]
+ExceptionNormalizer = Callable[[str, str], str | None]
+
+
+@dataclass(frozen=True, slots=True)
+class ExpressionFingerprint:
+    """Structural key for SPDX expression equivalence checks."""
+
+    kind: str
+    value: str | None = None
+    operands: tuple[ExpressionFingerprint, ...] = tuple()
 
 
 class _Parser:
@@ -193,3 +204,136 @@ def evaluate_expression(
     parser = _Parser(_tokenize(expression))
     tree = parser.parse()
     return tree.evaluate(mapper)
+
+
+def fingerprint_expression(
+    expression: str,
+    leaf_normalizer: LeafNormalizer,
+    exception_normalizer: ExceptionNormalizer | None = None,
+) -> ExpressionFingerprint:
+    """Return a normalized structural key for a syntactically valid SPDX expression.
+
+    ``OR`` operands are sorted because SPDX disjunction order is not meaningful for the
+    resolver evidence checks. Other operators keep their parsed structure.
+    """
+
+    parser = _Parser(_tokenize(expression))
+    tree = parser.parse()
+    return _fingerprint_node(
+        tree,
+        leaf_normalizer=leaf_normalizer,
+        exception_normalizer=exception_normalizer or _identity_exception_normalizer,
+    )
+
+
+def equivalent_expressions(
+    left: str,
+    right: str,
+    leaf_normalizer: LeafNormalizer,
+    exception_normalizer: ExceptionNormalizer | None = None,
+) -> bool:
+    """Return whether two SPDX expressions are structurally equivalent."""
+
+    return fingerprint_expression(
+        left,
+        leaf_normalizer=leaf_normalizer,
+        exception_normalizer=exception_normalizer,
+    ) == fingerprint_expression(
+        right,
+        leaf_normalizer=leaf_normalizer,
+        exception_normalizer=exception_normalizer,
+    )
+
+
+def _fingerprint_node(
+    node: _Node,
+    *,
+    leaf_normalizer: LeafNormalizer,
+    exception_normalizer: ExceptionNormalizer,
+) -> ExpressionFingerprint:
+    if isinstance(node, _LeafNode):
+        normalized = leaf_normalizer(node.license_id)
+        if normalized is None:
+            raise ParseError("Unknown SPDX license id")
+        return ExpressionFingerprint(kind="ID", value=normalized)
+
+    if isinstance(node, _WithNode):
+        base = _fingerprint_node(
+            node.base,
+            leaf_normalizer=leaf_normalizer,
+            exception_normalizer=exception_normalizer,
+        )
+        if base.value is None:
+            raise ParseError("Unknown SPDX license id")
+        exception = exception_normalizer(base.value, node.exception)
+        if exception is None:
+            raise ParseError("Unknown SPDX exception id")
+        return ExpressionFingerprint(kind="WITH", value=exception, operands=(base,))
+
+    if isinstance(node, _OrNode):
+        operands = _or_operands(
+            node.left,
+            leaf_normalizer=leaf_normalizer,
+            exception_normalizer=exception_normalizer,
+        ) + _or_operands(
+            node.right,
+            leaf_normalizer=leaf_normalizer,
+            exception_normalizer=exception_normalizer,
+        )
+        return ExpressionFingerprint(
+            kind="OR",
+            operands=tuple(sorted(operands, key=_fingerprint_sort_key)),
+        )
+
+    if isinstance(node, _AndNode):
+        return ExpressionFingerprint(
+            kind="AND",
+            operands=(
+                _fingerprint_node(
+                    node.left,
+                    leaf_normalizer=leaf_normalizer,
+                    exception_normalizer=exception_normalizer,
+                ),
+                _fingerprint_node(
+                    node.right,
+                    leaf_normalizer=leaf_normalizer,
+                    exception_normalizer=exception_normalizer,
+                ),
+            ),
+        )
+
+    raise ParseError("Unsupported expression node")
+
+
+def _or_operands(
+    node: _Node,
+    *,
+    leaf_normalizer: LeafNormalizer,
+    exception_normalizer: ExceptionNormalizer,
+) -> tuple[ExpressionFingerprint, ...]:
+    if isinstance(node, _OrNode):
+        return _or_operands(
+            node.left,
+            leaf_normalizer=leaf_normalizer,
+            exception_normalizer=exception_normalizer,
+        ) + _or_operands(
+            node.right,
+            leaf_normalizer=leaf_normalizer,
+            exception_normalizer=exception_normalizer,
+        )
+    return (
+        _fingerprint_node(
+            node,
+            leaf_normalizer=leaf_normalizer,
+            exception_normalizer=exception_normalizer,
+        ),
+    )
+
+
+def _fingerprint_sort_key(fingerprint: ExpressionFingerprint) -> str:
+    operands = ",".join(_fingerprint_sort_key(operand) for operand in fingerprint.operands)
+    return f"{fingerprint.kind}:{fingerprint.value or ''}:[{operands}]"
+
+
+def _identity_exception_normalizer(_license_id: str, exception: str) -> str | None:
+    return exception.strip() or None

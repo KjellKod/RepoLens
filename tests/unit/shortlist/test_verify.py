@@ -98,6 +98,23 @@ def test_unrecognized_spdx_abstains_without_fetch() -> None:
     assert fetched == []  # never re-fetches on an unrecognized claim
 
 
+def test_compound_expression_claim_still_fails_closed_without_fetch() -> None:
+    fetched: list[str] = []
+
+    def counting_fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        fetched.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b"{}")
+
+    resolution = Resolution("Apache-2.0 OR MIT", _DEPS_DEV_URL, "Apache-2.0 OR MIT")
+    outcome = verify_agent_resolution(
+        resolution, fetcher=counting_fetcher, resolver=_public_resolver
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:unrecognized_spdx"
+    assert fetched == []
+
+
 def test_off_allowlist_host_raises_at_validate() -> None:
     options = HttpFetchOptions(allowed_hosts=API_ALLOWED_HOSTS, headers={})
     with pytest.raises(FetchSecurityError, match="host is not allowlisted"):

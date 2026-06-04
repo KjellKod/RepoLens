@@ -8,7 +8,7 @@ from pathlib import Path
 
 from repolens.data.limits import SCHEMA_VERSION
 from repolens.data.models import ResolvedItem
-from repolens.policy.config import load_default_policy
+from repolens.policy.config import Policy, load_default_policy
 from repolens.policy.spdx import normalize_license
 from repolens.resolve.adapters import (
     API_ALLOWED_HOSTS,
@@ -19,6 +19,7 @@ from repolens.resolve.evidence import (
     has_exact_license_evidence,
     should_attempt_api_resolution,
 )
+from repolens.resolve.license_expression import license_resolution_id, license_resolution_key
 from repolens.resolve.mobile import (
     MobileDetection,
     MobileEnrichmentOutcome,
@@ -277,8 +278,11 @@ def _resolve_api_package(
         if lower_unresolved:
             return _record(package, spdx_id=None, source_layer="api", anchor=unresolved_anchor)
         return None
-    spdx_ids = {candidate.spdx_id for candidate in verified_candidates}
-    if len(spdx_ids) > 1:
+    license_keys = {
+        license_resolution_key(candidate.spdx_id, load_default_policy())
+        for candidate in verified_candidates
+    }
+    if len(license_keys) > 1:
         return _record(
             package, spdx_id="CONFLICT", source_layer="api", anchor="conflict:api_disagreement"
         )
@@ -333,8 +337,9 @@ def _verify_api_candidate(
     fetcher: FetchFunction,
     resolver: Resolver | None,
 ) -> ApiCandidate | None:
-    normalized = normalize_license(candidate.spdx_id, load_default_policy())
-    if normalized.spdx_id is None or not candidate.evidence_anchor:
+    policy = load_default_policy()
+    spdx_id = _api_candidate_license_id(candidate.spdx_id, policy)
+    if spdx_id is None or not candidate.evidence_anchor:
         return None
 
     options = HttpFetchOptions(allowed_hosts=API_ALLOWED_HOSTS, headers={})
@@ -344,13 +349,17 @@ def _verify_api_candidate(
     except FetchSecurityError:
         return None
 
-    if not has_exact_license_evidence(result.body, candidate, normalized.spdx_id):
+    if not has_exact_license_evidence(result.body, candidate, spdx_id):
         return None
     return ApiCandidate(
-        spdx_id=normalized.spdx_id,
+        spdx_id=spdx_id,
         evidence_url=result.url,
         evidence_anchor=candidate.evidence_anchor,
     )
+
+
+def _api_candidate_license_id(raw_license: str, policy: Policy) -> str | None:
+    return license_resolution_id(raw_license, policy)
 
 
 def _record(

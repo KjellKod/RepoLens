@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from repolens.policy import load_default_policy
 from repolens.resolve.adapters import API_ALLOWED_HOSTS, build_default_adapters
+from repolens.resolve.license_expression import license_resolution_id
 from repolens.resolve.models import PackageFact
 from repolens.resolve.purl import package_identity, parse_purl
 from repolens.security.errors import FetchSecurityError
@@ -54,6 +56,90 @@ def test_adapters_use_fixed_allowlist_and_no_auth_headers() -> None:
     assert seen[0][1].headers == {}
 
 
+def test_adapter_carries_compound_spdx_expression_candidate() -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(url=url, status=200, headers=(), body=b'{"license":"Apache-2.0 OR MIT"}')
+
+    candidate = build_default_adapters(fetcher)[0].resolve(
+        PackageFact(
+            name="anyhow",
+            version="1.0.98",
+            package_type="cargo",
+            repo="acme-alpha",
+            purl="pkg:cargo/anyhow@1.0.98",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is not None
+    assert candidate.spdx_id == "Apache-2.0 OR MIT"
+    assert candidate.evidence_anchor == "Apache-2.0 OR MIT"
+
+
+def test_deep_compound_expression_fails_closed() -> None:
+    expression = ("(" * 2_000) + "MIT" + (")" * 2_000)
+
+    assert license_resolution_id(expression, load_default_policy()) is None
+
+
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "GPL-3.0-only WITH Unknown-exception",
+        "AGPL-3.0-only WITH Autoconf-exception-3.0",
+    ],
+)
+def test_adapter_rejects_unsupported_with_exception_candidate(expression: str) -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=f'{{"license":"{expression}"}}'.encode(),
+        )
+
+    candidate = build_default_adapters(fetcher)[0].resolve(
+        PackageFact(
+            name="acme-lib",
+            version="1.2.3",
+            package_type="cargo",
+            repo="acme-alpha",
+            purl="pkg:cargo/acme-lib@1.2.3",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is None
+
+
+def test_adapter_carries_known_with_exception_candidate() -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=b'{"license":"GPL-3.0-only WITH Autoconf-exception-3.0"}',
+        )
+
+    candidate = build_default_adapters(fetcher)[0].resolve(
+        PackageFact(
+            name="acme-lib",
+            version="1.2.3",
+            package_type="cargo",
+            repo="acme-alpha",
+            purl="pkg:cargo/acme-lib@1.2.3",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is not None
+    assert candidate.spdx_id == "GPL-3.0-only WITH Autoconf-exception-3.0"
+    assert candidate.evidence_anchor == "GPL-3.0-only WITH Autoconf-exception-3.0"
+
+
 @pytest.mark.parametrize(
     ("purl", "expected_url"),
     [
@@ -89,6 +175,77 @@ def test_deps_dev_adapter_covers_locked_ecosystems(purl: str, expected_url: str)
     assert candidate is not None
     assert candidate.spdx_id == "MIT"
     assert seen == [(expected_url, HttpFetchOptions(allowed_hosts=API_ALLOWED_HOSTS, headers={}))]
+
+
+@pytest.mark.parametrize(
+    ("name", "version", "purl", "expected_url"),
+    [
+        (
+            "@img/sharp-win32-x64",
+            "0.33.5",
+            "pkg:npm/%40img/sharp-win32-x64@0.33.5",
+            "https://api.deps.dev/v3alpha/systems/npm/packages/"
+            "@img%2Fsharp-win32-x64/versions/0.33.5",
+        ),
+        (
+            "left-pad",
+            "1.3.0",
+            "pkg:npm/left-pad@1.3.0",
+            "https://api.deps.dev/v3alpha/systems/npm/packages/left-pad/versions/1.3.0",
+        ),
+    ],
+)
+def test_deps_dev_npm_url_preserves_scoped_at_and_encodes_slash(
+    name: str, version: str, purl: str, expected_url: str
+) -> None:
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        seen.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"license":"MIT"}')
+
+    candidate = build_default_adapters(fetcher)[0].resolve(
+        PackageFact(name, version, "npm", "acme-alpha", purl, None)
+    )
+
+    assert candidate is not None
+    assert seen == [expected_url]
+
+
+@pytest.mark.parametrize(
+    ("name", "version", "purl", "expected_url"),
+    [
+        (
+            "@img/sharp-win32-x64",
+            "0.33.5",
+            "pkg:npm/%40img/sharp-win32-x64@0.33.5",
+            "https://registry.npmjs.org/@img%2Fsharp-win32-x64/0.33.5",
+        ),
+        (
+            "left-pad",
+            "1.3.0",
+            "pkg:npm/left-pad@1.3.0",
+            "https://registry.npmjs.org/left-pad/1.3.0",
+        ),
+    ],
+)
+def test_native_npm_url_preserves_scoped_at_and_encodes_slash(
+    name: str, version: str, purl: str, expected_url: str
+) -> None:
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        seen.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"license":"MIT"}')
+
+    candidate = build_default_adapters(fetcher)[1].resolve(
+        PackageFact(name, version, "npm", "acme-alpha", purl, None)
+    )
+
+    assert candidate is not None
+    assert seen == [expected_url]
 
 
 def test_adapter_order_is_deps_dev_then_targeted_fallbacks() -> None:

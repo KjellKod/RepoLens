@@ -40,6 +40,15 @@ def test_mit_not_flagged(make_record, collected) -> None:
     assert outcome.decision.tier.value == "ALLOW"
 
 
+def test_compound_apache_mit_expression_routes_allow(make_record, collected) -> None:
+    outcome = _outcome(collected([make_record(spdx_id="Apache-2.0 OR MIT")]))
+
+    assert outcome.decision.tier.value == "ALLOW"
+    assert outcome.component.policy_tier == "ALLOW"
+    assert outcome.component.license == "Apache-2.0 OR MIT"
+    assert "compound_expression" in outcome.reason_note
+
+
 def test_stated_reason_text_present(make_record, collected) -> None:
     block = _outcome(collected([make_record(spdx_id="AGPL-3.0-only")]))
     unknown = _outcome(collected([make_record(spdx_id=None)]))

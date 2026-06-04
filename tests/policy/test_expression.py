@@ -1,7 +1,22 @@
 """Compound SPDX expression tests."""
 
 from repolens.policy import classify_license_input, load_default_policy
+from repolens.policy.expression import equivalent_expressions
+from repolens.policy.spdx import normalize_license
 from repolens.policy.types import PolicyTier
+
+
+def _normalize_leaf(raw: str) -> str | None:
+    return normalize_license(raw, load_default_policy()).spdx_id
+
+
+def test_apache_mit_or_uses_lower_risk_allow_tier() -> None:
+    decision = classify_license_input("Apache-2.0 OR MIT", policy=load_default_policy())
+
+    assert decision.tier == PolicyTier.ALLOW
+    assert decision.chosen_branch == "Apache-2.0"
+    assert decision.dual_license_detected is True
+    assert "compound_expression" in decision.reasons
 
 
 def test_or_uses_lower_risk_and_records_branch() -> None:
@@ -76,6 +91,14 @@ def test_with_exception_downgrades_to_explicit_target_tier() -> None:
 
     assert classpath.tier == PolicyTier.REVIEW
     assert autoconf.tier == PolicyTier.ALLOW
+
+
+def test_expression_equivalence_tolerates_or_operand_order() -> None:
+    assert equivalent_expressions(
+        "Apache-2.0 OR MIT",
+        "MIT OR Apache-2.0",
+        leaf_normalizer=_normalize_leaf,
+    )
 
 
 def test_with_without_exception_match_is_unknown() -> None:

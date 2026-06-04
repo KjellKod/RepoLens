@@ -6,8 +6,8 @@ import json
 from dataclasses import dataclass
 from urllib.parse import quote
 
-from repolens.policy.config import load_default_policy
-from repolens.policy.spdx import normalize_license
+from repolens.policy.config import Policy, load_default_policy
+from repolens.resolve.license_expression import license_resolution_id
 from repolens.resolve.models import ApiCandidate, FetchFunction, PackageFact, ResolveAdapter
 from repolens.resolve.purl import package_identity
 from repolens.security.errors import FetchSecurityError
@@ -68,7 +68,7 @@ class DepsDevAdapter:
             return None
         url = (
             "https://api.deps.dev/v3alpha/systems/"
-            f"{quote(system, safe='')}/packages/{quote(package_name, safe='')}"
+            f"{quote(system, safe='')}/packages/{_quote_deps_dev_package(system, package_name)}"
             f"/versions/{quote(package.version, safe='')}"
         )
         return _candidate_from_url(self.fetcher, url)
@@ -123,7 +123,8 @@ def _native_registry_url(ecosystem: str, package_name: str, version: str) -> str
         )
     if ecosystem == "npm":
         return (
-            f"https://registry.npmjs.org/{quote(package_name, safe='')}/{quote(version, safe='')}"
+            f"https://registry.npmjs.org/{_quote_npm_package(package_name)}/"
+            f"{quote(version, safe='')}"
         )
     if ecosystem in {"cargo", "rust"}:
         name = quote(package_name, safe="")
@@ -156,14 +157,28 @@ def _candidate_from_url(fetcher: FetchFunction, url: str) -> ApiCandidate | None
         return None
     policy = load_default_policy()
     for license_text in target_license_candidates(result.body):
-        normalized = normalize_license(license_text, policy)
-        if normalized.spdx_id is not None:
+        spdx_id = _license_resolution_id(license_text, policy)
+        if spdx_id is not None:
             return ApiCandidate(
-                spdx_id=normalized.spdx_id,
+                spdx_id=spdx_id,
                 evidence_url=result.url,
                 evidence_anchor=license_text,
             )
     return None
+
+
+def _quote_deps_dev_package(system: str, package_name: str) -> str:
+    if system == "npm":
+        return _quote_npm_package(package_name)
+    return quote(package_name, safe="")
+
+
+def _quote_npm_package(package_name: str) -> str:
+    return quote(package_name, safe="@")
+
+
+def _license_resolution_id(license_text: str, policy: Policy) -> str | None:
+    return license_resolution_id(license_text, policy)
 
 
 def target_license_candidates(body: bytes) -> tuple[str, ...]:

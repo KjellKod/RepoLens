@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "repo": "resolver-coverage",
+  "generated_at": "2026-06-04T00:00:00Z",
+  "tool": {
+    "name": "syft",
+    "version": "fixture"
+  },
+  "source": "https://example.invalid/resolver-coverage",
+  "artifacts": [
+    {
+      "name": "anyhow",
+      "version": "1.0.98",
+      "type": "cargo",
+      "purl": "pkg:cargo/anyhow@1.0.98",
+      "licenses": [],
+      "locations": [
+        "Cargo.lock"
+      ]
+    },
+    {
+      "name": "either",
+      "version": "1.15.0",
+      "type": "cargo",
+      "purl": "pkg:cargo/either@1.15.0",
+      "licenses": [],
+      "locations": [
+        "Cargo.lock"
+      ]
+    },
+    {
+      "name": "@img/sharp-win32-x64",
+      "version": "0.33.5",
+      "type": "npm",
+      "purl": "pkg:npm/%40img/sharp-win32-x64@0.33.5",
+      "licenses": [],
+      "locations": [
+        "package-lock.json"
+      ]
+    }
+  ]
+}
