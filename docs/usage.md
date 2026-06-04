@@ -250,7 +250,16 @@ denylist.
 Use `run` for the normal end-to-end workflow:
 
 ```bash
-repolens run --work-root work --owner <OWNER> --out-dir reports
+repolens run --work-root work --owner <OWNER>
+```
+
+When `--out-dir` is omitted, `run` writes reports to `<work-root>/reports`. Use
+`--out-dir <DIR>` only when you want the reports somewhere else.
+
+For one-repo dogfood:
+
+```bash
+repolens run --work-root /tmp/repolens-dogfood --owner <OWNER> --repos "<REPO>"
 ```
 
 What happens:
@@ -266,7 +275,8 @@ What happens:
 7. Mark available group checkboxes or item rows in `work/shortlist.md` with `[x]` approve
    or `[r]` reject, then press Enter. Item ticks override group ticks. `run` repeats until
    `open_count == 0`.
-8. `report` writes `report.main.{md,csv,docx}` and appendices under `reports`.
+8. `report` writes `report.main.{md,csv,docx}` and appendices under
+   `<work-root>/reports` unless `--out-dir` overrides it.
 
 Resume is artifact-based. Rerun the same command after Ctrl-C, a closed terminal, or a crash:
 existing SBOMs, `resolved.ndjson`, `inventory.json`, a clear shortlist, and report files decide
@@ -276,19 +286,27 @@ where the pipeline resumes. Once scan artifacts exist, `run` does not regenerate
 For inspection after every stage, add `--step` in an interactive terminal:
 
 ```bash
-repolens run --work-root work --owner <OWNER> --out-dir reports --step
+repolens run --work-root work --owner <OWNER> --step
 ```
 
 For automation, add `--yes`:
 
 ```bash
-repolens run --work-root work --owner <OWNER> --out-dir reports --yes
+repolens run --work-root work --owner <OWNER> --yes
 ```
 
-`--yes` never approves the shortlist and never runs an AI proposal pass. In non-interactive
-mode, open shortlist items produce a deterministic non-zero exit, emit
-`work/shortlist.contexts.json`, print copy-pasteable artifact instructions, and write no
-report until a human clears `shortlist.md`.
+`--yes` never approves the shortlist and never runs an AI proposal pass. In
+non-interactive mode, open shortlist items produce a deterministic non-zero exit, emit
+`work/shortlist.contexts.json`, ingest an existing `work/shortlist.proposals.json` if one
+is already present, print copy-pasteable artifact instructions once, and write no report
+until a human clears `shortlist.md`.
+
+The final `run` summary separates resume skips from real failures and names the exact
+report directory. Review `report.main.md` and `report.main.csv` (and `report.main.docx`
+when present), review every `report.appendix.<label>.{md,csv}`, and double-check any
+reported coverage gaps. An empty shortlist means there are no open shipped-license
+decisions; it does not mean appendix rows have complete SPDX, source URL, or version
+coverage.
 
 `run` continues past per-repo scan or resolve failures when other repos succeeded. It lists the
 failed repos in the final summary, writes reports for successfully resolved repos, and exits
@@ -349,7 +367,7 @@ repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
                                       # emit model-free external proposal contexts
 repolens shortlist --work-root work --proposals work/shortlist.proposals.json
                                       # ingest external proposals after local verification
-repolens report --work-root <WORK> --out-dir reports
+repolens report --work-root <WORK>
                                       # assemble gated main, docx, and appendix reports
 ```
 
@@ -646,6 +664,14 @@ local runtime report config. If `<WORK>/shortlist.json` exists with `open_count 
 any item whose `status` is `open`, the command exits with findings-open status and writes
 no report artifacts. A missing shortlist does not block assembly.
 
+When `--out-dir` is omitted, report writes to `<WORK>/reports`. The finish summary lists
+the resolved report directory, main row count, appendix row counts by label, and coverage
+gaps worth human review. Review `report.main.md`/`.csv`/`.docx` when present, review
+appendices especially when `build-ci` rows have `UNKNOWN`, `missing_spdx_id`,
+`missing_source_url`, or `missing_version`, and generate the docx later by adding
+`report.header` config or rerunning report interactively if the summary says docx was
+skipped.
+
 The `report.main.{md,csv}` and appendix data always render — they need no header
 config and never hard-fail. The docx cover is **optional** and resolved as follows:
 
@@ -719,8 +745,9 @@ appendix, and docx counts. The work root contains `discovered.json`,
 `repos.candidate.md`, per-fixture `sbom.syft.json` and
 `resolved.ndjson`, a clear `shortlist.json`, `reports/report.main.{md,csv,docx}`, and
 `reports/report.appendix.<category>.{md,csv}`. This is a fixture harness only; live owner
-dogfood still uses the normal `repolens discover -> scan -> resolve -> flag -> report`
-commands above.
+dogfood still uses the normal `repolens run --work-root /tmp/repolens-dogfood --owner
+<OWNER> --repos "<REPO>"` shape, or the equivalent
+`discover -> scan -> resolve -> flag -> shortlist -> report` stage flow.
 
 ## Outputs
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import math
 import re
 import shlex
@@ -26,7 +27,7 @@ from repolens.bootstrap.cache import (
     load_syft_pin,
 )
 from repolens.bootstrap.errors import IntegrityError, UsageError
-from repolens.report import ReportGateOpen, render_main_report
+from repolens.report import ReportGateOpen, ReportResult, render_main_report
 from repolens.security.redaction import redact_tokens
 
 from .config import Config, load_config
@@ -50,6 +51,7 @@ class CommandStatus(Enum):
 class CommandResult:
     status: CommandStatus
     message: str = ""
+    metadata: object | None = None
 
 
 CommandHandler = Callable[[argparse.Namespace], CommandResult]
@@ -75,6 +77,11 @@ class RunSummary:
     failures: list[RunFailure] = field(default_factory=list)
     skipped: int = 0
     reports_dir: Path | None = None
+    report_paths: tuple[Path, ...] = ()
+    appendix_rows_by_label: dict[str, int] = field(default_factory=dict)
+    appendix_paths_by_label: dict[str, tuple[Path, Path]] = field(default_factory=dict)
+    coverage_gaps_by_label: dict[str, dict[str, int]] = field(default_factory=dict)
+    docx_skipped: bool = False
 
     @property
     def has_failures(self) -> bool:
@@ -177,7 +184,7 @@ _STAGE_HELP = {
         epilog=_stage_epilog(
             "resolved.ndjson files from resolve, discovered.json categories when present, "
             "a clear shortlist.json when present, and report.header config for docx.",
-            "repolens report --work-root <WORK> --out-dir reports",
+            "repolens report --work-root <WORK>",
             "report.main.{md,csv,docx} + report.appendix.<category>.{md,csv}.",
             "review and share it — you are responsible for validating the result.",
         ),
@@ -201,7 +208,7 @@ _EPILOG = (
     "  only for local config files.\n"
     "\n"
     "recommended:\n"
-    "  repolens run --work-root work --owner <OWNER> --out-dir reports\n"
+    "  repolens run --work-root work --owner <OWNER>\n"
     "\n"
     "step it yourself:\n"
     "  1. repolens discover --owner <OWNER>                     find + approve the repos\n"
@@ -209,7 +216,7 @@ _EPILOG = (
     "  3. repolens resolve --work-root work                     resolve scanned repos\n"
     "  4. repolens flag --work-root work                        flag risk / unknowns\n"
     "  5. repolens shortlist --work-root work                   settle the flags + approve\n"
-    "  6. repolens report --work-root work --out-dir reports    build the main disclosure\n"
+    "  6. repolens report --work-root work                      build the main disclosure\n"
     "\n"
     "Scan auto-acquires and verifies RepoLens's pinned Syft into a shared cache on\n"
     "first use; `repolens bootstrap` pre-seeds it for offline runs. Run\n"
@@ -262,8 +269,8 @@ def build_parser() -> argparse.ArgumentParser:
             "with human pauses only where review is required."
         ),
         epilog=(
-            "Example: repolens run --work-root work --owner <OWNER> --out-dir reports\n"
-            "Automation: repolens run --work-root work --owner <OWNER> --out-dir reports --yes\n"
+            "Example: repolens run --work-root work --owner <OWNER>\n"
+            "Automation: repolens run --work-root work --owner <OWNER> --yes\n"
             "Resume: rerun the same command; existing artifacts decide the next stage.\n"
             "Note: --yes never approves shortlist items."
         ),
@@ -404,9 +411,11 @@ def _configure_run_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--out-dir",
         type=Path,
-        default=Path("reports"),
         metavar="PATH",
-        help="Directory for report.main.{md,csv,docx} and appendix artifacts.",
+        help=(
+            "Directory for report.main.{md,csv,docx} and appendix artifacts "
+            "(default: <work-root>/reports)."
+        ),
     )
     subparser.add_argument(
         "--config",
@@ -634,14 +643,14 @@ def _run_command(args: argparse.Namespace) -> CommandResult:
         raise InputError("--timeout must be a positive number of seconds")
 
     work_root = Path(args.work_root)
-    out_dir = Path(args.out_dir)
+    out_dir = _resolve_report_out_dir(work_root, args.out_dir)
     summary = RunSummary(reports_dir=out_dir)
     interactive = _run_interactive(args)
 
     persisted_failures = _persisted_scan_failures(work_root)
     resolved_refs = _resolved_repo_refs(work_root)
     if _report_resume_complete(work_root, out_dir, resolved_refs, args.runtime_config):
-        summary.report_rows = _report_row_count(out_dir)
+        _load_existing_report_summary(summary, out_dir)
         summary.repo_refs.update(resolved_refs)
         summary.failures.extend(persisted_failures)
         status = CommandStatus.FINDINGS_OPEN if summary.has_failures else CommandStatus.SUCCESS
@@ -714,7 +723,10 @@ def _run_command(args: argparse.Namespace) -> CommandResult:
     report_result = _report(_stage_args(args, work_root=report_root, out_dir=out_dir))
     if report_result.status is CommandStatus.FINDINGS_OPEN:
         return report_result
-    summary.report_rows = _report_row_count(out_dir)
+    if isinstance(report_result.metadata, ReportResult):
+        _apply_report_result(summary, report_result.metadata)
+    else:
+        _load_existing_report_summary(summary, out_dir)
     _run_banner(args, "report", f"{summary.report_rows} rows")
 
     status = CommandStatus.FINDINGS_OPEN if summary.has_failures else CommandStatus.SUCCESS
@@ -857,13 +869,20 @@ def _run_shortlist_loop(
             return None
 
         if not interactive:
+            if proposals_path.exists():
+                _shortlist_stage(
+                    _stage_args(args, work_root=work_root, proposals_path=proposals_path)
+                )
+                open_count = _shortlist_open_count(work_root)
+                _run_banner(args, "shortlist", f"{open_count} open item(s) after proposals")
+                if open_count == 0:
+                    return None
             instruction = _shortlist_artifact_instruction(
                 open_count,
                 work_root,
                 contexts_path,
                 proposals_path,
             )
-            print(instruction, file=sys.stderr)
             return CommandResult(CommandStatus.FINDINGS_OPEN, instruction)
 
         _run_pause(
@@ -898,14 +917,14 @@ def _shortlist_artifact_instruction(
     proposals_path: Path,
 ) -> str:
     return (
-        f"{open_count} items still need review; report is halted before disclosure.\n"
+        f"Open shipped-license findings: {open_count}; report is halted before disclosure.\n"
         f"Contexts: {contexts_path}\n"
         f"Optional proposals: {proposals_path}\n"
         f"Grouped human review: {work_root / 'shortlist.md'}\n"
-        "Next: create proposals outside RepoLens if useful, then run "
+        "Next: create proposals outside RepoLens if useful, then ingest them with "
         f"`repolens shortlist --work-root {shlex.quote(str(work_root))} "
         f"--proposals {shlex.quote(str(proposals_path))}` and approve/reject groups "
-        "or items in shortlist.md."
+        "or items in shortlist.md. Rerun `repolens run` after human approval."
     )
 
 
@@ -1039,6 +1058,12 @@ def _report_work_root(work_root: Path, resolved_refs: set[str], summary: RunSumm
     return target
 
 
+def _resolve_report_out_dir(work_root: Path, out_dir: Path | None) -> Path:
+    if out_dir is not None:
+        return Path(out_dir)
+    return Path(work_root) / "reports"
+
+
 def _repo_artifact_dir(work_root: Path, repo_ref: str) -> Path:
     from repolens.data.store import repo_dir
 
@@ -1135,21 +1160,150 @@ def _report_row_count(out_dir: Path) -> int:
 
 
 def _run_done_message(summary: RunSummary) -> str:
-    failed = len(summary.failures)
-    skipped_failed = summary.skipped + failed
     reports = summary.reports_dir if summary.reports_dir is not None else Path("reports")
-    prefix = (
-        f"Done - {len(summary.repo_refs)} repos, {summary.report_rows} in report, "
-        f"{skipped_failed} skipped/failed; {reports}/ written."
-    )
+    lines = [
+        "Done.",
+        f"Repos included: {len(summary.repo_refs)}",
+        f"Main report rows: {summary.report_rows}",
+        f"Appendix rows: {_format_counts(summary.appendix_rows_by_label)}",
+        f"Resume skips: {summary.skipped}",
+        f"Failures: {len(summary.failures)}",
+        f"Reports directory: {_resolved_path(reports)}",
+        *_review_guidance(summary),
+    ]
     if not summary.failures:
-        return prefix
+        return "\n".join(lines)
     details = "\n".join(
         f"  - {failure.stage}"
         f"{f' {failure.repo_ref}' if failure.repo_ref else ''}: {failure.message}"
         for failure in summary.failures
     )
-    return f"{prefix}\nFailures:\n{details}"
+    return "\n".join((*lines, "Failure details:", details))
+
+
+def _apply_report_result(summary: RunSummary, result: ReportResult) -> None:
+    paths = [result.markdown_path, result.csv_path]
+    if result.docx_path is not None:
+        paths.append(result.docx_path)
+    summary.report_rows = result.row_count
+    summary.report_paths = tuple(paths)
+    summary.docx_skipped = result.docx_skipped
+    summary.coverage_gaps_by_label = {"main": dict(result.coverage_gaps)}
+    summary.appendix_rows_by_label = {
+        appendix.label: appendix.row_count for appendix in result.appendices
+    }
+    summary.appendix_paths_by_label = {
+        appendix.label: (appendix.markdown_path, appendix.csv_path)
+        for appendix in result.appendices
+    }
+    for appendix in result.appendices:
+        summary.coverage_gaps_by_label[appendix.label] = dict(appendix.coverage_gaps)
+
+
+def _load_existing_report_summary(summary: RunSummary, out_dir: Path) -> None:
+    summary.report_rows = _report_row_count(out_dir)
+    paths: list[Path] = []
+    for filename in REPORT_MAIN_FILENAMES:
+        path = Path(out_dir) / filename
+        if path.exists():
+            paths.append(path)
+    summary.report_paths = tuple(paths)
+    summary.docx_skipped = not (Path(out_dir) / REPORT_MAIN_DOCX_FILENAME).exists()
+    summary.coverage_gaps_by_label = {}
+    main_gaps = _coverage_gaps_from_csv(Path(out_dir) / "report.main.csv")
+    if main_gaps:
+        summary.coverage_gaps_by_label["main"] = main_gaps
+    summary.appendix_rows_by_label = {}
+    summary.appendix_paths_by_label = {}
+    for csv_path in sorted(
+        Path(out_dir).glob("report.appendix.*.csv"),
+        key=lambda path: (path.name.casefold(), path.name),
+    ):
+        label = unquote(csv_path.name.removeprefix("report.appendix.").removesuffix(".csv"))
+        markdown_path = csv_path.with_suffix(".md")
+        summary.appendix_rows_by_label[label] = _csv_data_row_count(csv_path)
+        summary.appendix_paths_by_label[label] = (markdown_path, csv_path)
+        gaps = _coverage_gaps_from_csv(csv_path)
+        if gaps:
+            summary.coverage_gaps_by_label[label] = gaps
+
+
+def _csv_data_row_count(path: Path) -> int:
+    if not path.exists():
+        return 0
+    with path.open(encoding="utf-8", newline="") as handle:
+        return max(0, sum(1 for _row in csv.reader(handle)) - 1)
+
+
+def _coverage_gaps_from_csv(path: Path) -> dict[str, int]:
+    if not path.exists():
+        return {}
+    gaps: dict[str, int] = {}
+    with path.open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle):
+            for gap in str(row.get("coverage_gaps", "")).split(";"):
+                normalized = gap.strip()
+                if not normalized or normalized == "none":
+                    continue
+                gaps[normalized] = gaps.get(normalized, 0) + 1
+    return gaps
+
+
+def _format_counts(counts: dict[str, int]) -> str:
+    if not counts:
+        return "none"
+    return ", ".join(f"{label}={count}" for label, count in sorted(counts.items()))
+
+
+def _format_gap_counts(gaps_by_label: dict[str, dict[str, int]]) -> str:
+    chunks: list[str] = []
+    for label, gaps in sorted(gaps_by_label.items()):
+        if not gaps:
+            continue
+        chunks.append(
+            f"{label}: "
+            + ", ".join(f"{gap}={count}" for gap, count in sorted(gaps.items()))
+        )
+    return "; ".join(chunks)
+
+
+def _review_guidance(summary: RunSummary) -> list[str]:
+    lines = ["Review checklist:"]
+    existing_main_paths = [path for path in summary.report_paths if path.exists()]
+    if existing_main_paths:
+        lines.append(
+            "  - Main report: "
+            + ", ".join(str(_resolved_path(path)) for path in existing_main_paths)
+        )
+    if summary.appendix_paths_by_label:
+        appendix_parts = []
+        for label, paths in sorted(summary.appendix_paths_by_label.items()):
+            existing = [path for path in paths if path.exists()]
+            if existing:
+                appendix_parts.append(
+                    f"{label}: " + ", ".join(str(_resolved_path(path)) for path in existing)
+                )
+        if appendix_parts:
+            lines.append("  - Appendices: " + "; ".join(appendix_parts))
+    gaps = _format_gap_counts(summary.coverage_gaps_by_label)
+    if gaps:
+        lines.append(f"  - Coverage gaps to double-check: {gaps}")
+    else:
+        lines.append("  - Coverage gaps: none reported in main or appendices")
+    lines.append(
+        "  - Shortlist: clear (0 open shipped-license findings). "
+        "This does not mean appendix coverage is gap-free."
+    )
+    if summary.docx_skipped:
+        lines.append(
+            "  - Docx skipped: add report.header config or rerun report interactively "
+            "to generate it."
+        )
+    return lines
+
+
+def _resolved_path(path: Path) -> Path:
+    return Path(path).expanduser().resolve(strict=False)
 
 
 def _first_line(value: str) -> str:
@@ -1761,29 +1915,42 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
             ),
         )
     report_command = (
-        f"repolens report --work-root {shlex.quote(str(args.work_root))} --out-dir reports"
+        f"repolens report --work-root {shlex.quote(str(args.work_root))}"
     )
     return CommandResult(CommandStatus.SUCCESS, f"{summary}\nNext CLI stage: {report_command}")
 
 
 def _report(args: argparse.Namespace) -> CommandResult:
+    out_dir = _resolve_report_out_dir(Path(args.work_root), args.out_dir)
     try:
         result = render_main_report(
             args.work_root,
-            args.out_dir,
+            out_dir,
             args.runtime_config,
             interactive=_run_interactive(args),
             owner=getattr(args, "owner", None),
         )
     except ReportGateOpen as exc:
         return CommandResult(CommandStatus.FINDINGS_OPEN, str(exc))
-    written = [result.markdown_path, result.csv_path]
-    if result.docx_path is not None:
-        written.append(result.docx_path)
-    written.extend(result.appendix_paths)
+    summary = RunSummary(reports_dir=out_dir)
+    _apply_report_result(summary, result)
     return CommandResult(
         CommandStatus.SUCCESS,
-        "wrote " + ", ".join(str(path) for path in written),
+        _report_done_message(summary),
+        metadata=result,
+    )
+
+
+def _report_done_message(summary: RunSummary) -> str:
+    reports = summary.reports_dir if summary.reports_dir is not None else Path("reports")
+    return "\n".join(
+        (
+            "Report written.",
+            f"Main report rows: {summary.report_rows}",
+            f"Appendix rows: {_format_counts(summary.appendix_rows_by_label)}",
+            f"Reports directory: {_resolved_path(reports)}",
+            *_review_guidance(summary),
+        )
     )
 
 

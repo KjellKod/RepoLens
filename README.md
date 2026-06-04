@@ -76,20 +76,28 @@ with **anchored evidence under human approval**, never guessed.
 For a normal run, use the single front-door command:
 
 ```
-repolens run --work-root work --owner <OWNER> --out-dir reports
+repolens run --work-root work --owner <OWNER>
 ```
 
 `run` pauses inline after discovery so you can untick repos in `work/repos.candidate.md`,
 then resumes after Enter. If the shortlist has open items, it pauses again until you mark
 each item in `work/shortlist.md` with `[x]` approve or `[r]` reject. Rerun the same
 command after an interruption; existing artifacts decide where to resume.
+When `--out-dir` is omitted, reports are written under the work root at
+`work/reports`. Use `--out-dir <DIR>` only when you want a different location.
+
+For one-repo dogfood:
+
+```
+repolens run --work-root /tmp/repolens-dogfood --owner <OWNER> --repos "<REPO>"
+```
 
 For automation, pass `--yes`. It proceeds past the discover gate and tool-consent prompts,
 but it **never** approves shortlist items: if any remain open, `run` exits non-zero before
 writing reports.
 
 ```
-repolens run --work-root work --owner <OWNER> --out-dir reports --yes
+repolens run --work-root work --owner <OWNER> --yes
 ```
 
 For offline runs, `repolens bootstrap` pre-seeds the verified Syft cache before `run` or
@@ -104,7 +112,7 @@ repolens scan    --work-root work
 repolens resolve --work-root work
 repolens flag    --work-root work
 repolens shortlist --work-root work
-repolens report  --work-root work --out-dir reports
+repolens report  --work-root work
 ```
 
 ## Resolving flagged licenses — with AI help, under your approval
@@ -156,7 +164,7 @@ used** — so one decision covers a whole equivalence class:
 **One command** — RepoLens drives the whole pipeline and pauses where you're needed:
 
 ```bash
-repolens run --work-root work --owner <OWNER> --out-dir reports
+repolens run --work-root work --owner <OWNER>
 #  pauses to approve the repo list, then again at the grouped shortlist
 ```
 
@@ -170,7 +178,7 @@ repolens flag --work-root work
 repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
 #   ↳ let the AI (or a teammate) answer → work/shortlist.proposals.json
 repolens shortlist --work-root work --proposals work/shortlist.proposals.json
-repolens report --work-root work --out-dir reports
+repolens report --work-root work
 ```
 
 The AI step is the same seam in both modes — and it's optional. RepoLens itself never
@@ -190,7 +198,10 @@ hand.
 One row per library (deduplicated across repos), each carrying its resolved license,
 version, a fetchable source, and `origin`/`scope`/`distribution` tags. Excluded categories
 and first-party code land in `report.appendix.<category>.*` — nothing is dropped, only
-routed. The full row also records evidence provenance and any coverage gaps.
+routed. The full row also records evidence provenance and any coverage gaps. An empty
+shortlist means there are no open shipped-license decisions; appendices can still contain
+coverage gaps such as `UNKNOWN`, `missing_spdx_id`, `missing_source_url`, or
+`missing_version`, and the final summary calls those out for review.
 
 You stay in control at three points: approving the repo list (`discover`), approving the
 flagged shortlist (`shortlist`), and the final report is **gated** until that shortlist is

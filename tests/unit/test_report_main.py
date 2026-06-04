@@ -37,6 +37,18 @@ def test_render_main_report_writes_md_and_csv_from_resolved_records(
         assert column in markdown
 
 
+def test_render_main_report_defaults_out_dir_under_work_root(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    store.write_resolved(tmp_path, "acme-alpha", [resolved_record])
+
+    result = render_main_report(tmp_path, config=_report_config())
+
+    assert result.markdown_path == tmp_path / "reports" / "report.main.md"
+    assert result.csv_path == tmp_path / "reports" / "report.main.csv"
+    assert result.docx_path == tmp_path / "reports" / "report.main.docx"
+
+
 def test_deduplicates_by_name_and_spdx_id_across_repos(
     tmp_path: Path, resolved_record: dict[str, Any]
 ) -> None:
@@ -504,6 +516,12 @@ def test_report_main_md_csv_docx_share_main_row_set_without_build_ci_gap(
     assert appendix_rows[0]["name"] == ci_name
     assert ci_name not in markdown
     assert ci_name not in docx_xml
+    assert result.appendices[0].label == "build-ci"
+    assert result.appendices[0].row_count == 1
+    assert dict(result.appendices[0].coverage_gaps) == {
+        "missing_source_url": 1,
+        "missing_spdx_id": 1,
+    }
 
 
 def _csv_records(path: Path) -> list[dict[str, str]]:
