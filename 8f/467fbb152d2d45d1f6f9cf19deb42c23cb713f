@@ -1,0 +1,42 @@
+docs/usage.md
+  s_9fbe409bdff8cc::t_90e019fa59fc06 60-90
+tests/unit/scan/test_runner.py
+  s_9fbe409bdff8cc::t_1afed712adbbe7 139-183,188-224
+  s_9fbe409bdff8cc::t_5bdfe9de254538 184-187
+tests/unit/test_resolve_stage.py
+  s_9fbe409bdff8cc::t_b86fe651b1ae96 6,910,914-915,923-948,950-957,969-975,981-982,987-988
+  s_9fbe409bdff8cc::t_04d50a0a204669 913,916-922,958-968
+tests/integration/test_resolve_cli.py
+  s_9fbe409bdff8cc::t_260062438a4ac5 8,176-193,195-250,252-304
+  s_9fbe409bdff8cc::t_e44e1046d63302 194
+  s_9fbe409bdff8cc::t_53596dda22601d 251
+src/repolens/scan/runner.py
+  s_9fbe409bdff8cc::t_a7cadd3b1cfe6f 896,923-930,936,947-949,992
+  s_9fbe409bdff8cc::t_339aa7f6086cba 776
+  s_9fbe409bdff8cc::t_1d337962ff291d 43-48,58-62,92-93,102-104
+  s_9fbe409bdff8cc::t_fb913e5ead5f9b 585,650-656,706-775,777
+src/repolens/resolve/stage.py
+  s_9fbe409bdff8cc::t_6c7693a5b434d5 62,90,103-108,162-170,508-517
+tests/unit/test_cli_run.py
+  s_9fbe409bdff8cc::t_dcc5bf478df9af 256-272,274-312
+  s_9fbe409bdff8cc::t_ce4ffd63837701 273
+src/repolens/data/store.py
+  s_9fbe409bdff8cc::t_5aadfbc9a4b1ff 7,33-38,226-249,251,254-259
+  s_9fbe409bdff8cc::t_ac7b408449601f 250,252-253
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "8f467fbb152d2d45d1f6f9cf19deb42c23cb713f",
+  "prompts": {},
+  "sessions": {
+    "s_9fbe409bdff8cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e938d-73d2-7181-a691-9e367177e074",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
