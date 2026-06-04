@@ -144,6 +144,47 @@ def test_api_candidate_accepts_equivalent_compound_expression_evidence(
     assert record["evidence"]["anchor"] == "Apache-2.0 OR MIT"
 
 
+def test_equivalent_compound_api_candidates_do_not_conflict(tmp_path: Path, repo_ref: str) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    first = CandidateAdapter(
+        ApiCandidate(
+            spdx_id="Apache-2.0 OR MIT",
+            evidence_url="https://api.deps.dev/v3alpha/one",
+            evidence_anchor="Apache-2.0 OR MIT",
+        )
+    )
+    second = CandidateAdapter(
+        ApiCandidate(
+            spdx_id="MIT OR Apache-2.0",
+            evidence_url="https://api.deps.dev/v3alpha/two",
+            evidence_anchor="MIT OR Apache-2.0",
+        )
+    )
+
+    def fetch(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        body = (
+            b'{"license":"Apache-2.0 OR MIT"}'
+            if url.endswith("/one")
+            else b'{"license":"MIT OR Apache-2.0"}'
+        )
+        return FetchResult(url=url, status=200, headers=(), body=body)
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[first, second],
+        fetcher=fetch,
+        evidence_resolver=public_resolver,
+        detect_conflicts=True,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == "Apache-2.0 OR MIT"
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == "Apache-2.0 OR MIT"
+
+
 def test_malformed_api_expression_lowers_unresolved_without_fetch(
     tmp_path: Path, repo_ref: str
 ) -> None:

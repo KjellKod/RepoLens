@@ -20,6 +20,15 @@ def license_resolution_id(raw_license: str, policy: Policy) -> str | None:
     return stripped
 
 
+def license_resolution_key(raw_license: str, policy: Policy) -> str | ExpressionFingerprint | None:
+    """Return a normalized identity key for conflict checks."""
+
+    normalized = normalize_license(raw_license.strip(), policy)
+    if normalized.spdx_id is not None:
+        return normalized.spdx_id
+    return expression_fingerprint(raw_license, policy)
+
+
 def expression_fingerprint(expression: str, policy: Policy) -> ExpressionFingerprint | None:
     """Return a structural expression fingerprint using policy-supported exceptions."""
 
@@ -31,7 +40,7 @@ def expression_fingerprint(expression: str, policy: Policy) -> ExpressionFingerp
                 license_id, exception, policy
             ),
         )
-    except ParseError:
+    except (ParseError, RecursionError):
         return None
 
 

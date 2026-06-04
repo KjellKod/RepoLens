@@ -19,7 +19,7 @@ from repolens.resolve.evidence import (
     has_exact_license_evidence,
     should_attempt_api_resolution,
 )
-from repolens.resolve.license_expression import license_resolution_id
+from repolens.resolve.license_expression import license_resolution_id, license_resolution_key
 from repolens.resolve.mobile import (
     MobileDetection,
     MobileEnrichmentOutcome,
@@ -278,8 +278,11 @@ def _resolve_api_package(
         if lower_unresolved:
             return _record(package, spdx_id=None, source_layer="api", anchor=unresolved_anchor)
         return None
-    spdx_ids = {candidate.spdx_id for candidate in verified_candidates}
-    if len(spdx_ids) > 1:
+    license_keys = {
+        license_resolution_key(candidate.spdx_id, load_default_policy())
+        for candidate in verified_candidates
+    }
+    if len(license_keys) > 1:
         return _record(
             package, spdx_id="CONFLICT", source_layer="api", anchor="conflict:api_disagreement"
         )

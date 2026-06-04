@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+from repolens.policy import load_default_policy
 from repolens.resolve.adapters import API_ALLOWED_HOSTS, build_default_adapters
+from repolens.resolve.license_expression import license_resolution_id
 from repolens.resolve.models import PackageFact
 from repolens.resolve.purl import package_identity, parse_purl
 from repolens.security.errors import FetchSecurityError
@@ -73,6 +75,12 @@ def test_adapter_carries_compound_spdx_expression_candidate() -> None:
     assert candidate is not None
     assert candidate.spdx_id == "Apache-2.0 OR MIT"
     assert candidate.evidence_anchor == "Apache-2.0 OR MIT"
+
+
+def test_deep_compound_expression_fails_closed() -> None:
+    expression = ("(" * 2_000) + "MIT" + (")" * 2_000)
+
+    assert license_resolution_id(expression, load_default_policy()) is None
 
 
 @pytest.mark.parametrize(
