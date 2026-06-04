@@ -1,0 +1,204 @@
+docs/usage.md
+  s_37d7baaa06722d::t_745d6fffcb0c9b 312
+  s_37d7baaa06722d::t_8f4906907be75d 648-650
+  s_37d7baaa06722d::t_6a91f20e46b7a8 307-311,313-333
+  s_37d7baaa06722d::t_30d8d0ec31a2b6 467-473,477-490
+  s_24ea6ed7859ca9::t_d260a9e751e30d 474-476
+tests/unit/test_resolve_adapters.py
+  s_37d7baaa06722d::t_efac88c95d54bc 94-122,149-182
+  s_24ea6ed7859ca9::t_03fbd653556900 123-148
+tests/unit/test_report_main.py
+  s_24ea6ed7859ca9::t_8925b07e760844 151-162
+  s_3bb5a00ca9d82e::t_ddebb2575095e3 348-354,359
+  s_37d7baaa06722d::t_6f4d9c20fbf545 4,342-347,355-358,360,362-363,365-368,370-393
+  s_3bb5a00ca9d82e::t_2d9b83b918ee94 361,364
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 369
+src/repolens/scan/runner.py
+  s_37d7baaa06722d::t_60f4f2783f9961 361-386
+  s_37d7baaa06722d::t_29b0871ac5449e 420-422
+  s_c04de871a6f6bf::t_9ae606c8b48cc8 27,30,411-415,488,490-491
+  s_2df20a9e9142cc::t_3cb2209b376cae 506-508,512-514
+  s_24ea6ed7859ca9::t_ae6ef3aaee3992 476-480
+  s_24ea6ed7859ca9::t_3d406a667afc91 354,357,359-360,389,403
+  s_37d7baaa06722d::t_7ce7769fb6b0d8 22,64-70,282-289,291-353,355-356,358,387-388,390-402,404-410,416-419,423-446,448-466,468-475,481-487,493,503,505,509-511,516-517,524,526,550-551,596,604-608,759-760,830-831
+  s_16f9e4e156d3b2::t_eec9ce50a661f3 290,447,467,489,492,494-502,504,515
+  s_24ea6ed7859ca9::t_12c93b3b5e7f7c 58-63
+tests/unit/flag/test_flag_policy.py
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 68
+  s_37d7baaa06722d::t_8c1e35bcb96e29 3,5,52-67,69-97
+docs/roadmap/archive/rpl_roadmap.md
+  s_24ea6ed7859ca9::t_e5276b36f3fe13 158-162
+  s_24ea6ed7859ca9::t_68f5ad8b6ef176 153
+src/repolens/report/main.py
+  s_24ea6ed7859ca9::t_8925b07e760844 222-225
+src/repolens/report/categories.py
+  s_37d7baaa06722d::t_ceeb64793b407c 12,94-98
+tests/unit/test_report_categories.py
+  s_37d7baaa06722d::t_14dbdd305be379 94-107,136-142,149
+tests/integration/test_m1_fixture_e2e.py
+  s_107fde8657826c::t_0845787efaf8b7 16,22,47-48,50-53
+  s_37d7baaa06722d::t_56aee639fec201 33-35,37-38
+  s_3bb5a00ca9d82e::t_962afe6ad0cd0d 56-57,59-65
+  s_107fde8657826c::t_d94c0b3a3ae2fe 49,54-55
+  s_7a40f252ed63ef::t_494c7a0086ccc0 58
+src/repolens/policy/data/license-policy.default.json
+  s_24ea6ed7859ca9::t_b3f56f71d8a58d 78-79
+tests/fixtures/synthetic/sentinel_ios_client/Podfile
+  s_37d7baaa06722d::t_537fd4ed273205 1-5
+src/repolens/resolve/stage.py
+  s_37d7baaa06722d::t_457ca691188e0b 17,52-56,227-232,423,428-431
+  s_c549f1b7e80094::t_cb3da6ebd634ca 197-202
+  s_c549f1b7e80094::t_b72ecd6546990e 196,203-226
+tests/unit/test_resolve_stage.py
+  s_24ea6ed7859ca9::t_03fbd653556900 299,302-312,324-361
+  s_24ea6ed7859ca9::t_ae6ef3aaee3992 494-520
+  s_24ea6ed7859ca9::t_12c93b3b5e7f7c 521-547,602-628
+  s_3bb5a00ca9d82e::t_485d8886125e53 90
+  s_c549f1b7e80094::t_cb3da6ebd634ca 410
+  s_24ea6ed7859ca9::t_ae4849a4abd7ef 7
+  s_24ea6ed7859ca9::t_324a5d05ade73a 548-601
+  s_3bb5a00ca9d82e::t_e1fe5a2c924cbd 475-476,478
+  s_37d7baaa06722d::t_aac1443733fba8 77-89,91-95,364-389,444-474,477
+  s_c549f1b7e80094::t_8e5b0ef6443a60 390-409,411-443
+src/repolens/resolve/ecosystems.py
+  s_24ea6ed7859ca9::t_12c93b3b5e7f7c 43-45,53-56,109-113,115,119
+  s_24ea6ed7859ca9::t_3d406a667afc91 46-52,104-108,114,116-118
+  s_37d7baaa06722d::t_2694b60e6f4831 1-26,40-41,57-66,95-103
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 27-39,67-81,83-94
+  s_7a40f252ed63ef::t_494c7a0086ccc0 82
+  s_24ea6ed7859ca9::t_ae6ef3aaee3992 42
+src/repolens/resolve/evidence.py
+  s_24ea6ed7859ca9::t_03fbd653556900 9,17-20
+src/repolens/flag/stage.py
+  s_c04de871a6f6bf::t_9ae606c8b48cc8 103
+  s_37d7baaa06722d::t_254d6c8c08ea37 104
+tests/fixtures/synthetic/sentinel_ios_client/Package.swift
+  s_37d7baaa06722d::t_537fd4ed273205 1-18
+scripts/m1_fixture_e2e.py
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 246
+  s_37d7baaa06722d::t_0b4e2bdee9b440 213,217,219-220,234,237-240,244-245,247,249,257,367-368
+  s_107fde8657826c::t_0845787efaf8b7 248,250
+src/repolens/cli.py
+  s_2df20a9e9142cc::t_3cb2209b376cae 736-737
+tests/integration/test_resolve_cli.py
+  s_24ea6ed7859ca9::t_60df8953eed1fe 195,197
+tests/policy/test_spdx_normalize.py
+  s_24ea6ed7859ca9::t_a2b7a2ca967b36 13,19-20
+tests/canaries/security/test_resolve_canaries.py
+  s_24ea6ed7859ca9::t_03fbd653556900 84-91
+tests/fixtures/synthetic/sentinel_android_app/build.gradle
+  s_37d7baaa06722d::t_537fd4ed273205 1,3-7
+  s_3bb5a00ca9d82e::t_d38afdc734e099 2
+tests/unit/scan/test_runner.py
+  s_24ea6ed7859ca9::t_555672d050229c 142,189-191,219-222,361-383
+  s_37d7baaa06722d::t_37f9ba9bcfa68e 50-58,92-141,143-188,192-205,285-309,340-360,410-411,472-478,482-497
+  s_24ea6ed7859ca9::t_ae6ef3aaee3992 225-254
+  s_24ea6ed7859ca9::t_12c93b3b5e7f7c 255-284
+  s_c04de871a6f6bf::t_9ae606c8b48cc8 479-481
+  s_2df20a9e9142cc::t_3cb2209b376cae 310-339,384-409
+  s_16f9e4e156d3b2::t_bd5c2b64b586df 412-471
+tests/unit/test_supported_ecosystems_docs.py
+  s_37d7baaa06722d::t_76549a85b50445 1-4,13-26,47-70
+  s_7a40f252ed63ef::t_494c7a0086ccc0 39
+  s_3bb5a00ca9d82e::t_962afe6ad0cd0d 5-12,27-36,38,40-46
+  s_3bb5a00ca9d82e::t_2d9b83b918ee94 37
+tests/unit/test_cli_run.py
+  s_2df20a9e9142cc::t_3cb2209b376cae 203-250
+tests/integration/test_fixture_manifest.py
+  s_3bb5a00ca9d82e::t_962afe6ad0cd0d 58-66
+  s_37d7baaa06722d::t_838dcfe870e1e1 19,21
+  s_3bb5a00ca9d82e::t_5a394a8ec9f123 29-32
+  s_7a40f252ed63ef::t_494c7a0086ccc0 67
+  s_107fde8657826c::t_0845787efaf8b7 49-57
+tests/fixtures/synthetic/sentinel_android_app/settings.gradle
+  s_37d7baaa06722d::t_537fd4ed273205 1-2
+tests/fixtures/synthetic/sentinel_android_app/gradle.lockfile
+  s_3bb5a00ca9d82e::t_ea5ec519b19758 1-2
+tests/fixtures/synthetic/sentinel_ios_client/Package.resolved
+  s_107fde8657826c::t_0845787efaf8b7 1-15
+src/repolens/resolve/adapters.py
+  s_37d7baaa06722d::t_55c4e03e31f2e2 11,100-101
+  s_24ea6ed7859ca9::t_03fbd653556900 32,51-52,111-112
+tests/fixtures/synthetic/fixture_manifest.json
+  s_37d7baaa06722d::t_537fd4ed273205 70-104
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "b5e2afe1c1f6e7c304aee1e0c1dab6b22d3b31cb",
+  "prompts": {},
+  "sessions": {
+    "s_107fde8657826c": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9145-4f23-7e81-ac90-238c78e8cec4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_16f9e4e156d3b2": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9125-cec1-7222-b8fd-2d4045ba8982",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_24ea6ed7859ca9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e90d5-2628-7752-bc0d-a965292d655f",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    },
+    "s_2df20a9e9142cc": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9135-57c9-7340-ba17-c99af531d9bc",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_37d7baaa06722d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9100-b84c-7133-b056-71fad0b73f4b",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    },
+    "s_3bb5a00ca9d82e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9154-4212-7ee1-944b-136f1ea2c85b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_7a40f252ed63ef": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019e9154-4212-7ee1-944b-136f1ea2c85b",
+        "model": "unknown"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_c04de871a6f6bf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019e9100-b84c-7133-b056-71fad0b73f4b",
+        "model": "unknown"
+      },
+      "human_author": null
+    },
+    "s_c549f1b7e80094": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9142-0847-7bb2-aa4c-c038f964e255",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
