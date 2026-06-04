@@ -7,9 +7,6 @@ from functools import lru_cache
 from importlib import resources
 from typing import Any
 
-from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError
-
 from repolens.data.errors import SchemaValidationError
 
 SCHEMA_NAMES = frozenset(
@@ -39,7 +36,9 @@ def load_schema(artifact_name: str) -> dict[str, Any]:
 
 
 @lru_cache
-def _validator(artifact_name: str) -> Draft202012Validator:
+def _validator(artifact_name: str) -> Any:
+    from jsonschema import Draft202012Validator
+
     schema = load_schema(artifact_name)
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema)
@@ -47,6 +46,8 @@ def _validator(artifact_name: str) -> Draft202012Validator:
 
 def validate_artifact(value: Any, artifact_name: str) -> None:
     """Validate ``value`` against a frozen schema."""
+
+    from jsonschema.exceptions import ValidationError
 
     validator = _validator(artifact_name)
     try:

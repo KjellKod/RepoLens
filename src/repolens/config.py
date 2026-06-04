@@ -8,9 +8,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from jsonschema import Draft202012Validator
-from jsonschema.exceptions import ValidationError
-
 from repolens.data.validation import load_schema
 
 from .exit_codes import InputError
@@ -72,6 +69,8 @@ def load_config(
 
 def validate_config_values(values: dict[str, Any], *, path: Path | None = None) -> None:
     """Validate parsed local config against the canonical JSON Schema."""
+
+    from jsonschema import Draft202012Validator
 
     validator = Draft202012Validator(load_schema("local_config"))
     errors = sorted(validator.iter_errors(values), key=lambda error: list(error.absolute_path))
@@ -320,7 +319,7 @@ def _first_blank_string_path(value: object, path: tuple[str, ...] = ()) -> tuple
     return None
 
 
-def _schema_error_message(error: ValidationError, path: Path | None) -> str:
+def _schema_error_message(error: Any, path: Path | None) -> str:
     key_path = _error_key_path(error)
     expected = _expected_from_error(error)
     actual = _json_type_name(error.instance)
@@ -329,7 +328,7 @@ def _schema_error_message(error: ValidationError, path: Path | None) -> str:
     return f"Invalid config{location}: {key_path}: expected {expected}; got {actual}. Fix: {fix}"
 
 
-def _error_key_path(error: ValidationError) -> str:
+def _error_key_path(error: Any) -> str:
     parts = [str(part) for part in error.absolute_path]
     if error.validator == "additionalProperties":
         unexpected = _unexpected_property(error)
@@ -338,7 +337,7 @@ def _error_key_path(error: ValidationError) -> str:
     return ".".join(parts) if parts else "root"
 
 
-def _unexpected_property(error: ValidationError) -> str | None:
+def _unexpected_property(error: Any) -> str | None:
     if isinstance(error.instance, dict):
         allowed = set(error.schema.get("properties", {}))
         unexpected = sorted(str(key) for key in error.instance if key not in allowed)
@@ -348,7 +347,7 @@ def _unexpected_property(error: ValidationError) -> str | None:
     return match.group(1) if match else None
 
 
-def _expected_from_error(error: ValidationError) -> str:
+def _expected_from_error(error: Any) -> str:
     if error.validator == "additionalProperties":
         return "a supported config key"
     if error.validator == "type":
@@ -365,7 +364,7 @@ def _expected_from_error(error: ValidationError) -> str:
     return error.message
 
 
-def _fix_hint(error: ValidationError) -> str:
+def _fix_hint(error: Any) -> str:
     if error.validator == "additionalProperties":
         return "Remove the unknown key or run `repolens config schema` for supported keys."
     if error.validator == "required":
@@ -376,7 +375,7 @@ def _fix_hint(error: ValidationError) -> str:
     return "Update the value to match `repolens config schema`."
 
 
-def _missing_required_property(error: ValidationError) -> str | None:
+def _missing_required_property(error: Any) -> str | None:
     match = re.search(r"'([^']+)' is a required property", error.message)
     return match.group(1) if match else None
 
