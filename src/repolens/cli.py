@@ -467,6 +467,14 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="Opt in to sandboxed native mobile license enrichment when mobile markers exist.",
     )
+    subparser.add_argument(
+        "--detect-conflicts",
+        action="store_true",
+        help=(
+            "Cross-check all API adapters and write CONFLICT when verified sources disagree "
+            "(slower; default stops at the first verified API source)."
+        ),
+    )
     subparser.set_defaults(handler=_resolve_stage)
 
 
@@ -1200,6 +1208,10 @@ def _scan_outcome_line(event: ScanProgressEvent) -> str:
 
 def _format_seconds(value: float | None) -> str:
     seconds = 0.0 if value is None else float(value)
+    if seconds >= 60.0:
+        total_seconds = int(seconds)
+        minutes, remaining_seconds = divmod(total_seconds, 60)
+        return f"{minutes}m{remaining_seconds:02d}s"
     return f"{seconds:.1f}s"
 
 
@@ -1365,16 +1377,42 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
         )
     paths = []
     total = len(repo_refs)
+    progress = _ResolveProgressPrinter(stream=sys.stderr)
     for index, repo_ref in enumerate(repo_refs, start=1):
-        print(f"[{index}/{total}] {repo_ref} — resolving...", file=sys.stderr, flush=True)
+        repo_started_at = time.monotonic()
+        progress.start_repo(index, total, repo_ref)
+
+        def package_progress(
+            package_index: int,
+            package_total: int,
+            package_name: str,
+            *,
+            repo_index: int = index,
+            repo_total: int = total,
+            current_repo_ref: str = repo_ref,
+            started_at: float = repo_started_at,
+        ) -> None:
+            progress.package(
+                repo_index,
+                repo_total,
+                current_repo_ref,
+                package_index,
+                package_total,
+                package_name,
+                time.monotonic() - started_at,
+            )
+
         path = run_resolve(
             args.work_root,
             repo_ref,
             source_root=args.source_root,
             enable_mobile_native=args.enable_mobile_native,
+            detect_conflicts=args.detect_conflicts,
+            progress=package_progress,
         )
-        print(f"[{index}/{total}] {repo_ref} ✓ wrote {path.name}", file=sys.stderr, flush=True)
+        progress.repo_done(index, total, repo_ref, path.name, time.monotonic() - repo_started_at)
         paths.append(path)
+    progress.finish(total)
     flag_command = f"repolens flag --work-root {shlex.quote(str(args.work_root))}"
     if len(paths) == 1:
         write_summary = f"wrote {paths[0].name}"
@@ -1386,6 +1424,92 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
         CommandStatus.SUCCESS,
         f"{write_summary}\nNext CLI stage: {flag_command}",
     )
+
+
+class _ResolveProgressPrinter:
+    def __init__(
+        self,
+        *,
+        stream: TextIO,
+        non_tty_package_interval: int = 25,
+        non_tty_seconds_interval: float = 30.0,
+    ) -> None:
+        self._stream = stream
+        self._tty = bool(getattr(stream, "isatty", lambda: False)())
+        self._last_line_length = 0
+        self._started_at = time.monotonic()
+        self._non_tty_package_interval = non_tty_package_interval
+        self._non_tty_seconds_interval = non_tty_seconds_interval
+        self._last_non_tty_report = self._started_at
+
+    def start_repo(self, index: int, total: int, repo_ref: str) -> None:
+        self._write_progress_line(
+            f"[{index}/{total}] {repo_ref} — resolving...",
+            newline=not self._tty,
+        )
+
+    def package(
+        self,
+        repo_index: int,
+        repo_total: int,
+        repo_ref: str,
+        package_index: int,
+        package_total: int,
+        package_name: str,
+        elapsed_seconds: float,
+    ) -> None:
+        now = time.monotonic()
+        if not self._tty and not self._should_report_non_tty(package_index, package_total, now):
+            return
+        elapsed = _format_seconds(elapsed_seconds)
+        line = (
+            f"[{repo_index}/{repo_total}] {repo_ref} — "
+            f"{package_index}/{package_total} resolved… ({elapsed})"
+        )
+        if package_name:
+            line = f"{line} {package_name}"
+        self._write_progress_line(line, newline=not self._tty)
+        self._last_non_tty_report = now
+
+    def repo_done(
+        self,
+        index: int,
+        total: int,
+        repo_ref: str,
+        path_name: str,
+        elapsed_seconds: float,
+    ) -> None:
+        elapsed = _format_seconds(elapsed_seconds)
+        self._write_progress_line(
+            f"[{index}/{total}] {repo_ref} ✓ wrote {path_name} ({elapsed})",
+            newline=True,
+        )
+
+    def finish(self, repo_count: int) -> None:
+        elapsed = _format_seconds(time.monotonic() - self._started_at)
+        self._write_progress_line(
+            f"Done: {repo_count} repos resolved in {elapsed}.",
+            newline=True,
+        )
+
+    def _should_report_non_tty(self, package_index: int, package_total: int, now: float) -> bool:
+        return (
+            package_index == package_total
+            or package_index % self._non_tty_package_interval == 0
+            or now - self._last_non_tty_report >= self._non_tty_seconds_interval
+        )
+
+    def _write_progress_line(self, line: str, *, newline: bool) -> None:
+        if self._tty:
+            padding = " " * max(0, self._last_line_length - len(line))
+            text = f"\r{line}{padding}"
+            self._last_line_length = len(line)
+            if newline:
+                text += "\n"
+                self._last_line_length = 0
+        else:
+            text = f"{line}\n"
+        print(text, end="", file=self._stream, flush=True)
 
 
 def _resolve_repo_refs(work_root: Path, repo_ref: str | None) -> tuple[str, ...]:

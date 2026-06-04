@@ -216,6 +216,66 @@ def test_api_ladder_continues_after_unverified_candidate(tmp_path: Path, repo_re
     assert good.calls == 1
 
 
+def test_api_ladder_short_circuits_after_first_verified_candidate(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    first = CandidateAdapter(ApiCandidate("MIT", "https://api.deps.dev/v3alpha/one", "MIT"))
+    second = CandidateAdapter(
+        ApiCandidate("Apache-2.0", "https://api.deps.dev/v3alpha/two", "Apache-2.0")
+    )
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[first, second],
+        fetcher=fetcher_with_body(b'{"license":"MIT"}'),
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == "MIT"
+    assert first.calls == 1
+    assert second.calls == 0
+
+
+def test_run_resolve_reports_progress_for_each_package(tmp_path: Path, repo_ref: str) -> None:
+    write_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "schema_version": "1.0",
+            "repo": repo_ref,
+            "generated_at": "2026-01-01T00:00:00Z",
+            "tool": {"name": "syft", "version": "1.0.0"},
+            "source": "https://example.invalid/progress",
+            "artifacts": [
+                {
+                    "name": "declared-one",
+                    "version": "1.0.0",
+                    "type": "python",
+                    "licenses": ["MIT"],
+                },
+                {
+                    "name": "declared-two",
+                    "version": "2.0.0",
+                    "type": "python",
+                    "licenses": ["Apache-2.0"],
+                },
+            ],
+        },
+    )
+    events: list[tuple[int, int, str]] = []
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        progress=lambda index, total, package_name: events.append((index, total, package_name)),
+    )
+
+    assert events == [(1, 2, "declared-one"), (2, 2, "declared-two")]
+
+
 def test_missing_or_null_version_becomes_unknown_without_api_fetch(
     tmp_path: Path, repo_ref: str
 ) -> None:
@@ -466,7 +526,7 @@ def test_p3b_mobile_conflict_writes_mobile_conflict(tmp_path: Path, repo_ref: st
     assert record["evidence"]["anchor"] == "conflict:mobile_disagreement"
 
 
-def test_p3b_validated_api_disagreement_writes_conflict(tmp_path: Path, repo_ref: str) -> None:
+def test_detect_conflicts_cross_checks_api_disagreement(tmp_path: Path, repo_ref: str) -> None:
     write_test_sbom(tmp_path, repo_ref, licenses=[])
     first = CandidateAdapter(ApiCandidate("MIT", "https://api.deps.dev/v3alpha/one", "MIT"))
     second = CandidateAdapter(
@@ -484,12 +544,15 @@ def test_p3b_validated_api_disagreement_writes_conflict(tmp_path: Path, repo_ref
         adapters=[first, second],
         fetcher=fetch,
         evidence_resolver=public_resolver,
+        detect_conflicts=True,
     )
 
     record = read_single_resolved(tmp_path, repo_ref)
     assert record["spdx_id"] == "CONFLICT"
     assert record["evidence"]["source_layer"] == "api"
     assert record["evidence"]["anchor"] == "conflict:api_disagreement"
+    assert first.calls == 1
+    assert second.calls == 1
 
 
 def test_unsupported_package_lowers_unresolved(tmp_path: Path, repo_ref: str) -> None:

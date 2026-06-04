@@ -51,6 +51,7 @@ DEFAULT_TAGS = {
 
 SbomReader = Callable[[str | Path, str], dict[str, object]]
 ResolvedWriter = Callable[[str | Path, str, Sequence[dict[str, object]]], Path]
+ResolveProgress = Callable[[int, int, str], None]
 
 
 def run_resolve(
@@ -62,6 +63,8 @@ def run_resolve(
     adapters: Iterable[ResolveAdapter] | None = None,
     fetcher: FetchFunction = fetch_url,
     evidence_resolver: Resolver | None = None,
+    detect_conflicts: bool = False,
+    progress: ResolveProgress | None = None,
     mobile_enricher: (
         Callable[
             [PackageFact, MobileDetection, Path, SandboxRunner | None, SecurityLimits],
@@ -82,26 +85,32 @@ def run_resolve(
     sbom = read(work_root, repo_ref)
     resolved_source_root = _validated_source_root(source_root)
     detection = detect_mobile(resolved_source_root, limits=limits)
-    records = [
-        _resolved_dict(
-            _resolve_package(
-                package,
-                work_root=work_root,
-                source_root=resolved_source_root,
-                mobile_detection=detection,
-                enable_mobile_native=enable_mobile_native,
-                adapters=adapters,
-                fetcher=fetcher,
-                evidence_resolver=evidence_resolver,
-                mobile_enricher=mobile_enricher,
-                sandbox_runner=sandbox_runner,
-                scancode_runner=scancode_runner,
-                scancode_executable_provider=scancode_executable_provider,
-                limits=limits,
+    packages = _package_facts(sbom, repo_ref)
+    records: list[dict[str, object]] = []
+    total = len(packages)
+    for index, package in enumerate(packages, start=1):
+        records.append(
+            _resolved_dict(
+                _resolve_package(
+                    package,
+                    work_root=work_root,
+                    source_root=resolved_source_root,
+                    mobile_detection=detection,
+                    enable_mobile_native=enable_mobile_native,
+                    adapters=adapters,
+                    fetcher=fetcher,
+                    evidence_resolver=evidence_resolver,
+                    detect_conflicts=detect_conflicts,
+                    mobile_enricher=mobile_enricher,
+                    sandbox_runner=sandbox_runner,
+                    scancode_runner=scancode_runner,
+                    scancode_executable_provider=scancode_executable_provider,
+                    limits=limits,
+                )
             )
         )
-        for package in _package_facts(sbom, repo_ref)
-    ]
+        if progress is not None:
+            progress(index, total, package.name)
     return write(work_root, repo_ref, records)
 
 
@@ -162,6 +171,7 @@ def _resolve_package(
     adapters: Iterable[ResolveAdapter] | None,
     fetcher: FetchFunction,
     evidence_resolver: Resolver | None,
+    detect_conflicts: bool,
     mobile_enricher: (
         Callable[
             [PackageFact, MobileDetection, Path, SandboxRunner | None, SecurityLimits],
@@ -188,6 +198,7 @@ def _resolve_package(
         adapters=adapters,
         fetcher=fetcher,
         evidence_resolver=evidence_resolver,
+        detect_conflicts=detect_conflicts,
         lower_unresolved=source_root is None,
     )
     if api_item is not None:
@@ -237,6 +248,7 @@ def _resolve_api_package(
     adapters: Iterable[ResolveAdapter] | None,
     fetcher: FetchFunction,
     evidence_resolver: Resolver | None,
+    detect_conflicts: bool,
     lower_unresolved: bool,
 ) -> ResolvedItem | None:
     if not should_attempt_api_resolution(package):
@@ -250,6 +262,14 @@ def _resolve_api_package(
             continue
         verified = _verify_api_candidate(candidate, fetcher=fetcher, resolver=evidence_resolver)
         if verified is not None:
+            if not detect_conflicts:
+                return _record(
+                    package,
+                    spdx_id=verified.spdx_id,
+                    source_layer="api",
+                    url=verified.evidence_url,
+                    anchor=verified.evidence_anchor,
+                )
             verified_candidates.append(verified)
         unresolved_anchor = "unresolved:evidence_mismatch"
 

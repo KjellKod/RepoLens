@@ -29,9 +29,11 @@ source as evidence. This shrinks the unknown set before anything slow or AI-driv
 | 3 | ScanCode on the remaining unknowns | expensive | scoped to a single package dir / `LICENSE*` files |
 | 4 | Evidence-anchored agent + human | human | the flagged shortlist only |
 
-A **string→SPDX normalization** pass runs before policy lookup. Precedence when sources
-disagree: native registry field → ClearlyDefined curated → deps.dev → GitHub Licensee →
-ScanCode detection; unresolved disagreement = `CONFLICT` → human.
+A **string→SPDX normalization** pass runs before policy lookup. Default API precedence follows
+the adapter ladder: deps.dev → native registry field → ClearlyDefined curated →
+ecosyste.ms. `resolve --detect-conflicts` opts into cross-checking every API adapter and
+lowers verified API disagreement to `CONFLICT` → human; the default stops at the first
+verified API source before falling through to mobile or ScanCode.
 
 ## Tagging & dedup
 
