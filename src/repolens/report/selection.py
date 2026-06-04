@@ -61,6 +61,19 @@ def report_header_from_config(config: Config | None) -> ReportHeader:
     )
 
 
+def report_header_if_configured(config: Config | None) -> ReportHeader | None:
+    """Return the docx header from ``report.header`` config, or ``None`` when absent.
+
+    A present-but-malformed ``report.header`` still raises via the strict
+    :func:`report_header_from_config`; only the *absent* case is relaxed to ``None``.
+    """
+
+    report = _report_config(config)
+    if "header" not in report:
+        return None
+    return report_header_from_config(config)
+
+
 def _report_config(config: Config | None) -> Mapping[str, object]:
     values = {} if config is None else config.values
     raw_report = values.get("report", {})

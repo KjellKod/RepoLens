@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,13 @@ import pytest
 from repolens.config import Config
 from repolens.data import store
 from repolens.exit_codes import InputError
-from repolens.report import COLUMNS, aggregate_rows, render_main_report
+from repolens.report import (
+    COLUMNS,
+    DEFAULT_LEGAL_TEXT,
+    DOCX_SKIPPED_NOTICE,
+    aggregate_rows,
+    render_main_report,
+)
 
 
 def test_render_main_report_writes_md_and_csv_from_resolved_records(
@@ -256,11 +263,117 @@ def test_missing_work_root_raises_input_error(tmp_path: Path) -> None:
         render_main_report(tmp_path, tmp_path / "out", _report_config())
 
 
-def test_report_requires_docx_header(tmp_path: Path, resolved_record: dict[str, Any]) -> None:
+def test_report_renders_md_csv_without_header_config(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
     store.write_resolved(tmp_path, "acme-alpha", [resolved_record])
 
+    result = render_main_report(tmp_path, tmp_path / "out", _no_header_config())
+
+    assert result.row_count == 1
+    assert result.markdown_path.exists()
+    assert result.csv_path.exists()
+    assert result.docx_path is None
+    assert result.docx_skipped is True
+    assert not (tmp_path / "out" / "report.main.docx").exists()
+
+
+def test_report_skips_docx_when_header_absent_non_interactive(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    store.write_resolved(tmp_path, "acme-alpha", [resolved_record])
+    output = io.StringIO()
+
+    result = render_main_report(
+        tmp_path,
+        tmp_path / "out",
+        _no_header_config(),
+        output_stream=output,
+    )
+
+    assert output.getvalue().strip() == DOCX_SKIPPED_NOTICE
+    assert result.docx_path is None
+    assert result.docx_skipped is True
+    assert not (tmp_path / "out" / "report.main.docx").exists()
+    assert result.csv_path.exists()
+    assert result.markdown_path.exists()
+
+
+def test_report_header_present_but_empty_still_raises(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    store.write_resolved(tmp_path, "acme-alpha", [resolved_record])
+    config = Config(values={"report": {"header": {"org_name": "", "legal_text": ""}}}, sources=())
+
     with pytest.raises(InputError, match="report.header"):
-        render_main_report(tmp_path, tmp_path / "out")
+        render_main_report(tmp_path, tmp_path / "out", config)
+
+
+def test_report_prompts_and_renders_docx_with_entered_header(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    store.write_resolved(tmp_path, "acme-alpha", [resolved_record])
+    input_stream = io.StringIO("Acme Inc\nConfidential - internal only\n")
+
+    result = render_main_report(
+        tmp_path,
+        tmp_path / "out",
+        _no_header_config(),
+        interactive=True,
+        owner=None,
+        input_stream=input_stream,
+        output_stream=io.StringIO(),
+    )
+
+    assert result.docx_path is not None
+    assert result.docx_skipped is False
+    document_xml = zipfile.ZipFile(result.docx_path).read("word/document.xml").decode("utf-8")
+    assert "Acme Inc" in document_xml
+    assert "Confidential - internal only" in document_xml
+
+
+def test_report_prompt_defaults_use_owner_and_default_legal(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    store.write_resolved(tmp_path, "acme-alpha", [resolved_record])
+    input_stream = io.StringIO("\n\n")
+
+    result = render_main_report(
+        tmp_path,
+        tmp_path / "out",
+        _no_header_config(),
+        interactive=True,
+        owner="acme",
+        input_stream=input_stream,
+        output_stream=io.StringIO(),
+    )
+
+    assert result.docx_path is not None
+    document_xml = zipfile.ZipFile(result.docx_path).read("word/document.xml").decode("utf-8")
+    assert "acme" in document_xml
+    assert DEFAULT_LEGAL_TEXT in document_xml
+
+
+def test_report_prompt_eof_without_owner_skips_docx(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    store.write_resolved(tmp_path, "acme-alpha", [resolved_record])
+    output = io.StringIO()
+
+    result = render_main_report(
+        tmp_path,
+        tmp_path / "out",
+        _no_header_config(),
+        interactive=True,
+        owner=None,
+        input_stream=io.StringIO(""),
+        output_stream=output,
+    )
+
+    assert result.docx_path is None
+    assert result.docx_skipped is True
+    assert DOCX_SKIPPED_NOTICE in output.getvalue()
+    assert not (tmp_path / "out" / "report.main.docx").exists()
 
 
 def test_same_component_can_split_between_main_and_appendix(
@@ -410,6 +523,13 @@ def _report_config(include: tuple[str, ...] | None = None) -> Config:
             "legal_text": "Example legal notice.",
         }
     }
+    if include is not None:
+        report["selection"] = {"include": list(include)}
+    return Config(values={"report": report}, sources=())
+
+
+def _no_header_config(include: tuple[str, ...] | None = None) -> Config:
+    report: dict[str, object] = {}
     if include is not None:
         report["selection"] = {"include": list(include)}
     return Config(values={"report": report}, sources=())

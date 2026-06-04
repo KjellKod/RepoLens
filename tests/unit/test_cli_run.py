@@ -92,6 +92,79 @@ def test_run_full_pipeline_writes_report(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert (out_dir / "report.main.csv").exists()
 
 
+def test_run_yes_no_header_skips_docx_via_report_stage(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    resolved_record: dict[str, object],
+) -> None:
+    from repolens.config import Config
+
+    work_root = tmp_path / "work"
+    out_dir = tmp_path / "reports"
+    config = Config(values={"report": {}}, sources=())
+    store.write_resolved(
+        work_root,
+        "sentinel-alpha",
+        [{**resolved_record, "repo": "sentinel-alpha"}],
+    )
+    captured: dict[str, object] = {}
+    real_render_main_report = cli.render_main_report
+
+    def render_main_report(*args: object, **kwargs: object) -> object:
+        captured["owner"] = kwargs.get("owner")
+        captured["interactive"] = kwargs.get("interactive")
+        return real_render_main_report(*args, **kwargs)
+
+    def flag(args: object) -> cli.CommandResult:
+        del args
+        (work_root / "inventory.json").write_text("{}\n", encoding="utf-8")
+        return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "flagged 0 open")
+
+    def shortlist(args: object) -> cli.CommandResult:
+        del args
+        store.atomic_write_json(
+            work_root / "shortlist.json",
+            {
+                "schema_version": "1.0",
+                "generated_at": "2026-01-01T00:00:00Z",
+                "open_count": 0,
+                "items": [],
+            },
+        )
+        (work_root / "shortlist.md").write_text("settled\n", encoding="utf-8")
+        return cli.CommandResult(cli.CommandStatus.SUCCESS, "settled")
+
+    stderr = io.StringIO()
+    monkeypatch.setattr(cli, "load_config", lambda _root, _path: config)
+    monkeypatch.setattr(cli, "run_discover", lambda **_kwargs: _discover_result(work_root))
+    monkeypatch.setattr(cli, "_run_scan_stage", lambda _args: None)
+    monkeypatch.setattr(cli, "_run_resolve_stage", lambda _args, _summary: {"sentinel-alpha"})
+    monkeypatch.setattr(cli, "_flag_stage", flag)
+    monkeypatch.setattr(cli, "_shortlist_stage", shortlist)
+    monkeypatch.setattr(cli, "render_main_report", render_main_report)
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(out_dir),
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+    assert captured == {"owner": "sentinel-owner", "interactive": False}
+    assert "docx skipped (no report.header)" in stderr.getvalue()
+    assert (out_dir / "report.main.md").exists()
+    assert (out_dir / "report.main.csv").exists()
+    assert not (out_dir / "report.main.docx").exists()
+
+
 def test_run_resolve_stage_resolves_every_scanned_repo(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sbom: dict[str, object]
 ) -> None:
@@ -432,6 +505,52 @@ def test_stale_flag_outputs_rerun_after_new_resolved_artifact(
 
     assert code == 0
     assert calls == ["flag"]
+
+
+def test_report_resume_currency_is_config_aware_for_skipped_docx(tmp_path: Path) -> None:
+    from repolens.config import Config
+
+    work_root = tmp_path / "work"
+    out_dir = tmp_path / "reports"
+    resolved_dir = store.repo_dir(work_root, "sentinel-alpha")
+    resolved_dir.mkdir(parents=True, exist_ok=True)
+    resolved_path = resolved_dir / "resolved.ndjson"
+    resolved_path.write_text("{}\n", encoding="utf-8")
+    (work_root / "inventory.json").write_text("{}\n", encoding="utf-8")
+    store.atomic_write_json(
+        work_root / "shortlist.json",
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "open_count": 0,
+            "items": [],
+        },
+    )
+    (work_root / "shortlist.md").write_text("settled\n", encoding="utf-8")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # A prior `--yes` run with no header skipped the docx: only md/csv exist.
+    (out_dir / "report.main.md").write_text("# report\n", encoding="utf-8")
+    (out_dir / "report.main.csv").write_text("name,spdx_id\n", encoding="utf-8")
+    for input_path in (
+        resolved_path,
+        work_root / "inventory.json",
+        work_root / "shortlist.json",
+        work_root / "shortlist.md",
+    ):
+        _set_mtime(input_path, 10)
+    for report_path in out_dir.iterdir():
+        _set_mtime(report_path, 20)
+
+    no_header = Config(values={"report": {}}, sources=())
+    with_header = Config(
+        values={"report": {"header": {"org_name": "Org", "legal_text": "Legal"}}},
+        sources=(),
+    )
+
+    # No header configured: md/csv are sufficient, so resume short-circuits.
+    assert cli._report_resume_complete(work_root, out_dir, {"sentinel-alpha"}, no_header) is True
+    # Header now configured: the missing docx must force a re-run (no stranding).
+    assert cli._report_resume_complete(work_root, out_dir, {"sentinel-alpha"}, with_header) is False
 
 
 def test_stale_report_reruns_when_inputs_are_newer(
