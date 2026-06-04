@@ -1,6 +1,9 @@
 # Roadmap — fast, parallel, sequenced
 
-> ✅ **Delivered & archived.** This was the build plan; all milestones M0–M3 shipped.
+> 📦 **Archived build plan.** M0–M3 were substantially delivered; residual acceptance
+> items (the M2 P4 flagging boxes, the R2 X1/X2/X3 grow-out, the M1 inventory
+> `missing_version` gap, and the final M3 "Round" sign-off) remain open and are tracked
+> in issue #20 — see the milestone checklists below.
 > Kept for historical reference — it is **not** current product documentation. For how
 > RepoLens works today, see the [README](../../../README.md) and [usage guide](../../usage.md);
 > for the live design, the [architecture](../rpl_architecture.md),
