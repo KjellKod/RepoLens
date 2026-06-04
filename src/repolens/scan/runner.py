@@ -78,6 +78,7 @@ MOBILE_RESTRICTED_CATALOGERS = (
     "cocoapods-cataloger",
     "swift-package-manager-cataloger",
 )
+DECLARED_UNPINNED_STATUS = "declared-unpinned"
 _REQ_NAME_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
 _EXACT_VERSION_RE = re.compile(r"(?<![<>=!~])={2,3}\s*([^,;\s]+)")
 
@@ -430,6 +431,8 @@ def _pyproject_artifacts(requirements: Sequence[object], location: str) -> list[
             "purl": f"pkg:pypi/{name}" + (f"@{version}" if version is not None else ""),
             "locations": [location],
         }
+        if version is None:
+            artifact["declared_version_status"] = DECLARED_UNPINNED_STATUS
         artifacts.append(artifact)
     return artifacts
 

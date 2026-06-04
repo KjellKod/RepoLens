@@ -21,6 +21,7 @@ class PackageFact:
     purl: str | None
     declared_license_raw: str | None
     locations: tuple[str, ...] = ()
+    declared_version_status: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
