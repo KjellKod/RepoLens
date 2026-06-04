@@ -279,8 +279,6 @@ def _read_config_file(path: Path) -> dict[str, Any]:
     except OSError as exc:
         raise InputError(f"Could not read config file: {_display_path(path)}") from exc
 
-    if loaded is None:
-        loaded = {}
     if not isinstance(loaded, dict):
         raise InputError(
             f"Invalid config {_display_path(path)}: root: expected object; "

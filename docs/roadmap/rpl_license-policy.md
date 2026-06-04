@@ -42,10 +42,11 @@ open-source arm (usually BLOCK), and route to human resolution.
 
 ## Config shape
 
-`license-policy.yaml`: `policy_version`, `default_unknown_action`, the four tier→SPDX-id
-lists, `non_spdx_patterns` (regex for NC / Commons-Clause), `compound_expression_rules`
+License policy is packaged behavior today, not local runtime config. The policy data
+model uses `policy_version`, `default_unknown_action`, the four tier to SPDX-id lists,
+`non_spdx_patterns` (regex for NC / Commons-Clause), `compound_expression_rules`
 (`OR`=min, `AND`=max, `WITH`=exception table), a `dual_license_detection` block, and
-`allowlist_overrides` — **per-dependency approvals carrying a justification and an
+`allowlist_overrides` - **per-dependency approvals carrying a justification and an
 expiry** (so overrides cannot silently rot).
 
 ## Standing caveats (surface on the flag, never auto-clear)

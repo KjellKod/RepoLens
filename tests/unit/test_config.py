@@ -131,6 +131,15 @@ class ConfigTests(unittest.TestCase):
             with self.assertRaisesRegex(InputError, "strict JSON values"):
                 load_config(root, path)
 
+    def test_json_null_root_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            path = root / ".repolens.local.json"
+            path.write_text("null", encoding="utf-8")
+
+            with self.assertRaisesRegex(InputError, "root: expected object; got null"):
+                load_config(root, path)
+
     def test_blank_strings_are_rejected_by_validate(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

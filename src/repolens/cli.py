@@ -730,6 +730,11 @@ def _config_validate_command(args: argparse.Namespace) -> CommandResult:
 
 def _config_init_command(args: argparse.Namespace) -> CommandResult:
     path = _prompt_config_path(args, input_stream=sys.stdin, output_stream=sys.stdout)
+    if path.suffix.lower() != ".json":
+        raise InputError(
+            f"Config output path must end in .json: {path}. "
+            "RepoLens local runtime config is JSON-only; use .repolens.local.json."
+        )
     if (
         path.exists()
         and not args.force

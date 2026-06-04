@@ -141,6 +141,22 @@ def test_config_init_refuses_overwrite_without_confirmation(
     assert path.read_text(encoding="utf-8") == "{}\n"
 
 
+def test_config_init_rejects_non_json_output_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / "bad.toml"
+    monkeypatch.setattr("sys.stdin", io.StringIO("\n"))
+
+    assert cli.main(["config", "init", "--out", str(path)]) == 2
+
+    err = capsys.readouterr().err
+    assert "must end in .json" in err
+    assert "JSON-only" in err
+    assert not path.exists()
+
+
 def test_run_startup_prints_active_config_summary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
