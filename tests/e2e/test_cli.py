@@ -4,6 +4,7 @@ import io
 import json
 import subprocess
 import tempfile
+import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -13,6 +14,7 @@ from unittest import mock
 
 from repolens import cli
 from repolens.data import store
+from repolens.scan.runner import ScanProgressEvent
 
 
 class _TtyStringIO(io.StringIO):
@@ -1006,6 +1008,29 @@ class ScanCliTests(unittest.TestCase):
             self.assertIn("\r[1/1] acme-alpha — cloning…", output)
             self.assertIn("\r[1/1] acme-alpha ✓ 1 deps", output)
 
+    def test_scan_progress_heartbeats_when_clone_is_slow(self) -> None:
+        stderr = io.StringIO()
+        printer = cli._ScanProgressPrinter(quiet=False, stream=stderr, heartbeat_interval=0.01)
+
+        printer(ScanProgressEvent("start", 1, 1, "acme-alpha"))
+        time.sleep(0.03)
+        printer(
+            ScanProgressEvent(
+                "outcome",
+                1,
+                1,
+                "acme-alpha",
+                status="scanned",
+                deps_count=1,
+                elapsed_seconds=0.1,
+            )
+        )
+
+        output = stderr.getvalue()
+        self.assertIn("[1/1] acme-alpha — cloning…", output)
+        self.assertIn("still cloning acme-alpha (", output)
+        self.assertIn("[1/1] acme-alpha ✓ 1 deps", output)
+
     def test_scan_missing_syft_binary_exits_two(self) -> None:
         self._use_real_syft_ensure()
         with tempfile.TemporaryDirectory() as tmp:
@@ -1071,7 +1096,8 @@ class ScanCliTests(unittest.TestCase):
             self.assertIn(pin.short_sha256, prompt)
             self.assertIn("docs/usage.md#tool-bootstrap", prompt)
             self.assertIn("Download and install RepoLens's validated Syft now? [y/N]", prompt)
-            self.assertIn("ok", prompt)
+            self.assertEqual(prompt.count("First run:"), 1)
+            self.assertIn(f"✓ Syft {pin.version} ready", prompt)
 
     def test_scan_interactive_no_exits_without_fetch(self) -> None:
         self._use_real_syft_ensure()
@@ -1127,8 +1153,141 @@ class ScanCliTests(unittest.TestCase):
 
             self.assertEqual(code, 0)
             ensure.assert_called_once()
-            self.assertIn("ok", stderr.getvalue())
+            self.assertEqual(stderr.getvalue().count("First run:"), 1)
+            self.assertIn(f"✓ Syft {pin.version} ready", stderr.getvalue())
             self.assertNotIn("Download and install", stderr.getvalue())
+
+    def test_scan_noninteractive_yes_prints_acquire_phases_in_order(self) -> None:
+        self._use_real_syft_ensure()
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            pin = cli.load_syft_pin()
+            syft_path = work_root / "tools" / "syft"
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            def fake_ensure(*, progress):
+                for phase in (
+                    "download_syft",
+                    "download_cosign",
+                    "verify_signature",
+                    "cache",
+                    "ready",
+                ):
+                    progress(phase, pin)
+                return SimpleNamespace(path=syft_path, pin=pin, acquired=True)
+
+            stderr = io.StringIO()
+            with (
+                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch("repolens.cli.ensure_syft_cached", side_effect=fake_ensure),
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(
+                    ["scan", "--work-root", str(work_root), "--repos", str(repos_path), "--yes"]
+                )
+
+            self.assertEqual(code, 0)
+            output = stderr.getvalue()
+            expected = [
+                "First run: fetching RepoLens's pinned Syft",
+                f"• downloading syft {pin.version}…",
+                "• downloading cosign…",
+                "• verifying signature…",
+                "• caching…",
+                f"✓ Syft {pin.version} ready",
+                "[1/1] acme-alpha — cloning…",
+            ]
+            positions = [output.index(text) for text in expected]
+            self.assertEqual(positions, sorted(positions))
+
+    def test_scan_quiet_suppresses_acquire_progress(self) -> None:
+        self._use_real_syft_ensure()
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            pin = cli.load_syft_pin()
+            syft_path = work_root / "tools" / "syft"
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
+            def fake_ensure(*, progress):
+                for phase in (
+                    "download_syft",
+                    "download_cosign",
+                    "verify_signature",
+                    "cache",
+                    "ready",
+                ):
+                    progress(phase, pin)
+                return SimpleNamespace(path=syft_path, pin=pin, acquired=True)
+
+            stderr = io.StringIO()
+            with (
+                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch("repolens.cli.ensure_syft_cached", side_effect=fake_ensure),
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(
+                    [
+                        "scan",
+                        "--work-root",
+                        str(work_root),
+                        "--repos",
+                        str(repos_path),
+                        "--yes",
+                        "--quiet",
+                    ]
+                )
+
+            self.assertEqual(code, 0)
+            self.assertEqual(stderr.getvalue(), "")
+
+    def test_scan_verify_timeout_surfaces_clear_error(self) -> None:
+        self._use_real_syft_ensure()
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            repos_path = self._scaffold(
+                work_root,
+                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
+            )
+            stderr = io.StringIO()
+            with (
+                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch(
+                    "repolens.cli.ensure_syft_cached",
+                    side_effect=cli.IntegrityError(
+                        "verifying Syft signature timed out — check network and retry"
+                    ),
+                ),
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(
+                    ["scan", "--work-root", str(work_root), "--repos", str(repos_path), "--yes"]
+                )
+
+            self.assertEqual(code, 1)
+            self.assertIn(
+                "verifying Syft signature timed out — check network and retry",
+                stderr.getvalue(),
+            )
 
     def test_scan_offline_empty_cache_exits_without_fetch(self) -> None:
         self._use_real_syft_ensure()
