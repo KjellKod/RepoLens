@@ -1,0 +1,32 @@
+src/repolens/policy/tiers.py
+  s_236b0b067c4002::t_18e2232493a403 88-91
+tests/unit/test_resolve_stage.py
+  s_236b0b067c4002::t_f1bdca43abd491 365-387
+src/repolens/policy/data/license-policy.default.json
+  s_236b0b067c4002::t_639fc412b08faf 2
+  s_236b0b067c4002::t_076b9091dd0439 46-47,121-125,130-131
+tests/unit/test_resolve_adapters.py
+  s_236b0b067c4002::t_dff9772c6bdbfc 80-85,149-174
+tests/policy/test_canaries_policy.py
+  s_236b0b067c4002::t_639fc412b08faf 31
+tests/policy/test_spdx_normalize.py
+  s_236b0b067c4002::t_cc68ada196b8c7 58-77
+tests/policy/test_expression.py
+  s_236b0b067c4002::t_ef71926075f3fb 96-106,144-146
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "5db1f30c44d5602f1cb55917bf204248978510de",
+  "prompts": {},
+  "sessions": {
+    "s_236b0b067c4002": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e938e-5ff1-7583-812e-259ed215f560",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
