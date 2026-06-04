@@ -930,6 +930,60 @@ def test_scancode_bootstrap_tooling_gets_build_scope_not_distributed(
     }
 
 
+def test_synthetic_fixture_dependency_gets_build_scope_not_distributed(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-fixture-lib",
+            "version": "1.0.0",
+            "type": "python",
+            "purl": "pkg:pypi/sentinel-fixture-lib@1.0.0",
+            "locations": ["/tests/fixtures/synthetic/fixture_requirements.txt"],
+            "licenses": [],
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "build",
+        "distribution": "not-distributed",
+    }
+
+
+def test_bootstrap_fixture_dependency_gets_build_scope_not_distributed(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-bootstrap-fixture",
+            "version": "1.0.0",
+            "type": "python",
+            "purl": "pkg:pypi/sentinel-bootstrap-fixture@1.0.0",
+            "locations": ["/tests/bootstrap/fixtures/requirements.nohash.bad.txt"],
+            "licenses": [],
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "build",
+        "distribution": "not-distributed",
+    }
+
+
 def test_token_shaped_api_payload_is_redacted_from_resolved_artifact(
     tmp_path: Path, repo_ref: str
 ) -> None:

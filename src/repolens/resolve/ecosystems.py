@@ -52,6 +52,8 @@ BUILD_TOOL_LOCATION_PREFIXES = frozenset(
         "pyproject.toml#project.optional-dependencies.tests",
         "requirements-dev.txt",
         "src/repolens/bootstrap/scancode.requirements.txt",
+        "tests/bootstrap/fixtures",
+        "tests/fixtures",
     }
 )
 
