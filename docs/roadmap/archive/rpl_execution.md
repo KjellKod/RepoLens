@@ -1,8 +1,10 @@
 # Execution model — how we drive the build
 
-> ✅ **Delivered & archived.** This described how the build was driven (Quest/Workflow
-> lanes, parallel rounds, gates). The build is complete; kept for historical reference,
-> not as current product documentation. For how RepoLens works today, see the
+> 📦 **Archived build plan.** This described how the build was driven (Quest/Workflow
+> lanes, parallel rounds, gates). M0–M3 were substantially delivered, with residual
+> acceptance items still tracked in issue #20 (see the [roadmap](rpl_roadmap.md)
+> checklists). Kept for historical reference, not as current product documentation.
+> For how RepoLens works today, see the
 > [README](../../../README.md) and [usage guide](../../usage.md).
 
 The [roadmap](rpl_roadmap.md) says *what* to build and in what order. This says *how
