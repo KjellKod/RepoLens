@@ -28,4 +28,4 @@ def test_canary_compound_is_deterministic() -> None:
 
 def test_canary_policy_version_is_present() -> None:
     decision = classify_license_input("BSD-3-Clause", policy=load_default_policy())
-    assert decision.policy_version == "2026.06.01-f5"
+    assert decision.policy_version == "2026.06.04-f5"

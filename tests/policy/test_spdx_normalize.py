@@ -55,3 +55,23 @@ def test_valid_but_unrecognized_spdx_leaf_is_unknown() -> None:
 
     assert decision.tier == PolicyTier.UNKNOWN
     assert decision.effective_tier == PolicyTier.BLOCK
+
+
+def test_unicode_3_is_review_with_caveat() -> None:
+    policy = load_default_policy()
+    decision = classify_license_input("Unicode-3.0", policy=policy)
+
+    assert decision.tier == PolicyTier.REVIEW
+    assert decision.effective_tier == PolicyTier.REVIEW
+    assert decision.action == Action.FLAG
+    assert "freeform_unknown" not in decision.reasons
+    assert any("legal review" in caveat for caveat in decision.caveats)
+
+
+def test_unsupported_unicode_spdx_like_string_remains_unknown() -> None:
+    policy = load_default_policy()
+    decision = classify_license_input("Unicode-9.9", policy=policy)
+
+    assert decision.tier == PolicyTier.UNKNOWN
+    assert decision.effective_tier == PolicyTier.BLOCK
+    assert decision.action == Action.FLAG_HARD
