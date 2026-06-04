@@ -466,10 +466,7 @@ def _modified_value(value: object) -> str:
 
 def _version_display(record: dict[str, Any]) -> str:
     version = str(record["version"])
-    if (
-        version == "unknown"
-        and record.get("declared_version_status") == DECLARED_UNPINNED_STATUS
-    ):
+    if version == "unknown" and record.get("declared_version_status") == DECLARED_UNPINNED_STATUS:
         return DECLARED_UNPINNED_STATUS
     return version
 
