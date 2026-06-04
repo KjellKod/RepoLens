@@ -1,0 +1,56 @@
+src/repolens/resolve/adapters.py
+  s_4a4ac3cb2b3660::t_2ded038e6decb7 10,181
+  s_4a4ac3cb2b3660::t_487cf9407c8c2e 9,71,126-127,160-161,163,170-180
+src/repolens/resolve/evidence.py
+  s_4a4ac3cb2b3660::t_d3f6b37e737b68 5,27-42,45-47
+  s_4a4ac3cb2b3660::t_2ded038e6decb7 6,9,48
+tests/unit/shortlist/test_verify.py
+  s_4a4ac3cb2b3660::t_c2ec9eaf6b471a 101-117
+src/repolens/resolve/stage.py
+  s_4a4ac3cb2b3660::t_2ded038e6decb7 359
+  s_4a4ac3cb2b3660::t_45f061dc67cffc 11,337-339,349,352,358
+  s_4a4ac3cb2b3660::t_6783723e21575b 22
+tests/canaries/security/canary_matrix.json
+  s_4a4ac3cb2b3660::t_6b719e9b7d362b 178-181,188
+  s_4a4ac3cb2b3660::t_2ded038e6decb7 3,182-187
+tests/policy/test_expression.py
+  s_4a4ac3cb2b3660::t_c2ec9eaf6b471a 4-5,9-21,96-101
+src/repolens/policy/expression.py
+  s_4a4ac3cb2b3660::t_a503e143f555b6 26,30-36,207-224,226-265,269-332,336-337
+  s_4a4ac3cb2b3660::t_e47e6f4f050c10 333-335
+  s_4a4ac3cb2b3660::t_2a034f8f16581e 27,225,266-268,338-339
+tests/unit/test_resolve_stage.py
+  s_4a4ac3cb2b3660::t_ba4882bcdd5d1e 498-501,505
+  s_4a4ac3cb2b3660::t_2ded038e6decb7 180-242,502-504,541-543
+  s_4a4ac3cb2b3660::t_a14fb4157e0227 3,14-17,121-179,494-497,506-540,544
+tests/fixtures/resolve/resolver_coverage/sbom.syft.json
+  s_4a4ac3cb2b3660::t_b8964c9eab441a 1-42
+tests/unit/test_resolve_adapters.py
+  s_4a4ac3cb2b3660::t_2a034f8f16581e 78-85,92
+  s_4a4ac3cb2b3660::t_170c4072b745bb 57-77,172-240
+  s_4a4ac3cb2b3660::t_2ded038e6decb7 86-91,93-134
+tests/unit/flag/test_flag_policy.py
+  s_4a4ac3cb2b3660::t_c2ec9eaf6b471a 43-51
+tests/canaries/security/test_resolve_canaries.py
+  s_4a4ac3cb2b3660::t_2ded038e6decb7 88-111
+  s_4a4ac3cb2b3660::t_c2ec9eaf6b471a 74-87
+src/repolens/resolve/license_expression.py
+  s_4a4ac3cb2b3660::t_2a034f8f16581e 30-32,38,42-45
+  s_4a4ac3cb2b3660::t_2ded038e6decb7 1-29,33-37,39-41,46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "86fa810c1cd920bd02639814bdd4c26f9e7fb18d",
+  "prompts": {},
+  "sessions": {
+    "s_4a4ac3cb2b3660": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9156-af70-7aa1-bd0e-5be5f36b25b2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
