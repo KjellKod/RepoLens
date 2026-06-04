@@ -1,0 +1,57 @@
+tests/unit/scan/test_runner_auth.py
+  s_feae1344d59495::t_d094f49ed137ec 254-263
+  s_feae1344d59495::t_1ed9e0fb303b72 59,73
+  s_feae1344d59495::t_2eb8046d30bb5e 22,227-253
+src/repolens/security/clone.py
+  s_feae1344d59495::t_e336804f52d1a6 188,216,271-274,276,288,295,304-314
+  s_feae1344d59495::t_3d9db27a6b1a3c 120,163,206-208
+  s_feae1344d59495::t_ccb63c92ce62da 11,14,22,50-104,172,204-205,209,211-213,215,217-224,233-270,275,277-287,289-294,296-303,315-321,334-377,465-467
+  s_feae1344d59495::t_c2098395208576 470-489
+tests/unit/security/test_clone.py
+  s_feae1344d59495::t_749ff38b1e5fc0 347,373-438
+  s_feae1344d59495::t_580340391a9f68 294-329
+  s_feae1344d59495::t_e0e9d7eb0bef28 70-95
+  s_feae1344d59495::t_42c95f56902c9c 12,23,30,39-40,163,273-277,338,342-346,348-372,439-501,503,506-510,512-523,531-571
+  s_feae1344d59495::t_d546399d19cb0e 502,504-505,511,524-530
+  s_feae1344d59495::t_6f378ef03f4bbe 572-582,584-596,598-623
+src/repolens/cli.py
+  s_feae1344d59495::t_ccb63c92ce62da 364-371,449-456,647-648,752,818,1183-1184,1194,1213-1221,1223-1227
+  s_feae1344d59495::t_b08ee9e359ec94 1222
+src/repolens/scan/runner.py
+  s_feae1344d59495::t_aab3d2757a8077 846-847
+  s_feae1344d59495::t_a573271c38c04d 21
+  s_feae1344d59495::t_ccb63c92ce62da 30,49,52,310-320,574,606,692,703,712,732-733,788,848,887
+tests/unit/security/test_sparse_clone.py
+  s_feae1344d59495::t_598e8927026333 1-10,12-145,147-167,177-185,190-191,194,223-225,232-245,248-278
+  s_feae1344d59495::t_880a6ec951999c 246-247
+  s_feae1344d59495::t_e16a40f28227ef 11,146,168-174,176,186,188,192-193,195-217,219-222,226,228-231,279-305
+tests/unit/test_cli_run.py
+  s_feae1344d59495::t_38cf6b8dcb0c07 306,314,324-378
+src/repolens/security/errors.py
+  s_feae1344d59495::t_ccb63c92ce62da 24-36
+tests/canaries/security/test_clone_canaries.py
+  s_feae1344d59495::t_a2e6aa2eab9fb8 54,57-63,91,101-103,129,139-141
+  s_feae1344d59495::t_ee5eab43a8a2da 67-69,107-109,146
+docs/usage.md
+  s_feae1344d59495::t_23980cb7b4c36e 443-444,458-460,475-484,498,520-523
+docs/roadmap/rpl_architecture.md
+  s_feae1344d59495::t_23980cb7b4c36e 108-111
+docs/roadmap/rpl_security.md
+  s_feae1344d59495::t_23980cb7b4c36e 126
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "0ef096302b6c975051fb9eff833e03500a31f6e2",
+  "prompts": {},
+  "sessions": {
+    "s_feae1344d59495": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9342-b0a6-7912-8d64-2850c7859a1d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
