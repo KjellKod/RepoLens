@@ -1,0 +1,24 @@
+tests/unit/test_report_main.py
+  s_a6e27205a381a9::t_443f1c4842efb5 166-177,179-182,554-557
+  s_a6e27205a381a9::t_2f9a83dfe977c1 178
+src/repolens/report/main.py
+  s_a6e27205a381a9::t_569a3c409a1e2c 360-362
+.skills/repolens/reference/triage-cheatsheet.md
+  s_a6e27205a381a9::t_df3383b8545aa8 20-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "d6622a8b86698e06160562360d592aea185c2764",
+  "prompts": {},
+  "sessions": {
+    "s_a6e27205a381a9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e93f2-debf-70f0-9fc5-19009c53d2e3",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
