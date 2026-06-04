@@ -38,6 +38,7 @@ from repolens.githost import (
     private_repo_needs_auth_message,
     rate_limited_message,
 )
+from repolens.scan.first_party import collect_first_party_names
 from repolens.security.clone import CloneCredential, CloneOptions, hardened_clone
 from repolens.security.errors import (
     CloneAccessDenied,
@@ -553,6 +554,7 @@ def _scan_one(
     repo_dir_fn: Callable[..., Path],
     write_sbom_fn: Callable[..., Path],
     write_status_fn: Callable[[str | Path, Any], None],
+    write_first_party_fn: Callable[..., Path],
     get_credential: CredentialProvider,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
@@ -610,6 +612,11 @@ def _scan_one(
         # status file is written via atomic_write_json, which does NOT redact, so
         # we apply the single redaction discipline here for both paths.
         write_sbom_fn(work_root, repo.repo_ref, redact_tokens_from_structure(sbom))
+        # Detect the repo's own workspace members while the checkout still exists
+        # (this is the only stage with one) and persist them to a work-root sidecar
+        # that survives the `finally` rmtree of the ephemeral workdir. Persisted
+        # under repo_dir, not workdir, so later checkout-free stages can read it.
+        write_first_party_fn(work_root, repo.repo_ref, _detect_first_party(clone_path))
         _write_status(
             repo_dir,
             write_status_fn,
@@ -642,6 +649,21 @@ def _scan_one(
     finally:
         # Guaranteed cleanup of the scan-owned ephemeral workdir (rpl_security §7).
         shutil.rmtree(workdir, ignore_errors=True)
+
+
+def _detect_first_party(clone_path: Path) -> list[str]:
+    """Best-effort first-party detection over the untrusted clone.
+
+    The detector is already internally guarded (bounded reads, tolerant parses),
+    but detection must *never* abort a scan batch — a broad guard here keeps a
+    pathological repo from turning a detection edge case into a failed scan. An
+    empty list is treated exactly like an absent sidecar by the resolve reader.
+    """
+
+    try:
+        return collect_first_party_names(clone_path)
+    except Exception:
+        return []
 
 
 def _clone_with_retry(
@@ -755,6 +777,7 @@ def scan_repos(
     repo_dir_fn: Callable[..., Path] | None = None,
     write_sbom_fn: Callable[..., Path] | None = None,
     write_status_fn: Callable[[str | Path, Any], None] | None = None,
+    write_first_party_fn: Callable[..., Path] | None = None,
     progress: ProgressFn | None = None,
     exclude_paths: Sequence[str] = DEFAULT_EXCLUDE_PATHS,
     syft_catalogers: Sequence[str] | None = None,
@@ -781,13 +804,14 @@ def scan_repos(
     sleep = sleep or time.sleep
     monotonic = monotonic or time.monotonic
 
-    if None in (is_scanned_fn, repo_dir_fn, write_sbom_fn, write_status_fn):
+    if None in (is_scanned_fn, repo_dir_fn, write_sbom_fn, write_status_fn, write_first_party_fn):
         # Lazy: importing the store pulls jsonschema (absent from the lock-only
-        # security-canaries env). Canaries inject all four seams to avoid this.
+        # security-canaries env). Canaries inject all store seams to avoid this.
         from repolens.data.store import (
             atomic_write_json,
             is_repo_scanned,
             repo_dir,
+            write_first_party,
             write_sbom,
         )
 
@@ -795,6 +819,7 @@ def scan_repos(
         repo_dir_fn = repo_dir_fn or repo_dir
         write_sbom_fn = write_sbom_fn or write_sbom
         write_status_fn = write_status_fn or atomic_write_json
+        write_first_party_fn = write_first_party_fn or write_first_party
 
     get_credential = _memoized_credential_provider(credential_provider)
 
@@ -833,6 +858,7 @@ def scan_repos(
             repo_dir_fn=repo_dir_fn,
             write_sbom_fn=write_sbom_fn,
             write_status_fn=write_status_fn,
+            write_first_party_fn=write_first_party_fn,
             get_credential=get_credential,
             sleep=sleep,
             monotonic=monotonic,

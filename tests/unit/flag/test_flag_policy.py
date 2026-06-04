@@ -91,6 +91,40 @@ def test_build_not_distributed_stays_in_inventory_without_open_shortlist_item(
     assert shortlist["items"] == []
 
 
+def test_first_party_component_not_in_open_shortlist(tmp_path, make_record) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            # A first-party member with an UNKNOWN license must NOT produce a shortlist
+            # item; an identical third-party UNKNOWN record still does.
+            make_record(
+                name="diffly-app",
+                spdx_id=None,
+                declared_license_raw=None,
+                origin="first-party",
+            ),
+            make_record(
+                name="third-party-lib",
+                spdx_id=None,
+                declared_license_raw=None,
+                origin="third-party-oss",
+            ),
+        ],
+    )
+
+    run_flag(tmp_path)
+
+    inventory = store.read_inventory(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    names = {component["name"] for component in inventory["components"]}
+    # Both components stay in the inventory; only the third-party one is flagged.
+    assert names == {"diffly-app", "third-party-lib"}
+    item_refs = [item["component_ref"] for item in shortlist["items"]]
+    assert item_refs == ["third-party-lib|UNKNOWN"]
+    assert shortlist["open_count"] == 1
+
+
 def test_mixed_runtime_and_build_group_remains_visible_for_review(make_record, collected) -> None:
     outcome = _outcome(
         collected(

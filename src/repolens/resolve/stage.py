@@ -58,6 +58,7 @@ CI_ONLY_TAGS = {
 
 SbomReader = Callable[[str | Path, str], dict[str, object]]
 ResolvedWriter = Callable[[str | Path, str, Sequence[dict[str, object]]], Path]
+FirstPartyReader = Callable[[str | Path, str], frozenset[str]]
 ResolveProgress = Callable[[int, int, str], None]
 
 
@@ -84,38 +85,47 @@ def run_resolve(
     scancode_executable_provider: ScancodeExecutableProvider | None = None,
     sbom_reader: SbomReader | None = None,
     resolved_writer: ResolvedWriter | None = None,
+    first_party_reader: FirstPartyReader | None = None,
     limits: SecurityLimits = DEFAULT_LIMITS,
 ) -> Path:
     """Resolve a Syft SBOM into frozen-schema ``resolved.ndjson`` records."""
 
     read, write = _storage_functions(sbom_reader, resolved_writer)
+    read_first_party = _first_party_reader(first_party_reader)
     sbom = read(work_root, repo_ref)
+    # Read the repo's own workspace-member names once (empty for old work-roots
+    # with no first_party.json — the fresh-scan-only caveat). Stamping in this
+    # loop, after _resolved_dict builds the record, covers every resolution path
+    # (declared, api, scancode, mobile, unresolved) with a single touch-point.
+    first_party_names = read_first_party(work_root, repo_ref)
     resolved_source_root = _validated_source_root(source_root)
     detection = detect_mobile(resolved_source_root, limits=limits)
     packages = _package_facts(sbom, repo_ref)
     records: list[dict[str, object]] = []
     total = len(packages)
     for index, package in enumerate(packages, start=1):
-        records.append(
-            _resolved_dict(
-                _resolve_package(
-                    package,
-                    work_root=work_root,
-                    source_root=resolved_source_root,
-                    mobile_detection=detection,
-                    enable_mobile_native=enable_mobile_native,
-                    adapters=adapters,
-                    fetcher=fetcher,
-                    evidence_resolver=evidence_resolver,
-                    detect_conflicts=detect_conflicts,
-                    mobile_enricher=mobile_enricher,
-                    sandbox_runner=sandbox_runner,
-                    scancode_runner=scancode_runner,
-                    scancode_executable_provider=scancode_executable_provider,
-                    limits=limits,
-                )
+        record = _resolved_dict(
+            _resolve_package(
+                package,
+                work_root=work_root,
+                source_root=resolved_source_root,
+                mobile_detection=detection,
+                enable_mobile_native=enable_mobile_native,
+                adapters=adapters,
+                fetcher=fetcher,
+                evidence_resolver=evidence_resolver,
+                detect_conflicts=detect_conflicts,
+                mobile_enricher=mobile_enricher,
+                sandbox_runner=sandbox_runner,
+                scancode_runner=scancode_runner,
+                scancode_executable_provider=scancode_executable_provider,
+                limits=limits,
             )
         )
+        tags = record["tags"]
+        if package.name in first_party_names and isinstance(tags, dict):
+            tags["origin"] = "first-party"
+        records.append(record)
         if progress is not None:
             progress(index, total, package.name)
     return write(work_root, repo_ref, records)
@@ -131,6 +141,15 @@ def _storage_functions(
     from repolens.data.store import read_sbom, write_resolved
 
     return sbom_reader or read_sbom, resolved_writer or write_resolved
+
+
+def _first_party_reader(reader: FirstPartyReader | None) -> FirstPartyReader:
+    if reader is not None:
+        return reader
+
+    from repolens.data.store import read_first_party
+
+    return read_first_party
 
 
 def _resolved_dict(item: ResolvedItem) -> dict[str, object]:

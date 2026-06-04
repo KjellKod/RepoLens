@@ -100,6 +100,13 @@ def _collect_resolved_records(work_root: Path) -> list[CollectedRecord]:
 
 
 def _is_flagged(outcome: GroupOutcome) -> bool:
+    # A disclosure should never ask a maintainer to review their own code: the
+    # repo's own workspace members are unpublished, so they can never resolve a
+    # registry license and would otherwise sit in the open shortlist as UNKNOWN
+    # noise. Drop them exactly as build/not-distributed CI items are dropped;
+    # report routing still files them under the first-party appendix.
+    if outcome.component.origin == "first-party":
+        return False
     if outcome.component.scope == "build" and outcome.component.distribution == "not-distributed":
         return False
     return outcome.decision.tier in _FLAG_TIERS

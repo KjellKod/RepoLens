@@ -56,6 +56,7 @@ def test_x2_scan_timeout_aborts(tmp_path: Path) -> None:
             repo_dir_fn=lambda root, ref: Path(root) / ref,
             write_sbom_fn=lambda root, ref, value: sboms.append(value) or Path("sbom"),
             write_status_fn=lambda path, value: statuses.append(value),
+            write_first_party_fn=lambda *_: Path("first_party"),
         )
 
     report = exc_info.value.report

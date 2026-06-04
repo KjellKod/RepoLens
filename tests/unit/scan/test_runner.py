@@ -56,6 +56,20 @@ def _clone_with_pyproject(text: str):
     return clone
 
 
+def _clone_with_cargo_workspace():
+    def clone(options):
+        destination = _clone_into(options)
+        (destination / "Cargo.toml").write_text(
+            '[workspace]\nmembers = ["crates/app"]\n', encoding="utf-8"
+        )
+        member = destination / "crates" / "app"
+        member.mkdir(parents=True, exist_ok=True)
+        (member / "Cargo.toml").write_text('[package]\nname = "diffly-app"\n', encoding="utf-8")
+        return destination
+
+    return clone
+
+
 def _syft_ok(document: dict):
     def runner(argv, *, timeout):
         return subprocess.CompletedProcess(list(argv), 0, stdout=json.dumps(document), stderr="")
@@ -87,6 +101,39 @@ def test_maps_syft_output_to_valid_sbom(tmp_path: Path) -> None:
     assert artifact["type"] == "python"
     assert artifact["licenses"] == ["MIT"]
     assert artifact["locations"] == ["requirements.txt"]
+
+
+def test_scan_writes_first_party_names_from_workspace_manifests(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_with_cargo_workspace(),
+        command_runner=_syft_ok(_syft_document()),
+        clock=lambda: "2026-01-01T00:00:00Z",
+    )
+
+    # The fresh scan persisted the detected workspace member set to the sidecar
+    # that survives the ephemeral-workdir cleanup.
+    assert store.read_first_party(work_root, "acme-alpha") == frozenset({"diffly-app"})
+
+
+def test_scan_writes_empty_first_party_set_when_no_workspaces(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(_syft_document()),
+        clock=lambda: "2026-01-01T00:00:00Z",
+    )
+
+    # A fresh scan always writes the sidecar (empty here), so "a scan ran" is observable.
+    assert store.read_first_party(work_root, "acme-alpha") == frozenset()
 
 
 def test_pyproject_project_dependencies_are_added_to_sbom(tmp_path: Path) -> None:
