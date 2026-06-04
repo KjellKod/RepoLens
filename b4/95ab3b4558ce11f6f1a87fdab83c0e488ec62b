@@ -1,0 +1,27 @@
+docs/roadmap/rpl_license-policy.md
+  s_853eb455586efb::t_20d2ede5e86321 45-47,49
+src/repolens/cli.py
+  s_853eb455586efb::t_20d2ede5e86321 733-737
+docs/roadmap/rpl_requirements.md
+  s_853eb455586efb::t_20d2ede5e86321 33-35
+tests/unit/test_config.py
+  s_853eb455586efb::t_20d2ede5e86321 134-142
+tests/unit/test_cli_config.py
+  s_853eb455586efb::t_20d2ede5e86321 144-159
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "b495ab3b4558ce11f6f1a87fdab83c0e488ec62b",
+  "prompts": {},
+  "sessions": {
+    "s_853eb455586efb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e94a7-867e-7881-aa54-d0c218023533",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
