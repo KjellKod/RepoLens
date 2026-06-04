@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from repolens.data import store
+from repolens.data.errors import SchemaValidationError
 from repolens.security.http_client import FetchResult, HttpFetchOptions
 from repolens.shortlist.agent import AgentRequest, AgentResponse
 from repolens.shortlist.stage import run_shortlist
@@ -155,3 +158,18 @@ def test_abstention_records_reason_without_verification(tmp_path: Path) -> None:
     assert item["status"] == "open"
     assert item["note"] == "agent:abstained"
     assert item["ai_suggestion"]["reason"] == "ambiguous"
+
+
+def test_proposal_artifact_schema_rejects_unknown_fields(tmp_path: Path) -> None:
+    _write_shortlist(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(proposals_path, [_proposal(unexpected="drift")])
+
+    with pytest.raises(SchemaValidationError, match="unexpected"):
+        run_shortlist(
+            tmp_path,
+            agent_client=_ExplodingAgent(),
+            proposals_path=proposals_path,
+            fetcher=_fetcher(b'{"license":"MIT"}'),
+            evidence_resolver=_public_resolver,
+        )

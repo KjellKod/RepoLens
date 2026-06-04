@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repolens.example/schemas/shortlist-proposals-1.0.json",
+  "title": "RepoLens external shortlist proposals",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "component_ref": {"type": "string"},
+      "spdx_id": {"type": "string"},
+      "evidence_url": {"type": "string"},
+      "evidence_anchor": {"type": "string"},
+      "disposition": {"type": "string"},
+      "confidence": {"type": ["string", "number"]},
+      "rationale": {"type": "string"},
+      "sanity_check": {"type": "string"},
+      "abstain": {"type": "boolean"},
+      "reason": {"type": "string"}
+    },
+    "additionalProperties": false
+  }
+}

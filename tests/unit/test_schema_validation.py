@@ -15,6 +15,7 @@ from repolens.data.validation import validate_artifact
         ("resolved", "resolved_record"),
         ("inventory", "inventory"),
         ("shortlist", "shortlist"),
+        ("shortlist_proposals", "shortlist_proposals"),
     ],
 )
 def test_valid_fixture_passes(
@@ -90,3 +91,12 @@ def test_shortlist_open_count_must_match_open_items(shortlist: dict[str, object]
 
     with pytest.raises(SchemaValidationError, match="open_count"):
         validate_artifact(shortlist, "shortlist")
+
+
+def test_shortlist_proposals_reject_unknown_fields(
+    shortlist_proposals: list[dict[str, object]],
+) -> None:
+    shortlist_proposals[0]["unexpected"] = "drift"
+
+    with pytest.raises(SchemaValidationError, match="unexpected"):
+        validate_artifact(shortlist_proposals, "shortlist_proposals")

@@ -679,7 +679,9 @@ the items a human approved or rejected:
    with `--proposals work/shortlist.proposals.json`. A proposal has
    `component_ref`, `spdx_id`, `evidence_url`, `evidence_anchor`, `disposition`,
    `confidence`, `rationale`, and `sanity_check`; an abstention uses
-   `component_ref`, `abstain: true`, and `reason`.
+   `component_ref`, `abstain: true`, and `reason`. RepoLens validates the artifact shape
+   with `src/repolens/data/schemas/shortlist_proposals.schema.json` before parsing
+   proposals fail-closed.
 4. **Verify, don't trust.** Every cited URL is re-fetched through the SSRF-guarded,
    allowlisted HTTP client and checked for an exact SPDX anchor. Bad, malicious,
    off-allowlist, mismatched, low-confidence, or abstained proposals leave the item open.

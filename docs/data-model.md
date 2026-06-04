@@ -10,6 +10,7 @@ work/<repo>/sbom.syft.json
 work/<repo>/resolved.ndjson
 inventory.json
 shortlist.json
+shortlist.proposals.json  # optional external input, validated before ingestion
 ```
 
 `<repo>` is an opaque runtime input. Tests and fixtures use invented `acme-*` names
@@ -26,6 +27,8 @@ Packaged schemas live in `src/repolens/data/schemas/`:
 - `inventory.schema.json` validates the deduped full dataset.
 - `shortlist.schema.json` validates the structured shortlist behind downstream human
   approval and `shortlist.md` rendering.
+- `shortlist_proposals.schema.json` validates the external proposal artifact container,
+  known fields, and field types before RepoLens parses each proposal fail-closed.
 
 `shortlist.json` is still canonical. The grouped Markdown view is derived from item data
 plus `inventory.json`; group checkboxes write back to the same item records. Optional
