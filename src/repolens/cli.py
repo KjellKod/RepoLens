@@ -29,7 +29,7 @@ from repolens.bootstrap.errors import IntegrityError, UsageError
 from repolens.report import ReportGateOpen, render_main_report
 from repolens.security.redaction import redact_tokens
 
-from .config import load_config
+from .config import Config, load_config
 from .data.errors import ArtifactError
 from .discovery.gh import DEFAULT_GH_LIMIT, MAX_GH_LIMIT, parse_repos_option
 from .discovery.pipeline import run_discover
@@ -56,7 +56,9 @@ CommandHandler = Callable[[argparse.Namespace], CommandResult]
 
 
 STAGE_COMMANDS = ("discover", "scan", "resolve", "flag", "shortlist", "report")
-REPORT_MAIN_FILENAMES = ("report.main.md", "report.main.csv", "report.main.docx")
+REPORT_MAIN_DATA_FILENAMES = ("report.main.md", "report.main.csv")
+REPORT_MAIN_DOCX_FILENAME = "report.main.docx"
+REPORT_MAIN_FILENAMES = (*REPORT_MAIN_DATA_FILENAMES, REPORT_MAIN_DOCX_FILENAME)
 
 
 @dataclass
@@ -638,7 +640,7 @@ def _run_command(args: argparse.Namespace) -> CommandResult:
 
     persisted_failures = _persisted_scan_failures(work_root)
     resolved_refs = _resolved_repo_refs(work_root)
-    if _report_resume_complete(work_root, out_dir, resolved_refs):
+    if _report_resume_complete(work_root, out_dir, resolved_refs, args.runtime_config):
         summary.report_rows = _report_row_count(out_dir)
         summary.repo_refs.update(resolved_refs)
         summary.failures.extend(persisted_failures)
@@ -797,6 +799,7 @@ def _stage_args(
         runtime_config=source.runtime_config,
         quiet=getattr(source, "quiet", False),
         yes=getattr(source, "yes", False),
+        owner=getattr(source, "owner", None),
         timeout=getattr(source, "timeout", None),
         repos=None,
         offline=False,
@@ -810,8 +813,10 @@ def _stage_args(
 
 
 def _run_interactive(args: argparse.Namespace) -> bool:
+    # ``getattr(..., "yes", False)`` keeps this safe for the standalone ``report``
+    # parser, which has no ``--yes`` flag (no new flags per scope).
     return (
-        not args.yes
+        not getattr(args, "yes", False)
         and bool(getattr(sys.stdin, "isatty", lambda: False)())
         and bool(getattr(sys.stderr, "isatty", lambda: False)())
     )
@@ -1041,14 +1046,29 @@ def _repo_artifact_dir(work_root: Path, repo_ref: str) -> Path:
 
 
 def _report_resume_complete(
-    work_root: Path, out_dir: Path, resolved_refs: set[str] | None = None
+    work_root: Path,
+    out_dir: Path,
+    resolved_refs: set[str] | None = None,
+    config: Config | None = None,
 ) -> bool:
     refs = resolved_refs if resolved_refs is not None else _resolved_repo_refs(work_root)
     return (
         bool(refs)
         and _shortlist_complete(work_root)
-        and _report_outputs_current(out_dir, _report_input_paths(work_root, refs))
+        and _report_outputs_current(
+            out_dir,
+            _report_input_paths(work_root, refs),
+            require_docx=_report_header_configured(config),
+        )
     )
+
+
+def _report_header_configured(config: Config | None) -> bool:
+    """Whether ``report.header`` config is present (docx is then expected)."""
+
+    values = getattr(config, "values", {})
+    report = values.get("report") if isinstance(values, dict) else None
+    return isinstance(report, dict) and report.get("header") is not None
 
 
 def _shortlist_complete(work_root: Path) -> bool:
@@ -1067,8 +1087,14 @@ def _flag_outputs_current(work_root: Path, resolved_refs: set[str]) -> bool:
     )
 
 
-def _report_outputs_current(out_dir: Path, input_paths: Sequence[Path]) -> bool:
-    output_paths = tuple(Path(out_dir) / filename for filename in REPORT_MAIN_FILENAMES)
+def _report_outputs_current(
+    out_dir: Path, input_paths: Sequence[Path], *, require_docx: bool = True
+) -> bool:
+    # When no header is configured the docx is legitimately skipped, so resume
+    # currency keys off the always-produced md/csv only. Once a header is added,
+    # the docx becomes required again so a previously skipped run re-renders it.
+    filenames = REPORT_MAIN_FILENAMES if require_docx else REPORT_MAIN_DATA_FILENAMES
+    output_paths = tuple(Path(out_dir) / filename for filename in filenames)
     return _artifacts_current(output_paths, input_paths)
 
 
@@ -1742,10 +1768,19 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
 
 def _report(args: argparse.Namespace) -> CommandResult:
     try:
-        result = render_main_report(args.work_root, args.out_dir, args.runtime_config)
+        result = render_main_report(
+            args.work_root,
+            args.out_dir,
+            args.runtime_config,
+            interactive=_run_interactive(args),
+            owner=getattr(args, "owner", None),
+        )
     except ReportGateOpen as exc:
         return CommandResult(CommandStatus.FINDINGS_OPEN, str(exc))
-    written = [result.markdown_path, result.csv_path, result.docx_path, *result.appendix_paths]
+    written = [result.markdown_path, result.csv_path]
+    if result.docx_path is not None:
+        written.append(result.docx_path)
+    written.extend(result.appendix_paths)
     return CommandResult(
         CommandStatus.SUCCESS,
         "wrote " + ", ".join(str(path) for path in written),

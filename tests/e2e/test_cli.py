@@ -479,9 +479,10 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertFalse((out_dir / "report.main.csv").exists())
 
-    def test_report_cli_exit_two_when_docx_header_missing(self) -> None:
+    def test_report_cli_skips_docx_when_header_missing_non_interactive(self) -> None:
         with TemporaryDirectory() as tmp:
             work_root = Path(tmp)
+            out_dir = work_root / "out"
             store.write_resolved(
                 work_root,
                 "acme-alpha",
@@ -502,11 +503,17 @@ class CliTests(unittest.TestCase):
                 ],
             )
 
-            code = cli.main(
-                ["report", "--work-root", str(work_root), "--out-dir", str(work_root / "out")]
-            )
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
+                code = cli.main(
+                    ["report", "--work-root", str(work_root), "--out-dir", str(out_dir)]
+                )
 
-            self.assertEqual(code, 2)
+            self.assertEqual(code, 0)
+            self.assertIn("docx skipped (no report.header)", stderr.getvalue())
+            self.assertTrue((out_dir / "report.main.md").exists())
+            self.assertTrue((out_dir / "report.main.csv").exists())
+            self.assertFalse((out_dir / "report.main.docx").exists())
 
 
 def _fake_clone(options):
