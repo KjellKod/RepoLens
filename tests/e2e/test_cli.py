@@ -4,7 +4,6 @@ import io
 import json
 import subprocess
 import tempfile
-import time
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
@@ -1010,10 +1009,35 @@ class ScanCliTests(unittest.TestCase):
 
     def test_scan_progress_heartbeats_when_clone_is_slow(self) -> None:
         stderr = io.StringIO()
-        printer = cli._ScanProgressPrinter(quiet=False, stream=stderr, heartbeat_interval=0.01)
+        heartbeats = []
+
+        class FakeHeartbeat:
+            def __init__(self, interval_seconds, write):
+                self.interval_seconds = interval_seconds
+                self.write = write
+                self.started = False
+                self.stopped = False
+
+            def start(self):
+                self.started = True
+
+            def stop(self):
+                self.stopped = True
+
+        def make_heartbeat(interval_seconds, write):
+            heartbeat = FakeHeartbeat(interval_seconds, write)
+            heartbeats.append(heartbeat)
+            return heartbeat
+
+        printer = cli._ScanProgressPrinter(
+            quiet=False,
+            stream=stderr,
+            heartbeat_interval=30.0,
+            heartbeat_factory=make_heartbeat,
+        )
 
         printer(ScanProgressEvent("start", 1, 1, "acme-alpha"))
-        time.sleep(0.03)
+        heartbeats[0].write(31.0)
         printer(
             ScanProgressEvent(
                 "outcome",
@@ -1027,8 +1051,10 @@ class ScanCliTests(unittest.TestCase):
         )
 
         output = stderr.getvalue()
+        self.assertTrue(heartbeats[0].started)
+        self.assertTrue(heartbeats[0].stopped)
         self.assertIn("[1/1] acme-alpha — cloning…", output)
-        self.assertIn("still cloning acme-alpha (", output)
+        self.assertIn("still cloning acme-alpha (31s)…", output)
         self.assertIn("[1/1] acme-alpha ✓ 1 deps", output)
 
     def test_scan_missing_syft_binary_exits_two(self) -> None:

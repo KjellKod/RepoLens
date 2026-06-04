@@ -13,7 +13,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING, Protocol, TextIO
 from urllib.parse import unquote
 
 from repolens.bootstrap.cache import (
@@ -526,14 +526,23 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
 
 
 class _ScanProgressPrinter:
-    def __init__(self, *, quiet: bool, stream: TextIO, heartbeat_interval: float = 30.0) -> None:
+    def __init__(
+        self,
+        *,
+        quiet: bool,
+        stream: TextIO,
+        heartbeat_interval: float = 30.0,
+        heartbeat_factory: Callable[[float, Callable[[float], None]], _HeartbeatHandle]
+        | None = None,
+    ) -> None:
         self._quiet = quiet
         self._stream = stream
         self._tty = bool(getattr(stream, "isatty", lambda: False)())
         self._started_at = time.monotonic()
         self._last_line_length = 0
         self._heartbeat_interval = heartbeat_interval
-        self._clone_heartbeat: _Heartbeat | None = None
+        self._heartbeat_factory = heartbeat_factory or _make_heartbeat
+        self._clone_heartbeat: _HeartbeatHandle | None = None
 
     def __call__(self, event: ScanProgressEvent) -> None:
         if self._quiet:
@@ -541,9 +550,9 @@ class _ScanProgressPrinter:
         if event.kind == "start":
             self._stop_clone_heartbeat()
             self._write_progress_line(_scan_start_line(event), newline=not self._tty)
-            self._clone_heartbeat = _Heartbeat(
-                interval_seconds=self._heartbeat_interval,
-                write=lambda elapsed: self._write_progress_line(
+            self._clone_heartbeat = self._heartbeat_factory(
+                self._heartbeat_interval,
+                lambda elapsed: self._write_progress_line(
                     f"still cloning {event.repo_ref} ({int(elapsed)}s)…",
                     newline=True,
                 ),
@@ -605,6 +614,19 @@ class _Heartbeat:
     def _run(self) -> None:
         while not self._stop.wait(self._interval_seconds):
             self._write(time.monotonic() - self._started_at)
+
+
+class _HeartbeatHandle(Protocol):
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+
+def _make_heartbeat(
+    interval_seconds: float,
+    write: Callable[[float], None],
+) -> _HeartbeatHandle:
+    return _Heartbeat(interval_seconds=interval_seconds, write=write)
 
 
 def _scan_start_line(event: ScanProgressEvent) -> str:
