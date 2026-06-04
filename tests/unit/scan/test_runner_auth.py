@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from repolens.exit_codes import InputError
 from repolens.githost import (
     GH_NOT_AUTHENTICATED_MESSAGE,
     GH_NOT_INSTALLED_MESSAGE,
@@ -18,6 +19,7 @@ from repolens.security.clone import CloneCredential, CloneOptions
 from repolens.security.errors import (
     CloneAccessDenied,
     CloneRateLimited,
+    CloneTimeout,
     CloneTransient,
 )
 
@@ -54,6 +56,7 @@ def _scan(
 ) -> ScanReport:
     sboms: list = []
     statuses: list = []
+    write_status_fn = kwargs.pop("write_status_fn", lambda path, value: statuses.append(value))
     try:
         return scan_repos(
             tmp_path,
@@ -67,7 +70,7 @@ def _scan(
             is_scanned_fn=lambda *_: False,
             repo_dir_fn=lambda root, ref: Path(root) / ref,
             write_sbom_fn=lambda root, ref, value: sboms.append(value) or Path("sbom"),
-            write_status_fn=lambda path, value: statuses.append(value),
+            write_status_fn=write_status_fn,
             **kwargs,
         )
     except ScanBatchError as exc:
@@ -219,6 +222,45 @@ def test_clone_timeout_classified_transient_and_bounded(tmp_path: Path) -> None:
     # therefore bounds the batch at roughly 2 * clone_timeout.
     assert attempts["n"] == 2
     assert report.failed[0].error == "rate-limited after 2 retries - try again later"
+
+
+def test_clone_timeout_records_timeout_message_not_rate_limited(tmp_path: Path) -> None:
+    attempts = {"n": 0}
+    statuses: list[dict] = []
+
+    def clone(options: CloneOptions) -> Path:
+        attempts["n"] += 1
+        raise CloneTimeout(
+            configured_seconds=options.limits.clone_timeout_seconds,
+            elapsed_seconds=12.25,
+        )
+
+    report = _scan(
+        [RepoSpec("sentinel-pub", "https://github.com/acme-owner/sentinel-pub.git")],
+        tmp_path=tmp_path,
+        clone=clone,
+        clone_timeout_seconds=7.0,
+        write_status_fn=lambda path, value: statuses.append(value),
+    )
+
+    assert attempts["n"] == 1
+    expected = (
+        "clone timed out after 7s "
+        "(elapsed 12.2s; repo may be too large or network too slow; "
+        "try a higher --clone-timeout)"
+    )
+    assert report.failed[0].error == expected
+    assert statuses[0]["error"] == expected
+
+
+def test_scan_repos_rejects_invalid_clone_timeout_directly(tmp_path: Path) -> None:
+    with pytest.raises(InputError, match="clone_timeout_seconds must be a positive"):
+        _scan(
+            [RepoSpec("sentinel-pub", "https://github.com/acme-owner/sentinel-pub.git")],
+            tmp_path=tmp_path,
+            clone=lambda options: Path(options.destination),
+            clone_timeout_seconds=0,
+        )
 
 
 def test_access_denied_not_retried_distinct_message(tmp_path: Path) -> None:

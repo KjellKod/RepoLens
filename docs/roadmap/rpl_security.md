@@ -123,6 +123,6 @@ guaranteed temp-dir cleanup in a `finally` block.
 | Output: SSRF | metadata/private/`file:` URLs → blocked; allowlisted pass |
 | Output: token | `ghp_…` through pipeline → absent from all artifacts and agent env |
 | Output: markdown | `[x](javascript:…)`, `![](…/pixel)` → href neutralized |
-| DoS | mock slow scan (600 s) → per-repo timeout aborts ≤ 310 s |
+| DoS | mock slow scan / clone timeout → per-repo timeout aborts with scan-vs-clone taxonomy |
 | Auth: credential scrubbed | credentialed private clone → `Authorization: Basic …` header **present** in clone env (positive control), **absent** from Syft env (incl. `GH_TOKEN`/`GITHUB_TOKEN`), SBOM, `scan.status.json` |
 | Auth: token redaction | token-shaped string through success + failed credentialed clone → absent from status/SBOM/stderr; redaction marker present |
