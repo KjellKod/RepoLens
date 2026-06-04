@@ -1,0 +1,25 @@
+src/repolens/resolve/license_expression.py
+  s_4a4ac3cb2b3660::t_68ec9dc0a904f0 23-31,43
+src/repolens/resolve/stage.py
+  s_4a4ac3cb2b3660::t_9332e96ea3c99d 22,281-285
+tests/unit/test_resolve_stage.py
+  s_4a4ac3cb2b3660::t_b30ea8183726ff 147-187
+tests/unit/test_resolve_adapters.py
+  s_4a4ac3cb2b3660::t_f8ad548e627887 5,7,80-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "c88a087c1dd1ecef56b88a15f33216c05ca4bd9b",
+  "prompts": {},
+  "sessions": {
+    "s_4a4ac3cb2b3660": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9156-af70-7aa1-bd0e-5be5f36b25b2",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
