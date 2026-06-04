@@ -1,0 +1,38 @@
+tests/unit/test_schema_validation.py
+  s_27608d44ec7b20::t_10d14166e3d199 69-87
+src/repolens/data/schemas/resolved.schema.json
+  s_27608d44ec7b20::t_5aa510a1e4372f 14
+src/repolens/report/main.py
+  s_27608d44ec7b20::t_da20039648cb40 56,348
+  s_27608d44ec7b20::t_7273e67cce2595 467-476
+src/repolens/data/models.py
+  s_27608d44ec7b20::t_5aa510a1e4372f 14,29
+tests/unit/scan/test_runner.py
+  s_27608d44ec7b20::t_10d14166e3d199 164,208
+src/repolens/resolve/stage.py
+  s_27608d44ec7b20::t_67a85ac610f8d8 53,129-133,191-193,492-495
+src/repolens/resolve/models.py
+  s_27608d44ec7b20::t_5aa510a1e4372f 24
+src/repolens/scan/runner.py
+  s_27608d44ec7b20::t_5aa510a1e4372f 72,420-421
+tests/unit/test_resolve_stage.py
+  s_27608d44ec7b20::t_10d14166e3d199 576-625
+tests/unit/test_report_main.py
+  s_27608d44ec7b20::t_10d14166e3d199 182-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e664fe16981f726d2d9f4b490d1548359a0da899",
+  "prompts": {},
+  "sessions": {
+    "s_27608d44ec7b20": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e938b-eb1a-7d60-95f8-f09dfde9256e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
