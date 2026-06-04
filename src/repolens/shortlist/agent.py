@@ -74,9 +74,9 @@ class AgentClient(Protocol):
     """The injectable resolution-agent boundary.
 
     Implementations receive only an :class:`AgentRequest` and must return an
-    :class:`AgentResponse`. The production implementation wraps a real model behind this
-    protocol (exercised only by the scheduled live-smoke lane); all offline tests inject a
-    deterministic fake.
+    :class:`AgentResponse`. RepoLens does not ship a model client behind this protocol;
+    the supported AI-assisted workflow emits request-shaped contexts as artifacts,
+    receives external proposal artifacts, and verifies those citations locally.
     """
 
     def resolve(self, request: AgentRequest) -> AgentResponse:
@@ -86,11 +86,12 @@ class AgentClient(Protocol):
 def parse_agent_payload(payload: Any) -> AgentResponse:
     """Validate a raw agent JSON payload into a typed :class:`AgentResponse`.
 
-    A real model returns text/JSON; this is the single schema gate on the way *in* from the
-    agent boundary. Anything that is not an exact ``{spdx_id, evidence_url, evidence_anchor}``
-    object with non-empty string fields is treated as an abstention rather than trusted
-    (fail-closed; the agent "abstains rather than guesses"). An explicit ``{"abstain": ...}``
-    object also maps to :class:`Abstain`.
+    Older injected test clients and external tooling may produce raw JSON-like payloads;
+    this is the schema gate for that shape. Anything that is not an exact
+    ``{spdx_id, evidence_url, evidence_anchor}`` object with non-empty string fields is
+    treated as an abstention rather than trusted (fail-closed; the proposal abstains
+    rather than guesses). An explicit ``{"abstain": ...}`` object also maps to
+    :class:`Abstain`.
     """
 
     if not isinstance(payload, dict):

@@ -107,7 +107,78 @@ repolens shortlist --work-root work
 repolens report  --work-root work --out-dir reports
 ```
 
-### What the disclosure looks like
+## Resolving flagged licenses — with AI help, under your approval
+
+After `flag`, RepoLens tells you exactly what needs a human:
+
+```
+Flagged 823 components (deduped across 5 repos).
+  ✓ 448 auto-cleared (policy: ALLOW — no action needed)
+  ⚠ 375 need your decision  →  repolens shortlist
+```
+
+On a big estate that "375" can be thousands. RepoLens shrinks the pile in three passes:
+
+1. **Code resolves what it can** — the resolution ladder auto-clears anything policy allows.
+2. **An AI takes the first stab** — for what's left, an AI proposes a license + a
+   cited source, and double-checks every BLOCK for false positives (dual-licensed,
+   build-only, a license exception, not actually shipped...).
+3. **You approve** — RepoLens **re-fetches and verifies every citation itself** (it never
+   trusts the AI), then hands you a grouped checklist.
+
+> The AI only *suggests*. RepoLens verifies the evidence, and nothing lands without your
+> tick. A wrong AI guess simply fails verification and stays open.
+
+### Review in bulk, override the exceptions
+
+Items are grouped by what actually decides risk — **license × where it ships × how it's
+used** — so one decision covers a whole equivalence class:
+
+```
+✓ ACCEPT-RECOMMENDED   (AI: allow, evidence verified — tick the group)
+  [ ] MIT · runtime · not-distributed      42 items
+  [ ] Apache-2.0 · runtime · server        71 items
+
+⚠ NEEDS-JUDGMENT       (real copyleft in shipped code — your call)
+  [ ] GPL-3.0 · client-or-mobile            6 items   → open to override any one
+  [ ] AGPL-3.0 · server                     3 items
+
+? LOW-CONFIDENCE        (AI unsure — reviewed one by one)
+  [ ] UNKNOWN (unresolved)                 14 items
+```
+
+- **Accept a group** — one tick approves all its members.
+- **Drill in and override** — flip the one exception inside a group of 40.
+- Genuine copyleft in shipped code is **never** auto-accepted — it's always yours to decide.
+
+## Two ways to run
+
+**One command** — RepoLens drives the whole pipeline and pauses where you're needed:
+
+```bash
+repolens run --work-root work --owner <OWNER> --out-dir reports
+#  pauses to approve the repo list, then again at the grouped shortlist
+```
+
+**Stage by stage** — same artifacts, fully scriptable, resume anywhere:
+
+```bash
+repolens discover --owner <OWNER> --work-root work
+repolens scan --work-root work
+repolens resolve --work-root work
+repolens flag --work-root work
+repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
+#   ↳ let the AI (or a teammate) answer → work/shortlist.proposals.json
+repolens shortlist --work-root work --proposals work/shortlist.proposals.json
+repolens report --work-root work --out-dir reports
+```
+
+The AI step is the same seam in both modes — and it's optional. RepoLens itself never
+calls a model; it only emits the questions and verifies the answers. Drive it with the
+bundled **`repolens` skill** (works in both Claude and Codex) or resolve everything by
+hand.
+
+## What the disclosure looks like
 
 `report.main` (illustrative excerpt — same columns in Markdown, CSV, and `.docx`):
 

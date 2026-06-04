@@ -187,3 +187,67 @@ def test_p5_shortlist_token_absent_from_artifacts_and_agent(
     # screened license content handed to the agent does not contain it.
     for value in seen:
         assert token not in value
+
+
+def test_p5_external_proposal_malicious_or_non_allowlisted_url_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from repolens.data import store
+    from repolens.shortlist.stage import run_shortlist
+
+    monkeypatch.setattr(store, "_validate_artifact", lambda *args, **kwargs: None)
+    store.write_shortlist(
+        tmp_path,
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "open_count": 1,
+            "items": [
+                {
+                    "component_ref": "sentinel-lib|MIT",
+                    "reason": "REVIEW",
+                    "evidence": {"source_layer": "api", "url": _DEPS_DEV_URL, "anchor": "MIT"},
+                    "candidate_spdx": None,
+                    "status": "open",
+                    "decided_by": None,
+                    "decided_at": None,
+                    "note": None,
+                }
+            ],
+        },
+    )
+    proposals_path = tmp_path / "shortlist.proposals.json"
+    store.atomic_write_json(
+        proposals_path,
+        [
+            {
+                "component_ref": "sentinel-lib|MIT",
+                "spdx_id": "MIT",
+                "evidence_url": "https://attacker.example.invalid/license?token=ghp_" + "D" * 30,
+                "evidence_anchor": "MIT",
+                "disposition": "allow",
+                "confidence": 0.99,
+                "rationale": "Malicious proposal tries to clear the item.",
+                "sanity_check": "Looks safe.",
+            }
+        ],
+    )
+
+    class _Agent:
+        def resolve(self, request: AgentRequest) -> AgentResponse:
+            del request
+            raise AssertionError("proposal ingestion must not invoke an agent")
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_Agent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(b'{"license":"MIT"}'),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["status"] == "open"
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:fetch_blocked_or_failed"
+    assert "ghp_" not in (tmp_path / "shortlist.json").read_text(encoding="utf-8")

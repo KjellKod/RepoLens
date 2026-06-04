@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 57,
+    "expected_active_count": 58,
     "markers": [
         "offline",
         "security",
@@ -306,6 +306,12 @@
             "status": "active",
             "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_shortlist_token_absent_from_artifacts_and_agent",
             "guardrail": "token_absent_from_artifacts_and_agent"
+        },
+        {
+            "id": "p5_external_proposal_malicious_or_non_allowlisted_url_fails_closed",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_injection_canaries.py::test_p5_external_proposal_malicious_or_non_allowlisted_url_fails_closed",
+            "guardrail": "external_proposal_verify_dont_trust"
         },
         {
             "id": "p6b_report_docx_escapes_untrusted_markup",

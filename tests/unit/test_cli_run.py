@@ -584,6 +584,69 @@ def test_open_shortlist_noninteractive_exits_without_report(
     assert not (tmp_path / "reports" / "report.main.csv").exists()
 
 
+def test_run_yes_open_shortlist_emits_contexts_without_proposal_or_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_shortlist_open_count", lambda _work_root: 1)
+    calls: list[tuple[Path | None, Path | None]] = []
+
+    def shortlist(args):
+        calls.append((args.emit_contexts, args.proposals))
+        return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "open")
+
+    def fail_report(_args):
+        raise AssertionError("report must not run while shortlist is open")
+
+    monkeypatch.setattr(cli, "_shortlist_stage", shortlist)
+    monkeypatch.setattr(cli, "_report", fail_report)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--yes",
+        ]
+    )
+
+    assert code == 1
+    assert calls == [(work_root / "shortlist.contexts.json", None)]
+
+
+def test_run_shortlist_loop_ingests_proposals_then_human_decisions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = tmp_path / "work"
+    work_root.mkdir()
+    (work_root / "shortlist.proposals.json").write_text("[]\n", encoding="utf-8")
+    calls: list[tuple[Path | None, Path | None]] = []
+    open_counts = iter([1, 1, 0])
+
+    def shortlist(args):
+        calls.append((args.emit_contexts, args.proposals))
+        return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "open")
+
+    monkeypatch.setattr(cli, "_shortlist_stage", shortlist)
+    monkeypatch.setattr(cli, "_shortlist_open_count", lambda _work_root: next(open_counts))
+    monkeypatch.setattr("sys.stdin", _TtyStringIO("\n\n"))
+    monkeypatch.setattr("sys.stderr", _TtyStringIO())
+    args = SimpleNamespace(runtime_config=object(), quiet=True, yes=False, timeout=None)
+
+    result = cli._run_shortlist_loop(args, work_root, interactive=True)
+
+    assert result is None
+    assert calls == [
+        (work_root / "shortlist.contexts.json", None),
+        (None, work_root / "shortlist.proposals.json"),
+        (None, None),
+    ]
+
+
 def test_step_ignored_when_noninteractive(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     work_root = _patch_common_success(monkeypatch, tmp_path)
 

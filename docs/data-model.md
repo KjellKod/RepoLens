@@ -27,6 +27,18 @@ Packaged schemas live in `src/repolens/data/schemas/`:
 - `shortlist.schema.json` validates the structured shortlist behind downstream human
   approval and `shortlist.md` rendering.
 
+`shortlist.json` is still canonical. The grouped Markdown view is derived from item data
+plus `inventory.json`; group checkboxes write back to the same item records. Optional
+shortlist fields support the grouped AI-assisted review loop:
+
+- `ai_suggestion` stores external AI proposal metadata only. It is never proof and never
+  approval.
+- `verify_reason` records the local re-fetch/verification outcome for proposal citations.
+- `decided_via` records whether a human decision came from an item checkbox or group
+  checkbox.
+- `decision_provenance` records the group key plus covered `component_refs` and `found_in`
+  repositories for group decisions.
+
 Schemas are self-contained and do not perform network `$ref` retrieval. Validation uses
 package-data schemas loaded by `importlib.resources`.
 

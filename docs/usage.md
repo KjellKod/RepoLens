@@ -260,10 +260,13 @@ What happens:
 3. `scan` inventories checked repos with RepoLens's verified Syft.
 4. `resolve` runs for every successfully scanned repo; you do not call `--repo-ref` manually.
 5. `flag` writes `inventory.json`, `shortlist.json`, and `shortlist.md`.
-6. If the shortlist has open items, `run` pauses: mark each item in `work/shortlist.md` with
-   `[x]` approve or `[r]` reject, then press Enter. It re-ingests the file and repeats until
+6. If the shortlist has open items, `run` writes `work/shortlist.contexts.json`, tells you
+   to use the `.skills/repolens` runbook for any external AI proposal pass, ingests
+   `work/shortlist.proposals.json` if present, and renders grouped `work/shortlist.md`.
+7. Mark available group checkboxes or item rows in `work/shortlist.md` with `[x]` approve
+   or `[r]` reject, then press Enter. Item ticks override group ticks. `run` repeats until
    `open_count == 0`.
-7. `report` writes `report.main.{md,csv,docx}` and appendices under `reports`.
+8. `report` writes `report.main.{md,csv,docx}` and appendices under `reports`.
 
 Resume is artifact-based. Rerun the same command after Ctrl-C, a closed terminal, or a crash:
 existing SBOMs, `resolved.ndjson`, `inventory.json`, a clear shortlist, and report files decide
@@ -282,8 +285,10 @@ For automation, add `--yes`:
 repolens run --work-root work --owner <OWNER> --out-dir reports --yes
 ```
 
-`--yes` never approves the shortlist. In non-interactive mode, open shortlist items produce a
-deterministic non-zero exit and no report is written until a human edits `shortlist.md`.
+`--yes` never approves the shortlist and never runs an AI proposal pass. In non-interactive
+mode, open shortlist items produce a deterministic non-zero exit, emit
+`work/shortlist.contexts.json`, print copy-pasteable artifact instructions, and write no
+report until a human clears `shortlist.md`.
 
 `run` continues past per-repo scan or resolve failures when other repos succeeded. It lists the
 failed repos in the final summary, writes reports for successfully resolved repos, and exits
@@ -340,6 +345,10 @@ repolens resolve --work-root work    # license resolution for scanned repo SBOMs
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
 repolens shortlist --work-root work [--identity <REVIEWER>]
                                       # settle flagged items + human approval
+repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
+                                      # emit model-free external proposal contexts
+repolens shortlist --work-root work --proposals work/shortlist.proposals.json
+                                      # ingest external proposals after local verification
 repolens report --work-root <WORK> --out-dir reports
                                       # assemble gated main, docx, and appendix reports
 ```
@@ -592,28 +601,40 @@ Outputs land under `--work-root`:
 The default policy tiers live in [license-policy.md](roadmap/rpl_license-policy.md) and are
 overridable through untracked local config.
 
-## `shortlist` — capability-minimized agent + human approval
+## `shortlist` — artifact proposals + grouped human approval
 
-`repolens shortlist --work-root work [--identity <REVIEWER>]` reads the `shortlist.json` and
-`shortlist.md` that `flag` produced and settles each `open` item:
+`repolens shortlist --work-root work [--identity <REVIEWER>]` reads the `shortlist.json`
+and `shortlist.md` that `flag` produced, renders a grouped review surface, and settles only
+the items a human approved or rejected:
 
 1. **Ingest human decisions.** Any item whose checkbox you ticked in `shortlist.md`
-   (`[x]` approve, `[r]` reject) is recorded with `status`, `decided_by` (from `--identity`,
-   a runtime input — never an owner/repo literal), and a UTC `decided_at`. Do not edit the
-   `rpl:ref` markers; they key each decision back to its component.
+   (`[x]` approve, `[r]` reject) is recorded with `status`, `decided_by` (from
+   `--identity`, a runtime input — never an owner/repo literal), a UTC `decided_at`, and
+   `decided_via`. Group ticks apply to every covered member; item `rpl:ref` ticks override
+   group `rpl:group` ticks.
 2. **Pre-screen → route.** Each still-open item's untrusted text (LICENSE / README /
    description / evidence) is capped, NFC-normalized, and screened for injection markers
-   (role-play, output-override, container-escape, imperative, directional Unicode). A
-   flagged item routes to the human queue and the resolution agent is **never invoked** for
-   it.
-3. **Capability-minimized agent.** Clean content is wrapped in `<untrusted_content>` (output
-   instruction appended after the block) and handed to the agent, which may only propose a
-   schema-validated `{spdx_id, evidence_url, evidence_anchor}` or abstain. The agent has no
-   shell, no file-write, no token, and no arbitrary network.
-4. **Verify, don't trust.** Any proposal is confirmed by re-fetching the cited evidence URL
-   through the SSRF-guarded, allowlisted HTTP client and checking it exactly anchors the
-   claimed SPDX id. A verified proposal records the candidate and `evidence.source_layer =
-   "agent"` but the item **stays open until you tick it** — the agent proposes, you dispose.
+   (role-play, output-override, container-escape, imperative, directional Unicode). Use
+   `--emit-contexts` to write these request-shaped contexts to a JSON artifact. RepoLens
+   does not call a model.
+3. **External proposal artifact.** Create proposals outside RepoLens, then pass them back
+   with `--proposals work/shortlist.proposals.json`. A proposal has
+   `component_ref`, `spdx_id`, `evidence_url`, `evidence_anchor`, `disposition`,
+   `confidence`, `rationale`, and `sanity_check`; an abstention uses
+   `component_ref`, `abstain: true`, and `reason`.
+4. **Verify, don't trust.** Every cited URL is re-fetched through the SSRF-guarded,
+   allowlisted HTTP client and checked for an exact SPDX anchor. Bad, malicious,
+   off-allowlist, mismatched, low-confidence, or abstained proposals leave the item open.
+   `disposition`, `confidence`, `rationale`, and `sanity_check` are metadata only.
+
+The grouped Markdown tiers are:
+
+- `ACCEPT-RECOMMENDED`: all members have verified `allow` candidates and the class is
+  low-risk (`not-distributed` or permissive family). A group checkbox is available.
+- `NEEDS-JUDGMENT`: genuine block/review or mixed-risk cases. A group checkbox is
+  available, with drill-in per-item rows for exceptions.
+- `LOW-CONFIDENCE / CONFLICT`: abstentions, conflicts, verification failures, invalid
+  proposals, or low-confidence items. Per-item decisions only.
 
 `shortlist` exits `0` only when no item remains open and `1` (findings open) otherwise, so
 it gates the downstream report.
@@ -686,6 +707,7 @@ commands above.
 
 ## Safety
 
-Read-only against your code; never runs install/build scripts; the resolution agent has
-no shell, secrets, or arbitrary network. See the
+Read-only against your code; never runs install/build scripts; external proposal contexts
+carry no shell, secrets, filesystem paths, or callables, and RepoLens verifies every cited
+URL itself. See the
 [security model](roadmap/rpl_security.md) for the full guardrails.

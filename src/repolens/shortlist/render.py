@@ -21,9 +21,15 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from repolens.security.sanitize import markdown_link, render_code_span, sanitize_markdown
+from repolens.shortlist.contexts import ShortlistMetadata
+from repolens.shortlist.grouping import (
+    LOW_CONFIDENCE,
+    TIER_ORDER,
+    ShortlistGroup,
+    build_groups,
+    encode_group_key,
+)
 
-# Section order matches the shortlist ``reason`` enum values the flag stage emits.
-_QUEUES = ("BLOCK", "REVIEW", "UNKNOWN", "CONFLICT")
 _NO_EVIDENCE_URL = "no evidence url"
 
 #: Stable line-key markers. ``REF_PREFIX``/``REF_SUFFIX`` survive ``sanitize_markdown`` as
@@ -31,6 +37,8 @@ _NO_EVIDENCE_URL = "no evidence url"
 #: escaped form, so the encoded ``component_ref`` round-trips losslessly.
 REF_PREFIX = "<!-- rpl:ref="
 REF_SUFFIX = " -->"
+GROUP_PREFIX = "<!-- rpl:group="
+GROUP_SUFFIX = " -->"
 
 
 def encode_component_ref(component_ref: str) -> str:
@@ -50,34 +58,63 @@ def decode_component_ref(encoded: str) -> str | None:
         return None
 
 
-def render_shortlist_markdown(items: Sequence[Mapping[str, Any]]) -> str:
-    """Render shortlist items as a sanitized two-queue + checkbox/decided markdown view."""
+def render_shortlist_markdown(
+    items: Sequence[Mapping[str, Any]],
+    *,
+    metadata: ShortlistMetadata | None = None,
+) -> str:
+    """Render shortlist items as a sanitized grouped checkbox/decided Markdown view."""
 
-    by_reason: dict[str, list[Mapping[str, Any]]] = {queue: [] for queue in _QUEUES}
-    for item in items:
-        reason = str(item["reason"])
-        by_reason.setdefault(reason, []).append(item)
+    resolved_metadata = metadata or ShortlistMetadata(triage_by_ref={})
+    groups = build_groups(items, resolved_metadata)
+    by_tier: dict[str, list[ShortlistGroup]] = {tier: [] for tier in TIER_ORDER}
+    for group in groups:
+        by_tier.setdefault(group.tier, []).append(group)
 
     lines = [
         "# RepoLens Shortlist",
         "",
-        "Tick an item's checkbox to approve it, or write `[r]` to reject it, then re-run "
-        "`repolens shortlist`. Do not edit the `rpl:ref` markers.",
+        "Tick an available group checkbox or an item checkbox to approve it, or write `[r]` "
+        "to reject it, then re-run `repolens shortlist`. Item decisions override group "
+        "decisions. Do not edit the `rpl:group` or `rpl:ref` markers.",
         "",
     ]
-    for queue in _QUEUES:
-        queue_items = by_reason.get(queue, [])
-        if not queue_items:
-            continue
-        lines.append(f"## {queue}")
+    for tier in TIER_ORDER:
+        lines.append(f"## {tier}")
         lines.append("")
-        lines.extend(_render_item(item) for item in queue_items)
+        tier_groups = by_tier.get(tier, [])
+        if not tier_groups:
+            lines.append("_none_")
+        else:
+            for group in tier_groups:
+                lines.extend(_render_group(group))
+                lines.append("")
         lines.append("")
 
     return sanitize_markdown("\n".join(lines).rstrip() + "\n")
 
 
-def _render_item(item: Mapping[str, Any]) -> str:
+def _render_group(group: ShortlistGroup) -> list[str]:
+    label = (
+        f"{group.key.spdx_family} / {group.key.distribution} / {group.key.scope} "
+        f"({len(group.items)} item{'s' if len(group.items) != 1 else ''})"
+    )
+    found_in = ", ".join(group.found_in[:5]) if group.found_in else "unknown repo"
+    if len(group.found_in) > 5:
+        found_in = f"{found_in}, ..."
+    marker = f"{GROUP_PREFIX}{encode_group_key(group.key)}{GROUP_SUFFIX}"
+    lines: list[str] = []
+    has_group_decision = group.tier != LOW_CONFIDENCE
+    if has_group_decision:
+        lines.append(f"- [ ] **{label}** — found in {render_code_span(found_in)} {marker}")
+    else:
+        lines.append(f"### {label} — found in {render_code_span(found_in)}")
+    indent = "  " if has_group_decision else ""
+    lines.extend(_render_item(item, indent=indent) for item in group.items)
+    return lines
+
+
+def _render_item(item: Mapping[str, Any], *, indent: str = "") -> str:
     component_ref = str(item["component_ref"])
     label = render_code_span(component_ref)
     note = item.get("note") or str(item["reason"])
@@ -86,7 +123,7 @@ def _render_item(item: Mapping[str, Any]) -> str:
     status = str(item.get("status") or "open")
     checkbox = _checkbox_for_status(status)
     decided = _decided_suffix(item)
-    return f"- {checkbox} {label} — {note} — {_evidence_cell(evidence)}{decided} {key}"
+    return f"{indent}- {checkbox} {label} — {note} — {_evidence_cell(evidence)}{decided} {key}"
 
 
 def _checkbox_for_status(status: str) -> str:
@@ -123,6 +160,8 @@ def _evidence_cell(evidence: Mapping[str, Any]) -> str:
 __all__ = [
     "REF_PREFIX",
     "REF_SUFFIX",
+    "GROUP_PREFIX",
+    "GROUP_SUFFIX",
     "decode_component_ref",
     "encode_component_ref",
     "render_shortlist_markdown",
