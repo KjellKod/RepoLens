@@ -1,0 +1,57 @@
+tests/e2e/test_cli.py
+  s_52a89a355f3bfa::t_a99cd031d41a45 482,485,506-510,512-516
+src/repolens/report/main.py
+  s_52a89a355f3bfa::t_607aa1cf1a1089 5,9,20-24
+  s_52a89a355f3bfa::t_e0a994c5dcac0c 50-55
+  s_52a89a355f3bfa::t_39ed0f4b831288 134-138,140-146,188-204,212-266,268-271
+  s_52a89a355f3bfa::t_a7e9fc5fab38d7 76-80,86,88
+docs/usage.md
+  s_52a89a355f3bfa::t_b8bc83f9ee8529 649-650,652-664,667-691
+src/repolens/report/__init__.py
+  s_52a89a355f3bfa::t_09f929b3d9a4d8 6-7,16-20,24-25,36
+tests/unit/test_report_main.py
+  s_52a89a355f3bfa::t_067efdde09dfd8 266-304,306,309-376
+  s_52a89a355f3bfa::t_4de7c3812022d1 4,14-20
+  s_52a89a355f3bfa::t_45c9aa0c5951c0 531-537
+tests/unit/test_cli_run.py
+  s_52a89a355f3bfa::t_bcae48009780ac 510-519,529-555
+  s_d11a5e69a93e62::t_c92b33c90708dd 95-167
+  s_52a89a355f3bfa::t_e88e112d340ff1 520-528
+src/repolens/report/selection.py
+  s_52a89a355f3bfa::t_c3cecce59d960b 64-76
+src/repolens/cli.py
+  s_52a89a355f3bfa::t_c82397bb2f7667 1069-1070
+  s_52a89a355f3bfa::t_21f6cae953c953 32
+  s_52a89a355f3bfa::t_e0ffae35e88690 1090-1095,1097
+  s_52a89a355f3bfa::t_b3ba98d2db8d27 1771-1777,1780-1783
+  s_52a89a355f3bfa::t_1f53aad2c1359d 802
+  s_52a89a355f3bfa::t_c0ada832801e13 1049-1052,1058-1062,1066-1068,1071
+  s_52a89a355f3bfa::t_c3f5080391a04b 643
+  s_52a89a355f3bfa::t_0b120ec8face27 816-817,819
+  s_52a89a355f3bfa::t_bb1263d21dc34c 59-61
+  s_52a89a355f3bfa::t_9a530c0decf3a9 1096
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "230cd55e8676c0c56c42b83ea232d0f56f4c449b",
+  "prompts": {},
+  "sessions": {
+    "s_52a89a355f3bfa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7c2e1e04-bbf7-4e81-a58c-dea184f8b28e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_d11a5e69a93e62": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9301-2ef3-7f43-8e78-eb398cd8a10c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
