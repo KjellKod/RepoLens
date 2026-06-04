@@ -67,6 +67,41 @@
           "scope": "runtime"
         }
       ]
+    },
+    {
+      "id": "sentinel_android_app",
+      "path": "sentinel_android_app",
+      "ecosystem": "android",
+      "expected_components": [
+        {
+          "name": "invalid.sentinel:sentinel-android-runtime",
+          "version": "3.1.4",
+          "declared_license": "Apache-2.0",
+          "scope": "runtime",
+          "ecosystem": "maven"
+        }
+      ]
+    },
+    {
+      "id": "sentinel_ios_client",
+      "path": "sentinel_ios_client",
+      "ecosystem": "ios",
+      "expected_components": [
+        {
+          "name": "sentinel-swift-runtime",
+          "version": "1.0.0",
+          "declared_license": "NOASSERTION",
+          "scope": "runtime",
+          "ecosystem": "swift"
+        },
+        {
+          "name": "SentinelPodRuntime",
+          "version": "2.0.0",
+          "declared_license": "NOASSERTION",
+          "scope": "runtime",
+          "ecosystem": "cocoapods"
+        }
+      ]
     }
   ]
 }

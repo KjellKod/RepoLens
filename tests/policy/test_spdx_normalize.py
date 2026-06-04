@@ -10,11 +10,14 @@ def test_normalize_canonical_and_alias_ids() -> None:
 
     mit = normalize_license("MIT", policy)
     apache_alias = normalize_license("apache 2.0", policy)
+    psf_alias = normalize_license("PSFL", policy)
 
     assert mit.spdx_id == "MIT"
     assert mit.reason == "canonical_id"
     assert apache_alias.spdx_id == "Apache-2.0"
     assert apache_alias.reason == "alias_hit"
+    assert psf_alias.spdx_id == "PSF-2.0"
+    assert psf_alias.reason == "alias_hit"
 
 
 def test_deprecated_id_is_not_treated_as_normalized_spdx() -> None:

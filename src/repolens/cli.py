@@ -733,6 +733,8 @@ def _run_scan_stage(args: argparse.Namespace) -> ScanReport | None:
             syft_path=syft_path,
             credential_provider=resolve_clone_credential_result,
             progress=progress,
+            exclude_paths=scan_runner.configured_exclude_paths(args.runtime_config.values),
+            syft_catalogers=scan_runner.configured_syft_catalogers(args.runtime_config.values),
             **extra,
         )
     except scan_runner.ScanBatchError as exc:
@@ -1076,6 +1078,8 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
             syft_path=syft_path,
             credential_provider=resolve_clone_credential_result,
             progress=progress,
+            exclude_paths=scan_runner.configured_exclude_paths(args.runtime_config.values),
+            syft_catalogers=scan_runner.configured_syft_catalogers(args.runtime_config.values),
             **extra,
         )
     except scan_runner.ScanBatchError as exc:

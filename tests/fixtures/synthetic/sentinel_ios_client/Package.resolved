@@ -1,0 +1,15 @@
+{
+  "originHash" : "sentinel-ios-client-lock",
+  "pins" : [
+    {
+      "identity" : "sentinel-swift-runtime",
+      "kind" : "remoteSourceControl",
+      "location" : "https://example.invalid/sentinel-swift-runtime.git",
+      "state" : {
+        "revision" : "1111111111111111111111111111111111111111",
+        "version" : "1.0.0"
+      }
+    }
+  ],
+  "version" : 3
+}

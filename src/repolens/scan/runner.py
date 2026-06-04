@@ -19,13 +19,15 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
 import time
+import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from repolens.data.errors import ArtifactError
@@ -53,6 +55,19 @@ SYFT_OUTPUT_FORMAT = "syft-json"
 #: Environment keys preserved when invoking Syft. Mirrors the clone env scrub:
 #: the GitHub token (and every other secret) is never placed in the child env.
 _SAFE_ENV_KEYS = ("HOME", "PATH", "SYSTEMROOT", "TMPDIR", "TEMP", "TMP", "USERPROFILE")
+DEFAULT_EXCLUDE_PATHS = (
+    "tests/fixtures/",
+    "test/fixtures/",
+    "tests/bootstrap/fixtures/",
+    ".git/",
+)
+MOBILE_RESTRICTED_CATALOGERS = (
+    "java-gradle-lockfile-cataloger",
+    "cocoapods-cataloger",
+    "swift-package-manager-cataloger",
+)
+_REQ_NAME_RE = re.compile(r"^\s*([A-Za-z0-9][A-Za-z0-9._-]*)")
+_EXACT_VERSION_RE = re.compile(r"(?<![<>=!~])={2,3}\s*([^,;\s]+)")
 
 #: Injected boundary for invoking Syft, kept thin so tests stay offline.
 CommandRunner = Callable[..., "subprocess.CompletedProcess[str]"]
@@ -264,14 +279,251 @@ def _map_syft_to_sbom(
     return sbom, tool_version
 
 
+def configured_exclude_paths(config_values: dict[str, Any]) -> tuple[str, ...]:
+    """Return scan exclusion prefixes from runtime config, replacing defaults when set."""
+
+    raw = _nested_config(config_values, ("scan", "exclude_paths"))
+    if raw is None:
+        return DEFAULT_EXCLUDE_PATHS
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise InputError("scan.exclude_paths must be an array of path prefixes")
+    return _normalized_exclude_prefixes(raw)
+
+
+def configured_syft_catalogers(config_values: dict[str, Any]) -> tuple[str, ...] | None:
+    """Return optional restricted Syft catalogers from runtime config."""
+
+    raw = _nested_config(config_values, ("scan", "syft", "catalogers"))
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise InputError("scan.syft.catalogers must be an array of cataloger names")
+    catalogers = tuple(item.strip() for item in raw if item.strip())
+    if not catalogers:
+        raise InputError("scan.syft.catalogers must contain at least one cataloger")
+    return catalogers
+
+
+def _nested_config(config_values: dict[str, Any], path: tuple[str, ...]) -> Any:
+    current: Any = config_values
+    for key in path:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def _syft_argv(
+    syft_path: Path,
+    target: Path,
+    *,
+    catalogers: Sequence[str] | None,
+) -> list[str]:
+    argv = [str(syft_path), "scan", f"dir:{target}", "-o", SYFT_OUTPUT_FORMAT]
+    if catalogers is not None:
+        argv.extend(["--select-catalogers", ",".join(_catalogers_with_mobile(catalogers))])
+    return argv
+
+
+def _catalogers_with_mobile(catalogers: Sequence[str]) -> tuple[str, ...]:
+    out: list[str] = []
+    seen: set[str] = set()
+    for cataloger in (*catalogers, *MOBILE_RESTRICTED_CATALOGERS):
+        value = cataloger.strip()
+        if value and value not in seen:
+            out.append(value)
+            seen.add(value)
+    return tuple(out)
+
+
+def _augment_with_pyproject_dependencies(sbom: dict[str, Any], source_root: Path) -> None:
+    pyproject_path = source_root / "pyproject.toml"
+    if not pyproject_path.is_file():
+        return
+    try:
+        data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return
+    project = data.get("project")
+    if not isinstance(project, dict):
+        return
+
+    artifacts = sbom["artifacts"]
+    dependencies = project.get("dependencies")
+    if isinstance(dependencies, list):
+        _append_new_artifacts(artifacts, _pyproject_artifacts(dependencies, "pyproject.toml"))
+    optional = project.get("optional-dependencies")
+    if isinstance(optional, dict):
+        for group, values in optional.items():
+            if isinstance(values, list):
+                location = f"pyproject.toml#project.optional-dependencies.{group}"
+                _append_new_artifacts(artifacts, _pyproject_artifacts(values, location))
+
+
+def _append_new_artifacts(
+    artifacts: list[dict[str, Any]],
+    candidates: Sequence[dict[str, Any]],
+) -> None:
+    seen = {_artifact_identity(artifact) for artifact in artifacts}
+    for candidate in candidates:
+        identity = _artifact_identity(candidate)
+        if identity in seen:
+            continue
+        artifacts.append(candidate)
+        seen.add(identity)
+
+
+def _artifact_identity(artifact: dict[str, Any]) -> tuple[str, str, str | None, str | None]:
+    name = str(artifact.get("name") or "")
+    artifact_type = str(artifact.get("type") or "")
+    version = artifact.get("version")
+    purl = artifact.get("purl")
+    return (
+        _normalize_pypi_name(name) if artifact_type == "python" else name,
+        artifact_type,
+        str(version) if version is not None else None,
+        str(purl) if purl is not None else None,
+    )
+
+
+def _pyproject_artifacts(requirements: Sequence[object], location: str) -> list[dict[str, Any]]:
+    artifacts: list[dict[str, Any]] = []
+    for raw in requirements:
+        if not isinstance(raw, str):
+            continue
+        parsed = _parse_pyproject_requirement(raw)
+        if parsed is None:
+            continue
+        name, version = parsed
+        artifact: dict[str, Any] = {
+            "name": name,
+            "type": "python",
+            "version": version,
+            "purl": f"pkg:pypi/{name}" + (f"@{version}" if version is not None else ""),
+            "locations": [location],
+        }
+        artifacts.append(artifact)
+    return artifacts
+
+
+def _parse_pyproject_requirement(value: str) -> tuple[str, str | None] | None:
+    requirement = value.strip()
+    if (
+        not requirement
+        or " @ " in requirement
+        or requirement.startswith((".", "/", "file:", "git+"))
+    ):
+        return None
+    match = _REQ_NAME_RE.match(requirement)
+    if match is None:
+        return None
+    remainder = requirement[match.end() :].lstrip()
+    if remainder and not remainder.startswith(("[", ";", "<", ">", "=", "!", "~", ",")):
+        return None
+    name = _normalize_pypi_name(match.group(1))
+    version = _exact_version(requirement)
+    return name, version
+
+
+def _normalize_pypi_name(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _exact_version(requirement: str) -> str | None:
+    before_marker = requirement.split(";", 1)[0]
+    match = _EXACT_VERSION_RE.search(before_marker)
+    if match is None:
+        return None
+    version = match.group(1).strip()
+    if not version or "*" in version:
+        return None
+    return version
+
+
+def _filter_artifacts_by_exclusions(
+    artifacts: Sequence[dict[str, Any]],
+    exclude_paths: Sequence[str],
+) -> list[dict[str, Any]]:
+    prefixes = _normalized_exclude_prefixes(exclude_paths)
+    if not prefixes:
+        return list(artifacts)
+    return [
+        artifact
+        for artifact in artifacts
+        if not _artifact_locations_all_excluded(artifact, prefixes)
+    ]
+
+
+def _artifact_locations_all_excluded(
+    artifact: dict[str, Any],
+    exclude_prefixes: Sequence[str],
+) -> bool:
+    locations = artifact.get("locations")
+    if not isinstance(locations, list) or not locations:
+        return False
+    normalized = [_normalized_location(location) for location in locations]
+    valid_locations = [location for location in normalized if location is not None]
+    if not valid_locations:
+        return False
+    return all(_path_is_excluded(location, exclude_prefixes) for location in valid_locations)
+
+
+def _normalized_location(location: object) -> str | None:
+    if not isinstance(location, str) or not location.strip():
+        return None
+    text = location.strip().replace("\\", "/")
+    path = PurePosixPath(text)
+    if path.is_absolute():
+        # Syft reports repository-root-relative locations with a leading slash.
+        # Treat those as relative while still leaving host absolute paths outside
+        # configured prefixes unless their repo-relative tail matches exactly.
+        path = PurePosixPath(text.lstrip("/"))
+    if path.is_absolute() or ".." in path.parts:
+        return None
+    return path.as_posix()
+
+
+def _path_is_excluded(path: str, exclude_prefixes: Sequence[str]) -> bool:
+    normalized = _normalize_exclude_prefix(path)
+    return any(
+        prefix and (normalized == prefix or normalized.startswith(f"{prefix}/"))
+        for prefix in exclude_prefixes
+    )
+
+
+def _normalized_exclude_prefixes(values: Sequence[str]) -> tuple[str, ...]:
+    prefixes: list[str] = []
+    for value in values:
+        if not value.strip():
+            continue
+        normalized = _normalize_exclude_prefix(value)
+        if normalized:
+            prefixes.append(normalized)
+    return tuple(prefixes)
+
+
+def _normalize_exclude_prefix(value: str) -> str:
+    text = value.strip().replace("\\", "/")
+    while text.startswith("./"):
+        text = text[2:]
+    if not text:
+        return ""
+    path = PurePosixPath(text)
+    if path.is_absolute() or ".." in path.parts:
+        return ""
+    normalized = path.as_posix().rstrip("/")
+    return normalized
+
+
 def _run_syft(
     command_runner: CommandRunner,
     *,
     syft_path: Path,
     target: Path,
     timeout: float,
+    catalogers: Sequence[str] | None,
 ) -> dict[str, Any]:
-    argv = [str(syft_path), "scan", f"dir:{target}", "-o", SYFT_OUTPUT_FORMAT]
+    argv = _syft_argv(syft_path, target, catalogers=catalogers)
     try:
         completed = command_runner(argv, timeout=timeout)
     except subprocess.TimeoutExpired as exc:
@@ -295,6 +547,8 @@ def _scan_one(
     timeout_seconds: float,
     clone: CloneFn,
     command_runner: CommandRunner,
+    exclude_paths: Sequence[str],
+    syft_catalogers: Sequence[str] | None,
     clock: Callable[[], str],
     repo_dir_fn: Callable[..., Path],
     write_sbom_fn: Callable[..., Path],
@@ -339,12 +593,18 @@ def _scan_one(
             syft_path=syft_path,
             target=clone_path,
             timeout=timeout_seconds,
+            catalogers=syft_catalogers,
         )
         sbom, tool_version = _map_syft_to_sbom(
             document,
             repo_ref=repo.repo_ref,
             source=repo.clone_url,
             generated_at=clock(),
+        )
+        _augment_with_pyproject_dependencies(sbom, clone_path)
+        sbom["artifacts"] = _filter_artifacts_by_exclusions(
+            sbom["artifacts"],
+            exclude_paths,
         )
         # Redact before persisting. write_sbom redacts + schema-validates; the
         # status file is written via atomic_write_json, which does NOT redact, so
@@ -496,6 +756,8 @@ def scan_repos(
     write_sbom_fn: Callable[..., Path] | None = None,
     write_status_fn: Callable[[str | Path, Any], None] | None = None,
     progress: ProgressFn | None = None,
+    exclude_paths: Sequence[str] = DEFAULT_EXCLUDE_PATHS,
+    syft_catalogers: Sequence[str] | None = None,
 ) -> ScanReport:
     """Scan each repository: resume-skip, hardened clone, Syft, persist, status.
 
@@ -565,6 +827,8 @@ def scan_repos(
             timeout_seconds=timeout_seconds,
             clone=clone,
             command_runner=command_runner,
+            exclude_paths=exclude_paths,
+            syft_catalogers=syft_catalogers,
             clock=clock,
             repo_dir_fn=repo_dir_fn,
             write_sbom_fn=write_sbom_fn,

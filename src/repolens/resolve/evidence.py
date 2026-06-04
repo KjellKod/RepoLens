@@ -8,6 +8,7 @@ from repolens.policy.spdx import normalize_license
 from repolens.resolve.adapters import target_license_candidates
 from repolens.resolve.license_expression import expression_fingerprint
 from repolens.resolve.models import ApiCandidate, PackageFact
+from repolens.resolve.purl import package_identity
 
 UNKNOWN_VERSION = "unknown"
 
@@ -15,7 +16,10 @@ UNKNOWN_VERSION = "unknown"
 def should_attempt_api_resolution(package: PackageFact) -> bool:
     """Return whether a package has enough metadata for versioned API resolution."""
 
-    return package.version != UNKNOWN_VERSION
+    if package.version != UNKNOWN_VERSION:
+        return True
+    ecosystem, _package_name = package_identity(package.package_type, package.name, package.purl)
+    return ecosystem in {"python", "pypi"}
 
 
 def has_exact_license_evidence(

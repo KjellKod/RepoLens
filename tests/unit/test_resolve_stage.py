@@ -5,6 +5,7 @@ from pathlib import Path
 
 from repolens.data.store import iter_resolved, write_sbom
 from repolens.exit_codes import InputError
+from repolens.resolve.adapters import API_ALLOWED_HOSTS
 from repolens.resolve.mobile import MobileEnrichmentOutcome
 from repolens.resolve.models import ApiCandidate, PackageFact, ResolveAdapter
 from repolens.resolve.stage import run_resolve
@@ -73,6 +74,25 @@ def write_test_sbom(
             "generated_at": "2026-01-01T00:00:00Z",
             "tool": {"name": "syft", "version": "1.0.0"},
             "source": "https://example.invalid/acme-alpha",
+            "artifacts": [artifact],
+        },
+    )
+
+
+def write_single_artifact_sbom(
+    tmp_path: Path,
+    repo_ref: str,
+    artifact: dict[str, object],
+) -> None:
+    write_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "schema_version": "1.0",
+            "repo": repo_ref,
+            "generated_at": "2026-01-01T00:00:00Z",
+            "tool": {"name": "syft", "version": "1.0.0"},
+            "source": "https://example.invalid/sentinel-source",
             "artifacts": [artifact],
         },
     )
@@ -444,10 +464,20 @@ def test_run_resolve_reports_progress_for_each_package(tmp_path: Path, repo_ref:
     assert events == [(1, 2, "declared-one"), (2, 2, "declared-two")]
 
 
-def test_missing_or_null_version_becomes_unknown_without_api_fetch(
+def test_non_pypi_missing_or_null_version_becomes_unknown_without_api_fetch(
     tmp_path: Path, repo_ref: str
 ) -> None:
-    write_test_sbom(tmp_path, repo_ref, licenses=[], version=None)
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-maven-runtime",
+            "version": None,
+            "type": "maven",
+            "purl": "pkg:maven/invalid.sentinel/sentinel-maven-runtime",
+            "licenses": [],
+        },
+    )
     adapter = CandidateAdapter(ApiCandidate("MIT", "https://api.deps.dev/example", "MIT"))
 
     run_resolve(tmp_path, repo_ref, adapters=[adapter])
@@ -457,6 +487,311 @@ def test_missing_or_null_version_becomes_unknown_without_api_fetch(
     assert record["version"] == "unknown"
     assert record["spdx_id"] is None
     assert record["evidence"]["anchor"] == "unresolved:missing_version"
+
+
+def test_unversioned_pypi_package_resolves_from_package_metadata(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-runtime",
+            "version": None,
+            "type": "python",
+            "purl": "pkg:pypi/sentinel-runtime",
+            "licenses": [],
+            "locations": ["pyproject.toml"],
+        },
+    )
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        assert options.allowed_hosts == API_ALLOWED_HOSTS
+        seen.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"info":{"license":"MIT"}}')
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        fetcher=fetcher,
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["version"] == "unknown"
+    assert record["spdx_id"] == "MIT"
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["url"] == "https://pypi.org/pypi/sentinel-runtime/json"
+    assert seen == [
+        "https://pypi.org/pypi/sentinel-runtime/json",
+        "https://pypi.org/pypi/sentinel-runtime/json",
+    ]
+
+
+def test_swiftpm_purl_is_cataloging_only_without_supported_api(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-swift-runtime",
+            "version": "1.0.0",
+            "type": "swift",
+            "purl": "pkg:swift/sentinel-swift-runtime@1.0.0",
+            "licenses": [],
+        },
+    )
+    adapter = CandidateAdapter(ApiCandidate("MIT", "https://api.deps.dev/example", "MIT"))
+
+    run_resolve(tmp_path, repo_ref, adapters=[adapter])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert adapter.calls == 0
+    assert record["spdx_id"] is None
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == "unresolved:no_supported_catalog_license_api"
+
+
+def test_swiftpm_purl_with_mobile_native_opt_in_uses_mobile_enricher(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-swift-runtime",
+            "version": "1.0.0",
+            "type": "swift",
+            "purl": "pkg:swift/sentinel-swift-runtime@1.0.0",
+            "licenses": [],
+        },
+    )
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "Package.swift").write_text(
+        "// swift-tools-version: 5.9\n"
+        "import PackageDescription\n"
+        'let package = Package(name: "SentinelClient")\n',
+        encoding="utf-8",
+    )
+    calls: list[PackageFact] = []
+
+    def mobile_enricher(
+        package: PackageFact,
+        detection: object,
+        root: Path,
+        sandbox_runner: object,
+        limits: object,
+    ) -> MobileEnrichmentOutcome:
+        del detection, root, sandbox_runner, limits
+        calls.append(package)
+        return MobileEnrichmentOutcome(
+            candidate=ApiCandidate("MIT", "mobile-native://sandbox", "license:mit")
+        )
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[FailingAdapter()],
+        source_root=source_root,
+        enable_mobile_native=True,
+        mobile_enricher=mobile_enricher,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert [package.name for package in calls] == ["sentinel-swift-runtime"]
+    assert record["spdx_id"] == "MIT"
+    assert record["evidence"]["source_layer"] == "mobile"
+    assert record["evidence"]["anchor"] == "license:mit"
+
+
+def test_cocoapods_purl_is_cataloging_only_without_supported_api(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "SentinelPodRuntime",
+            "version": "2.0.0",
+            "type": "cocoapods",
+            "purl": "pkg:cocoapods/SentinelPodRuntime@2.0.0",
+            "licenses": [],
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] is None
+    assert record["evidence"]["anchor"] == "unresolved:no_supported_catalog_license_api"
+
+
+def test_githubactions_purl_gets_build_scope_not_distributed(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-ci-owner/sentinel-ci-action",
+            "version": "v1",
+            "type": "githubactions",
+            "purl": "pkg:githubactions/sentinel-ci-owner/sentinel-ci-action@v1",
+            "licenses": [],
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "build",
+        "distribution": "not-distributed",
+    }
+    assert record["evidence"]["anchor"] == "unresolved:no_candidate"
+
+
+def test_syft_github_action_shape_gets_build_scope_not_distributed(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-ci-owner/sentinel-ci-action",
+            "version": "v1",
+            "type": "github-action",
+            "purl": "pkg:github/sentinel-ci-owner/sentinel-ci-action@v1",
+            "licenses": [],
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "build",
+        "distribution": "not-distributed",
+    }
+    assert record["evidence"]["anchor"] == "unresolved:no_candidate"
+
+
+def test_build_tool_locations_get_build_scope_not_distributed(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-build-tool",
+            "version": "1.0.0",
+            "type": "python",
+            "purl": "pkg:pypi/sentinel-build-tool@1.0.0",
+            "locations": ["/requirements-dev.txt"],
+            "licenses": [],
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "build",
+        "distribution": "not-distributed",
+    }
+
+
+def test_pyproject_dev_optional_dependency_gets_build_scope_not_distributed(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-dev-extra",
+            "version": "1.0.0",
+            "type": "python",
+            "purl": "pkg:pypi/sentinel-dev-extra@1.0.0",
+            "locations": ["pyproject.toml#project.optional-dependencies.dev"],
+            "licenses": [],
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "build",
+        "distribution": "not-distributed",
+    }
+
+
+def test_mixed_runtime_and_build_locations_keep_runtime_scope(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-shared-runtime",
+            "version": "1.0.0",
+            "type": "python",
+            "purl": "pkg:pypi/sentinel-shared-runtime@1.0.0",
+            "locations": ["/requirements-dev.txt", "/requirements.txt"],
+            "licenses": [],
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "runtime",
+        "distribution": "server",
+    }
+
+
+def test_scancode_bootstrap_tooling_gets_build_scope_not_distributed(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-scancode-tool",
+            "version": "1.0.0",
+            "type": "python",
+            "purl": "pkg:pypi/sentinel-scancode-tool@1.0.0",
+            "locations": ["/src/repolens/bootstrap/scancode.requirements.txt"],
+            "licenses": [],
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "build",
+        "distribution": "not-distributed",
+    }
 
 
 def test_token_shaped_api_payload_is_redacted_from_resolved_artifact(

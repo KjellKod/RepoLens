@@ -75,7 +75,8 @@
     "gplv3": "GPL-3.0-only",
     "gplv2": "GPL-2.0-only",
     "lgplv3": "LGPL-3.0-only",
-    "agplv3": "AGPL-3.0-only"
+    "agplv3": "AGPL-3.0-only",
+    "psfl": "PSF-2.0"
   },
   "deprecated_ids": [
     "GPL-2.0",

@@ -1,0 +1,2 @@
+# Synthetic Gradle lockfile fixture; never executed by tests.
+invalid.sentinel:sentinel-android-runtime:3.1.4=runtimeClasspath

@@ -1,0 +1,16 @@
+PODS:
+  - SentinelPodRuntime (2.0.0)
+
+DEPENDENCIES:
+  - SentinelPodRuntime (= 2.0.0)
+
+SPEC REPOS:
+  https://example.invalid/sentinel-pod-specs.git:
+    - SentinelPodRuntime
+
+SPEC CHECKSUMS:
+  SentinelPodRuntime: 2222222222222222222222222222222222222222
+
+PODFILE CHECKSUM: 3333333333333333333333333333333333333333
+
+COCOAPODS: 1.15.2
