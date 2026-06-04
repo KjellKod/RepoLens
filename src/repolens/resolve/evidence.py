@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from repolens.policy.config import load_default_policy
+from repolens.policy.config import Policy, load_default_policy
+from repolens.policy.expression import ExpressionFingerprint
 from repolens.policy.spdx import normalize_license
 from repolens.resolve.adapters import target_license_candidates
+from repolens.resolve.license_expression import expression_fingerprint
 from repolens.resolve.models import ApiCandidate, PackageFact
 
 UNKNOWN_VERSION = "unknown"
@@ -22,8 +24,25 @@ def has_exact_license_evidence(
     """Return true when structured target evidence exactly confirms the candidate."""
 
     policy = load_default_policy()
-    for license_text in target_license_candidates(body):
-        normalized = normalize_license(license_text, policy)
-        if normalized.spdx_id == normalized_spdx_id and license_text == candidate.evidence_anchor:
+    license_texts = target_license_candidates(body)
+    normalized = normalize_license(normalized_spdx_id, policy)
+    if normalized.spdx_id is not None:
+        for license_text in license_texts:
+            target = normalize_license(license_text, policy)
+            if target.spdx_id == normalized.spdx_id and license_text == candidate.evidence_anchor:
+                return True
+        return False
+
+    expected = _expression_fingerprint(normalized_spdx_id, policy)
+    anchor = _expression_fingerprint(candidate.evidence_anchor, policy)
+    if expected is None or anchor != expected:
+        return False
+
+    for license_text in license_texts:
+        if _expression_fingerprint(license_text, policy) == expected:
             return True
     return False
+
+
+def _expression_fingerprint(expression: str, policy: Policy) -> ExpressionFingerprint | None:
+    return expression_fingerprint(expression, policy)

@@ -71,6 +71,44 @@ def test_p3a_resolve_rejects_similar_spdx_evidence() -> None:
     assert not has_exact_license_evidence(b'{"license":"MIT-0"}', candidate, "MIT")
 
 
+def test_p3a_resolve_accepts_equivalent_compound_expression_evidence() -> None:
+    candidate = ApiCandidate(
+        "Apache-2.0 OR MIT",
+        "https://api.deps.dev/v3alpha/systems/cargo/packages/anyhow/versions/1.0.98",
+        "Apache-2.0 OR MIT",
+    )
+
+    assert has_exact_license_evidence(
+        b'{"license":"MIT OR Apache-2.0"}',
+        candidate,
+        "Apache-2.0 OR MIT",
+    )
+
+
+def test_p3a_resolve_gates_with_exceptions_to_policy_table() -> None:
+    unknown = ApiCandidate(
+        "GPL-3.0-only WITH Unknown-exception",
+        "https://api.deps.dev/v3alpha/systems/cargo/packages/acme-lib/versions/1.2.3",
+        "GPL-3.0-only WITH Unknown-exception",
+    )
+    known = ApiCandidate(
+        "GPL-3.0-only WITH Autoconf-exception-3.0",
+        "https://api.deps.dev/v3alpha/systems/cargo/packages/acme-lib/versions/1.2.3",
+        "GPL-3.0-only WITH Autoconf-exception-3.0",
+    )
+
+    assert not has_exact_license_evidence(
+        b'{"license":"GPL-3.0-only WITH Unknown-exception"}',
+        unknown,
+        "GPL-3.0-only WITH Unknown-exception",
+    )
+    assert has_exact_license_evidence(
+        b'{"license":"GPL-3.0-only WITH Autoconf-exception-3.0"}',
+        known,
+        "GPL-3.0-only WITH Autoconf-exception-3.0",
+    )
+
+
 def test_p3a_resolve_blocks_allowlisted_host_resolving_private_ip() -> None:
     with pytest.raises(FetchSecurityError, match="blocked IP"):
         validate_url_for_fetch(

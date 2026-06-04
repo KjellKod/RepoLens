@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 55,
+    "expected_active_count": 57,
     "markers": [
         "offline",
         "security",
@@ -174,6 +174,18 @@
             "status": "active",
             "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_rejects_similar_spdx_evidence",
             "guardrail": "resolve_exact_spdx_evidence"
+        },
+        {
+            "id": "p3a_resolve_equivalent_compound_expression",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_accepts_equivalent_compound_expression_evidence",
+            "guardrail": "resolve_compound_expression_evidence"
+        },
+        {
+            "id": "p3a_resolve_with_exception_policy_table",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3a_resolve_gates_with_exceptions_to_policy_table",
+            "guardrail": "resolve_compound_expression_evidence"
         },
         {
             "id": "p3a_resolve_allowlisted_host_private_ip",
