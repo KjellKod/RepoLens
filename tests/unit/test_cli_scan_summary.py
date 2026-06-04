@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from repolens.cli import CommandStatus, _scan_command_result
 from repolens.githost import GH_NOT_INSTALLED_MESSAGE
 from repolens.scan.runner import RepoScanOutcome, ScanReport
@@ -11,16 +13,29 @@ def _report(*outcomes: RepoScanOutcome) -> ScanReport:
     return ScanReport(tuple(outcomes))
 
 
-def test_clean_run_exits_success_without_extra_summary(capsys) -> None:
+def test_clean_run_exits_success_with_resolve_next_step(capsys) -> None:
     report = _report(
         RepoScanOutcome("sentinel-a", "scanned", tool_version="1.0"),
         RepoScanOutcome("sentinel-b", "skipped"),
     )
 
-    result = _scan_command_result(report)
+    result = _scan_command_result(report, Path("work"))
 
     assert result.status is CommandStatus.SUCCESS
-    assert result.message == ""
+    assert result.message == "Next CLI stage: repolens resolve --work-root work"
+    assert capsys.readouterr().err == ""
+
+
+def test_cached_run_exits_success_with_resolve_next_step(capsys) -> None:
+    report = _report(
+        RepoScanOutcome("sentinel-cached", "skipped"),
+        RepoScanOutcome("sentinel-other", "skipped"),
+    )
+
+    result = _scan_command_result(report, Path("/tmp/repo1"))
+
+    assert result.status is CommandStatus.SUCCESS
+    assert result.message == "Next CLI stage: repolens resolve --work-root /tmp/repo1"
     assert capsys.readouterr().err == ""
 
 
@@ -35,7 +50,7 @@ def test_mixed_run_prints_summary_and_failures_to_stderr_exit_one(capsys) -> Non
         ),
     )
 
-    result = _scan_command_result(report)
+    result = _scan_command_result(report, Path("work"))
     err = capsys.readouterr().err
 
     assert result.status is CommandStatus.FINDINGS_OPEN
@@ -47,7 +62,7 @@ def test_mixed_run_prints_summary_and_failures_to_stderr_exit_one(capsys) -> Non
 def test_failure_reasons_are_path_sanitized(capsys) -> None:
     report = _report(RepoScanOutcome("sentinel-path", "failed", error="boom at /tmp/acme/private"))
 
-    result = _scan_command_result(report)
+    result = _scan_command_result(report, Path("work"))
     err = capsys.readouterr().err
 
     assert result.status is CommandStatus.FINDINGS_OPEN
@@ -58,7 +73,7 @@ def test_failure_reasons_are_path_sanitized(capsys) -> None:
 def test_gh_not_installed_message_keeps_install_url(capsys) -> None:
     report = _report(RepoScanOutcome("sentinel-priv", "failed", error=GH_NOT_INSTALLED_MESSAGE))
 
-    result = _scan_command_result(report)
+    result = _scan_command_result(report, Path("work"))
     err = capsys.readouterr().err
 
     assert result.status is CommandStatus.FINDINGS_OPEN
@@ -80,7 +95,7 @@ def test_access_denied_and_no_auth_messages_surface_verbatim(capsys) -> None:
         ),
     )
 
-    result = _scan_command_result(report)
+    result = _scan_command_result(report, Path("work"))
     err = capsys.readouterr().err
 
     assert result.status is CommandStatus.FINDINGS_OPEN

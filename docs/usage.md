@@ -263,9 +263,7 @@ Exit codes are:
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
 repolens scan      --work-root work  # first use verifies Syft cache, then writes SBOMs
-ls work/work                         # choose a repo_ref directory created by scan
-repolens resolve --work-root work --repo-ref sentinel-alpha
-                                      # license resolution for one existing repo SBOM
+repolens resolve --work-root work    # license resolution for scanned repo SBOMs
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
 repolens shortlist --work-root work [--identity <REVIEWER>]
                                       # settle flagged items + human approval
@@ -416,19 +414,19 @@ layered at the runner — see
 
 ## `resolve` — license ladder → `resolved.ndjson`
 
-For the resolution stage, `<WORK>/work/<REPO_REF>/sbom.syft.json` must already exist:
+For the resolution stage, scan must already have written SBOMs under
+`<WORK>/work/<repo_ref>/sbom.syft.json`:
 
 ```bash
-ls <WORK>/work
-repolens resolve --work-root <WORK> --repo-ref sentinel-alpha
+repolens resolve --work-root <WORK>
 ```
 
-`<REPO_REF>` is the directory name created by `scan` under `<WORK>/work/`, not the
-`--work-root` path itself. For example, after `scan` writes
-`work/work/sentinel-alpha/sbom.syft.json`, run `repolens resolve --work-root work
---repo-ref sentinel-alpha`.
+By default, `resolve` processes every scanned repo with an SBOM under
+`<WORK>/work/` and writes `<WORK>/work/<repo_ref>/resolved.ndjson` for each one.
+Use `--repo-ref <REPO_REF>` only when you intentionally want to resolve a single
+repo artifact directory.
 
-That no-flag form preserves the API-layer behavior: Syft-declared licenses and
+That normal form preserves the API-layer behavior: Syft-declared licenses and
 verified metadata API evidence are written to `resolved.ndjson`; unresolved records
 remain schema-valid.
 
@@ -442,12 +440,14 @@ repolens resolve \
   --source-root fixtures/source/sentinel-mobile
 ```
 
-`--source-root` is read-only input. It lets `resolve` detect mobile markers and derive
-package-local ScanCode targets from SBOM `locations`. ScanCode is invoked only for
-dependencies still unresolved by earlier layers, and target selection rejects broad
-repository-root scans and paths outside the source root. If the canonical
-hash-pinned/bootstrap-produced ScanCode executable is unavailable, affected packages
-stay unresolved instead of failing the run.
+`--source-root` is read-only input and currently requires `--repo-ref` when more
+than one scanned repo exists, because one source checkout can only describe one
+repository. It lets `resolve` detect mobile markers and derive package-local
+ScanCode targets from SBOM `locations`. ScanCode is invoked only for dependencies
+still unresolved by earlier layers, and target selection rejects broad repository-root
+scans and paths outside the source root. If the canonical hash-pinned/bootstrap-produced
+ScanCode executable is unavailable, affected packages stay unresolved instead of failing
+the run.
 
 Native mobile enrichment is opt-in and remains off by default even when mobile markers
 are present:
