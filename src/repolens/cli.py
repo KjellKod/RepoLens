@@ -361,7 +361,14 @@ def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
         type=float,
         default=None,
         metavar="SECONDS",
-        help="Per-repo wall-clock budget for the Syft scan (default: clone timeout).",
+        help="Per-repo wall-clock budget for the Syft scan.",
+    )
+    subparser.add_argument(
+        "--clone-timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Per-repo wall-clock budget for hardened git clone (default: 300).",
     )
     subparser.add_argument(
         "--yes",
@@ -439,7 +446,14 @@ def _configure_run_parser(subparser: argparse.ArgumentParser) -> None:
         type=float,
         default=None,
         metavar="SECONDS",
-        help="Per-repo wall-clock budget for the Syft scan (default: clone timeout).",
+        help="Per-repo wall-clock budget for the Syft scan.",
+    )
+    subparser.add_argument(
+        "--clone-timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Per-repo wall-clock budget for hardened git clone (default: 300).",
     )
     subparser.set_defaults(handler=_run_command)
 
@@ -630,8 +644,8 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
 
 
 def _run_command(args: argparse.Namespace) -> CommandResult:
-    if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
-        raise InputError("--timeout must be a positive number of seconds")
+    _validate_positive_timeout("--timeout", args.timeout)
+    _validate_positive_timeout("--clone-timeout", args.clone_timeout)
 
     work_root = Path(args.work_root)
     out_dir = Path(args.out_dir)
@@ -735,7 +749,7 @@ def _run_scan_stage(args: argparse.Namespace) -> ScanReport | None:
     scan_args = _stage_args(args, work_root=work_root)
     syft_path = _ensure_syft_for_scan(scan_args)
     progress = _ScanProgressPrinter(quiet=args.quiet, stream=sys.stderr)
-    extra = {"timeout_seconds": args.timeout} if args.timeout is not None else {}
+    extra = _scan_timeout_kwargs(args, scan_runner)
     try:
         report = scan_runner.scan_repos(
             work_root,
@@ -801,6 +815,7 @@ def _stage_args(
         yes=getattr(source, "yes", False),
         owner=getattr(source, "owner", None),
         timeout=getattr(source, "timeout", None),
+        clone_timeout=getattr(source, "clone_timeout", None),
         repos=None,
         offline=False,
         repo_ref=None,
@@ -1165,8 +1180,8 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
 
     if args.offline and args.yes:
         raise InputError("--offline cannot be combined with --yes")
-    if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
-        raise InputError("--timeout must be a positive number of seconds")
+    _validate_positive_timeout("--timeout", args.timeout)
+    _validate_positive_timeout("--clone-timeout", args.clone_timeout)
     if args.repos is not None:
         repos = load_explicit_repo_specs(args.repos, scan_runner.RepoSpec)
     else:
@@ -1176,7 +1191,7 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     # finishing the batch when expected per-repo failures occurred. The credential
     # provider resolves a read-only GitHub token lazily, only when a private repo
     # is encountered. A None timeout uses the default per-repo budget.
-    extra = {"timeout_seconds": args.timeout} if args.timeout is not None else {}
+    extra = _scan_timeout_kwargs(args, scan_runner)
     progress = _ScanProgressPrinter(quiet=args.quiet, stream=sys.stderr)
     try:
         report = scan_runner.scan_repos(
@@ -1193,6 +1208,23 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
         report = exc.report
     progress.finish(report)
     return _scan_command_result(report, args.work_root)
+
+
+def _validate_positive_timeout(name: str, value: float | None) -> None:
+    if value is not None and (not math.isfinite(value) or value <= 0):
+        raise InputError(f"{name} must be a positive number of seconds")
+
+
+def _scan_timeout_kwargs(args: argparse.Namespace, scan_runner: object) -> dict[str, float]:
+    kwargs: dict[str, float] = {}
+    if args.timeout is not None:
+        kwargs["timeout_seconds"] = args.timeout
+    clone_timeout = getattr(args, "clone_timeout", None)
+    if clone_timeout is None:
+        clone_timeout = scan_runner.configured_clone_timeout_seconds(args.runtime_config.values)
+    if clone_timeout is not None:
+        kwargs["clone_timeout_seconds"] = clone_timeout
+    return kwargs
 
 
 class _ScanProgressPrinter:

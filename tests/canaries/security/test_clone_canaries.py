@@ -51,16 +51,22 @@ def test_post_checkout_hook_does_not_execute(
     (hooks / "post-checkout").chmod(0o755)
 
     def fake_run(command, **kwargs):
+        del kwargs
         if command == ["git", "--version"]:
             return subprocess.CompletedProcess(command, 0, stdout="git version 2.52.0\n", stderr="")
-        assert "--no-recurse-submodules" in command
-        assert "core.hooksPath=/dev/null" in command
-        clone_path = Path(command[-1])
-        shutil.copytree(source, clone_path, ignore=shutil.ignore_patterns(".git"))
+        if "clone" in command:
+            assert "--no-recurse-submodules" in command
+            assert "--filter=blob:none" in command
+            assert "--no-checkout" in command
+            assert "core.hooksPath=/dev/null" in command
+            clone_path = Path(command[-1])
+            shutil.copytree(source, clone_path, ignore=shutil.ignore_patterns(".git"))
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    destination = hardened_clone(CloneOptions(str(source), tmp_path / "clone"))
+    destination = hardened_clone(
+        CloneOptions("https://example.invalid/project.git", tmp_path / "clone")
+    )
     assert destination.exists()
     assert not sentinel.exists()
 
@@ -82,6 +88,7 @@ def test_submodule_is_not_checked_out_or_contacted(
     )
 
     def fake_run(command, **kwargs):
+        del kwargs
         if command == ["git", "--version"]:
             return subprocess.CompletedProcess(command, 0, stdout="git version 2.52.0\n", stderr="")
         if command[:2] == ["git", "config"]:
@@ -91,12 +98,15 @@ def test_submodule_is_not_checked_out_or_contacted(
                 stdout="submodule.acme-lib.url https://attacker.example/acme-lib\n",
                 stderr="",
             )
-        clone_path = Path(command[-1])
-        shutil.copytree(source, clone_path, ignore=shutil.ignore_patterns(".git"))
+        if "clone" in command:
+            clone_path = Path(command[-1])
+            shutil.copytree(source, clone_path, ignore=shutil.ignore_patterns(".git"))
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
-    destination = hardened_clone(CloneOptions(str(source), tmp_path / "clone"))
+    destination = hardened_clone(
+        CloneOptions("https://example.invalid/project.git", tmp_path / "clone")
+    )
     assert (destination / ".gitmodules").exists()
     assert not (destination / "vendor" / "acme-lib").exists()
 
@@ -116,6 +126,7 @@ def test_file_protocol_submodule_is_blocked(
     )
 
     def fake_run(command, **kwargs):
+        del kwargs
         if command == ["git", "--version"]:
             return subprocess.CompletedProcess(command, 0, stdout="git version 2.52.0\n", stderr="")
         if command[:2] == ["git", "config"]:
@@ -125,12 +136,13 @@ def test_file_protocol_submodule_is_blocked(
                 stdout="submodule.acme-lib.url file:///etc/passwd\n",
                 stderr="",
             )
-        clone_path = Path(command[-1])
-        shutil.copytree(source, clone_path, ignore=shutil.ignore_patterns(".git"))
+        if "clone" in command:
+            clone_path = Path(command[-1])
+            shutil.copytree(source, clone_path, ignore=shutil.ignore_patterns(".git"))
         return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     with pytest.raises(CloneSecurityError):
-        hardened_clone(CloneOptions(str(source), tmp_path / "clone"))
+        hardened_clone(CloneOptions("https://example.invalid/project.git", tmp_path / "clone"))
     assert not (tmp_path / "clone").exists()
     assert not list(tmp_path.glob(".clone.clone-*"))

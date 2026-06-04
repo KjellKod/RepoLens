@@ -8,8 +8,10 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from subprocess import CompletedProcess
 from urllib.parse import urlparse
 
 from repolens.security.errors import (
@@ -17,6 +19,7 @@ from repolens.security.errors import (
     CloneAuthRequired,
     CloneRateLimited,
     CloneSecurityError,
+    CloneTimeout,
     CloneTransient,
 )
 from repolens.security.limits import DEFAULT_LIMITS, SecurityLimits
@@ -44,6 +47,61 @@ _CLONE_FLAGS = (
     "--single-branch",
     "--no-recurse-submodules",
 )
+_PARTIAL_CLONE_FLAGS = ("--filter=blob:none", "--no-checkout")
+SPARSE_MANIFEST_PATTERNS = (
+    "**/build.gradle",
+    "**/build.gradle.kts",
+    "**/settings.gradle",
+    "**/settings.gradle.kts",
+    "**/gradle/libs.versions.toml",
+    "**/gradle.lockfile",
+    "**/package.json",
+    "**/package-lock.json",
+    "**/npm-shrinkwrap.json",
+    "**/yarn.lock",
+    "**/pnpm-lock.yaml",
+    "**/Cargo.toml",
+    "**/Cargo.lock",
+    "**/pyproject.toml",
+    "**/setup.py",
+    "**/setup.cfg",
+    "**/requirements*.txt",
+    "**/Pipfile",
+    "**/Pipfile.lock",
+    "**/poetry.lock",
+    "**/uv.lock",
+    "**/go.mod",
+    "**/go.sum",
+    "**/pom.xml",
+    "**/*.csproj",
+    "**/packages.config",
+    "**/*.nuspec",
+    "**/Gemfile",
+    "**/Gemfile.lock",
+    "**/*.gemspec",
+    "**/Podfile",
+    "**/Podfile.lock",
+    "**/*.podspec",
+    "**/Package.swift",
+    "**/Package.resolved",
+    "**/Cartfile",
+    "**/Cartfile.resolved",
+    "**/composer.json",
+    "**/composer.lock",
+    "**/LICENSE*",
+    "**/COPYING*",
+    ".gitmodules",
+    "**/.gitmodules",
+)
+_UNSUPPORTED_PARTIAL_CLONE_MARKERS = (
+    "filtering not recognized by server, ignoring",
+    "filtering not supported by server, ignoring",
+    "server does not support filter",
+    "filter 'blob:none' not supported",
+    "partial clone is not supported",
+    "unrecognized filter",
+    "unknown filter",
+)
 
 
 #: git extraheader config key that scopes the injected credential to github.com.
@@ -59,7 +117,7 @@ class CloneCredential:
     header form) cannot leak through a stack trace, an f-string, or
     ``CloneOptions``' repr. The credential is injected via process-scoped
     ``GIT_CONFIG_*`` env entries (honoured since git 2.31) so it lives only inside
-    the hook-disabled fetch subprocess and is gone when ``hardened_clone`` returns.
+    hook-disabled network git subprocesses and is gone when ``hardened_clone`` returns.
     """
 
     secret: str = field(repr=False)
@@ -102,7 +160,7 @@ class CloneOptions:
     limits: SecurityLimits = DEFAULT_LIMITS
     git_executable: str = "git"
     min_git_version: tuple[int, int, int] = MIN_GIT_VERSION
-    #: Optional read-only credential injected into the fetch subprocess only.
+    #: Optional read-only credential injected into clone/checkout network subprocesses only.
     #: ``CloneCredential`` guards its own repr, so ``CloneOptions`` repr is safe.
     credential: CloneCredential | None = None
 
@@ -111,7 +169,7 @@ def build_hardened_clone_command(remote_url: str, destination: Path | str) -> Cl
     """Return a hardened git clone invocation without executing it."""
 
     _validate_https_remote(remote_url)
-    command = _build_clone_command(
+    command = _build_partial_clone_command(
         CloneOptions(remote_url=remote_url, destination=Path(destination)),
         Path(destination),
     )
@@ -127,6 +185,7 @@ def hardened_clone(options: CloneOptions) -> Path:
     """Clone a repository with mandatory git hardening and cleanup."""
 
     _reject_file_remote(options.remote_url)
+    _validate_https_remote(options.remote_url)
     destination = Path(options.destination)
     if destination.exists():
         raise CloneSecurityError(f"destination already exists: {destination}")
@@ -142,31 +201,122 @@ def hardened_clone(options: CloneOptions) -> Path:
     temp_dir = Path(tempfile.mkdtemp(prefix=f".{destination.name}.clone-", dir=temp_parent))
     clone_path = temp_dir / "repo"
     try:
-        command = _build_clone_command(options, clone_path)
-        # The credential (when present) is injected ONLY here, into the child env
-        # of the hook-disabled fetch subprocess. _assert_git_version and
-        # _validate_gitmodules deliberately stay credential-free.
-        completed = subprocess.run(
+        started_at = time.monotonic()
+        command = _build_partial_clone_command(options, clone_path)
+        # The credential (when present) is scoped to network git subprocesses.
+        # _assert_git_version, sparse config, and _validate_gitmodules stay
+        # credential-free.
+        completed = _run_git(
             command,
-            env=_scrubbed_git_env(credential=options.credential),
-            capture_output=True,
-            text=True,
-            timeout=options.limits.clone_timeout_seconds,
-            check=False,
+            options=options,
+            credential=options.credential,
+            started_at=started_at,
         )
-        if completed.returncode != 0:
-            message = _safe_git_error(completed.stderr)
-            raise classify_git_failure(completed.returncode, completed.stderr)(message)
+        partial_unsupported = _partial_clone_filter_unsupported(completed.stderr)
+        if completed.returncode != 0 and _can_fallback_to_full_clone(completed):
+            _run_full_clone_fallback(options, clone_path, started_at=started_at)
+        elif completed.returncode != 0:
+            _raise_git_failure(completed)
+        elif partial_unsupported:
+            shutil.rmtree(clone_path, ignore_errors=True)
+            _run_full_clone_fallback(options, clone_path, started_at=started_at)
+        else:
+            _run_sparse_checkout(options, clone_path, started_at=started_at)
 
         _validate_gitmodules(clone_path / ".gitmodules", git_executable=options.git_executable)
         shutil.move(str(clone_path), str(destination))
         return destination
-    except subprocess.TimeoutExpired as exc:
-        # A hung/slow fetch is a network-class condition: surface it as transient
-        # so the runner's bounded retry + max_elapsed budget engage (AC#5).
-        raise CloneTransient("git clone timed out") from exc
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+
+def is_sparse_manifest_path(path: str | Path) -> bool:
+    """Return whether ``path`` is included by the scan sparse manifest policy."""
+
+    normalized = Path(path).as_posix().lstrip("/")
+    parts = tuple(part for part in normalized.split("/") if part)
+    if not parts or ".." in parts:
+        return False
+    name = parts[-1]
+    parent = parts[-2] if len(parts) >= 2 else ""
+    return (
+        name in _EXACT_MANIFEST_NAMES
+        or name.startswith("requirements")
+        and name.endswith(".txt")
+        or name.startswith("LICENSE")
+        or name.startswith("COPYING")
+        or name.endswith((".csproj", ".nuspec", ".gemspec", ".podspec"))
+        or name == "libs.versions.toml"
+        and parent == "gradle"
+    )
+
+
+def _run_full_clone_fallback(
+    options: CloneOptions,
+    clone_path: Path,
+    *,
+    started_at: float,
+) -> None:
+    completed = _run_git(
+        _build_clone_command(options, clone_path),
+        options=options,
+        credential=options.credential,
+        started_at=started_at,
+    )
+    if completed.returncode != 0:
+        _raise_git_failure(completed)
+
+
+def _run_sparse_checkout(options: CloneOptions, clone_path: Path, *, started_at: float) -> None:
+    for command, credential in (
+        (_build_sparse_init_command(options, clone_path), None),
+        (_build_sparse_set_command(options, clone_path), None),
+        (_build_checkout_command(options, clone_path), options.credential),
+    ):
+        completed = _run_git(command, options=options, credential=credential, started_at=started_at)
+        if completed.returncode != 0:
+            _raise_git_failure(completed)
+
+
+def _run_git(
+    command: list[str],
+    *,
+    options: CloneOptions,
+    credential: CloneCredential | None,
+    started_at: float,
+) -> CompletedProcess[str]:
+    remaining_timeout = _remaining_clone_timeout(options, started_at)
+    try:
+        return subprocess.run(
+            command,
+            env=_scrubbed_git_env(credential=credential),
+            capture_output=True,
+            text=True,
+            timeout=remaining_timeout,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        elapsed = max(0.0, time.monotonic() - started_at)
+        raise CloneTimeout(
+            configured_seconds=options.limits.clone_timeout_seconds,
+            elapsed_seconds=elapsed,
+        ) from exc
+
+
+def _remaining_clone_timeout(options: CloneOptions, started_at: float) -> float:
+    elapsed = max(0.0, time.monotonic() - started_at)
+    remaining = options.limits.clone_timeout_seconds - elapsed
+    if remaining <= 0:
+        raise CloneTimeout(
+            configured_seconds=options.limits.clone_timeout_seconds,
+            elapsed_seconds=elapsed,
+        )
+    return remaining
+
+
+def _raise_git_failure(completed: CompletedProcess[str]) -> None:
+    message = _safe_git_error(completed.stderr)
+    raise classify_git_failure(completed.returncode, completed.stderr)(message)
 
 
 def _build_clone_command(options: CloneOptions, clone_path: Path) -> list[str]:
@@ -179,6 +329,50 @@ def _build_clone_command(options: CloneOptions, clone_path: Path) -> list[str]:
         command.extend(["--branch", options.branch])
     command.extend(["--", options.remote_url, str(clone_path)])
     return command
+
+
+def _build_partial_clone_command(options: CloneOptions, clone_path: Path) -> list[str]:
+    command = _build_clone_command(options, clone_path)
+    insert_at = command.index("clone") + 1
+    command[insert_at:insert_at] = list(_PARTIAL_CLONE_FLAGS)
+    return command
+
+
+def _build_sparse_init_command(options: CloneOptions, clone_path: Path) -> list[str]:
+    return _build_repo_command(options, clone_path, "sparse-checkout", "init", "--no-cone")
+
+
+def _build_sparse_set_command(options: CloneOptions, clone_path: Path) -> list[str]:
+    return _build_repo_command(
+        options,
+        clone_path,
+        "sparse-checkout",
+        "set",
+        "--no-cone",
+        "--",
+        *SPARSE_MANIFEST_PATTERNS,
+    )
+
+
+def _build_checkout_command(options: CloneOptions, clone_path: Path) -> list[str]:
+    return _build_repo_command(options, clone_path, "checkout")
+
+
+def _build_repo_command(options: CloneOptions, clone_path: Path, *args: str) -> list[str]:
+    command = [options.git_executable]
+    for key, value in _HARDENING_CONFIG:
+        command.extend(["-c", f"{key}={value}"])
+    command.extend(["-C", str(clone_path), *args])
+    return command
+
+
+_EXACT_MANIFEST_NAMES = frozenset(
+    pattern.removeprefix("**/")
+    for pattern in SPARSE_MANIFEST_PATTERNS
+    if pattern.startswith("**/")
+    and not any(char in pattern.removeprefix("**/") for char in "*?")
+    and "/" not in pattern.removeprefix("**/")
+)
 
 
 def _scrubbed_git_env(
@@ -266,6 +460,31 @@ def classify_git_failure(returncode: int, stderr: str) -> type[CloneSecurityErro
     ):
         return CloneTransient
     return CloneSecurityError
+
+
+def _partial_clone_filter_unsupported(stderr: str) -> bool:
+    text = (stderr or "").casefold()
+    return any(marker in text for marker in _UNSUPPORTED_PARTIAL_CLONE_MARKERS)
+
+
+def _can_fallback_to_full_clone(completed: CompletedProcess[str]) -> bool:
+    if not _partial_clone_filter_unsupported(completed.stderr):
+        return False
+    if classify_git_failure(completed.returncode, completed.stderr) is not CloneSecurityError:
+        return False
+    return _only_partial_clone_unsupported_stderr(completed.stderr)
+
+
+def _only_partial_clone_unsupported_stderr(stderr: str) -> bool:
+    lines = []
+    for raw_line in (stderr or "").splitlines():
+        line = raw_line.strip().casefold()
+        if not line or line.startswith("cloning into "):
+            continue
+        lines.append(line)
+    return bool(lines) and all(
+        any(marker in line for marker in _UNSUPPORTED_PARTIAL_CLONE_MARKERS) for line in lines
+    )
 
 
 def _assert_git_version(

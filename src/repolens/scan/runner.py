@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import math
 import os
 import re
 import shutil
@@ -26,7 +27,7 @@ import tempfile
 import time
 import tomllib
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -45,9 +46,10 @@ from repolens.security.errors import (
     CloneAuthRequired,
     CloneRateLimited,
     CloneSecurityError,
+    CloneTimeout,
     CloneTransient,
 )
-from repolens.security.limits import DEFAULT_LIMITS
+from repolens.security.limits import DEFAULT_LIMITS, SecurityLimits
 from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
 from repolens.security.retry import DEFAULT_BASE_DELAY, retry_with_backoff
 
@@ -305,6 +307,17 @@ def configured_syft_catalogers(config_values: dict[str, Any]) -> tuple[str, ...]
     return catalogers
 
 
+def configured_clone_timeout_seconds(config_values: dict[str, Any]) -> float | None:
+    """Return optional scan clone timeout from runtime config."""
+
+    raw = _nested_config(config_values, ("scan", "clone_timeout_seconds"))
+    if raw is None:
+        return None
+    if not isinstance(raw, int | float) or not math.isfinite(float(raw)) or float(raw) <= 0:
+        raise InputError("scan.clone_timeout_seconds must be a positive number of seconds")
+    return float(raw)
+
+
 def _nested_config(config_values: dict[str, Any], path: tuple[str, ...]) -> Any:
     current: Any = config_values
     for key in path:
@@ -558,6 +571,7 @@ def _scan_one(
     get_credential: CredentialProvider,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
+    clone_limits: SecurityLimits,
 ) -> tuple[RepoScanOutcome, int | None]:
     repo_dir = repo_dir_fn(work_root, repo.repo_ref)
     repo_dir.mkdir(parents=True, exist_ok=True)
@@ -589,6 +603,7 @@ def _scan_one(
             credential=credential,
             sleep=sleep,
             monotonic=monotonic,
+            clone_limits=clone_limits,
         )
         document = _run_syft(
             command_runner,
@@ -674,6 +689,7 @@ def _clone_with_retry(
     credential: CloneCredential | None,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
+    clone_limits: SecurityLimits,
 ) -> Path:
     """Clone with bounded retry on transient/rate-limit failures only.
 
@@ -684,7 +700,7 @@ def _clone_with_retry(
     options = CloneOptions(
         remote_url=repo.clone_url,
         destination=workdir / "repo",
-        limits=DEFAULT_LIMITS,
+        limits=clone_limits,
         credential=credential,
     )
     return retry_with_backoff(
@@ -693,7 +709,7 @@ def _clone_with_retry(
         max_attempts=CLONE_RETRY_MAX_ATTEMPTS,
         base_delay=DEFAULT_BASE_DELAY,
         sleep=sleep,
-        max_elapsed=DEFAULT_LIMITS.clone_timeout_seconds * _CLONE_ELAPSED_BUDGET_FACTOR,
+        max_elapsed=clone_limits.clone_timeout_seconds * _CLONE_ELAPSED_BUDGET_FACTOR,
         monotonic=monotonic,
     )
 
@@ -713,6 +729,8 @@ def _failure_message(repo: RepoSpec, exc: Exception) -> str:
         return private_repo_needs_auth_message(repo.repo_ref)
     if isinstance(exc, CloneAccessDenied):
         return access_denied_message(repo.repo_ref)
+    if isinstance(exc, CloneTimeout):
+        return str(exc)
     if isinstance(exc, CloneRateLimited | CloneTransient):
         return rate_limited_message(CLONE_RETRY_MAX_ATTEMPTS)
     return redact_tokens(str(exc))[:500]
@@ -767,6 +785,7 @@ def scan_repos(
     *,
     syft_path: str | Path,
     timeout_seconds: float = DEFAULT_LIMITS.clone_timeout_seconds,
+    clone_timeout_seconds: float = DEFAULT_LIMITS.clone_timeout_seconds,
     clone: CloneFn | None = None,
     command_runner: CommandRunner | None = None,
     clock: Callable[[], str] | None = None,
@@ -824,6 +843,9 @@ def scan_repos(
     get_credential = _memoized_credential_provider(credential_provider)
 
     syft = Path(syft_path)
+    if not math.isfinite(clone_timeout_seconds) or clone_timeout_seconds <= 0:
+        raise InputError("clone_timeout_seconds must be a positive number of seconds")
+    clone_limits = replace(DEFAULT_LIMITS, clone_timeout_seconds=clone_timeout_seconds)
     outcomes: list[RepoScanOutcome] = []
     total = len(repos)
     for index, repo in enumerate(repos, start=1):
@@ -862,6 +884,7 @@ def scan_repos(
             get_credential=get_credential,
             sleep=sleep,
             monotonic=monotonic,
+            clone_limits=clone_limits,
         )
         outcomes.append(outcome)
         if progress is not None:
