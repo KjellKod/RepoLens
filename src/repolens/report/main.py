@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -72,6 +73,17 @@ class DisclosureRow:
 
 
 @dataclass(frozen=True)
+class ReportAppendixSummary:
+    """Summary metadata for one appendix label."""
+
+    label: str
+    row_count: int
+    markdown_path: Path
+    csv_path: Path
+    coverage_gaps: tuple[tuple[str, int], ...] = ()
+
+
+@dataclass(frozen=True)
 class ReportResult:
     """Paths and summary for emitted report artifacts.
 
@@ -85,6 +97,8 @@ class ReportResult:
     file_gaps: tuple[str, ...]
     docx_path: Path | None = None
     appendix_paths: tuple[Path, ...] = ()
+    appendices: tuple[ReportAppendixSummary, ...] = ()
+    coverage_gaps: tuple[tuple[str, int], ...] = ()
     docx_skipped: bool = False
 
 
@@ -146,7 +160,7 @@ def render_main_report(
     """
 
     root = Path(work_root)
-    output_dir = Path(out_dir) if out_dir is not None else root / "out"
+    output_dir = Path(out_dir) if out_dir is not None else root / "reports"
     gate = run_report_gate(root)
     if not gate.clear:
         raise ReportGateOpen(gate.message)
@@ -168,6 +182,7 @@ def render_main_report(
     store.atomic_write_bytes(markdown_path, markdown_text.encode("utf-8"))
 
     appendix_paths: list[Path] = []
+    appendices: list[ReportAppendixSummary] = []
     for label, routed_records in split.appendix_records_by_label.items():
         appendix_rows = aggregate_rows(routed_records)
         stem = f"report.appendix.{quote(label, safe='')}"
@@ -184,6 +199,15 @@ def render_main_report(
         store.atomic_write_bytes(appendix_csv_path, appendix_csv.encode("utf-8"))
         store.atomic_write_bytes(appendix_markdown_path, appendix_markdown.encode("utf-8"))
         appendix_paths.extend((appendix_markdown_path, appendix_csv_path))
+        appendices.append(
+            ReportAppendixSummary(
+                label=label,
+                row_count=len(appendix_rows),
+                markdown_path=appendix_markdown_path,
+                csv_path=appendix_csv_path,
+                coverage_gaps=_coverage_gap_counts(appendix_rows),
+            )
+        )
 
     # Presentation-only docx: config → prompt (TTY) → skip (non-TTY / no owner).
     out_stream = output_stream if output_stream is not None else sys.stderr
@@ -209,6 +233,8 @@ def render_main_report(
         row_count=len(rows),
         file_gaps=tuple(file_gaps),
         appendix_paths=tuple(appendix_paths),
+        appendices=tuple(appendices),
+        coverage_gaps=_coverage_gap_counts(rows, file_gaps),
         docx_skipped=docx_skipped,
     )
 
@@ -447,6 +473,17 @@ def _join(values: Sequence[str]) -> str:
 
 def _coverage(gaps: Sequence[str]) -> str:
     return _join(gaps) if gaps else _NONE
+
+
+def _coverage_gap_counts(
+    rows: Sequence[DisclosureRow],
+    file_gaps: Sequence[str] = (),
+) -> tuple[tuple[str, int], ...]:
+    counter: Counter[str] = Counter()
+    for row in rows:
+        counter.update(row.coverage_gaps)
+    counter.update(file_gaps)
+    return tuple(sorted(counter.items(), key=lambda item: (item[0].casefold(), item[0])))
 
 
 def _markdown_source_urls(source_urls: Sequence[str]) -> str:

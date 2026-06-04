@@ -92,6 +92,48 @@ def test_run_full_pipeline_writes_report(monkeypatch: pytest.MonkeyPatch, tmp_pa
     assert (out_dir / "report.main.csv").exists()
 
 
+def test_run_defaults_out_dir_under_work_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+    assert (work_root / "reports" / "report.main.csv").exists()
+
+
+def test_report_command_defaults_out_dir_under_work_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    resolved_record: dict[str, object],
+) -> None:
+    from repolens.config import Config
+
+    work_root = tmp_path / "work"
+    store.write_resolved(
+        work_root,
+        "sentinel-alpha",
+        [{**resolved_record, "repo": "sentinel-alpha"}],
+    )
+    monkeypatch.setattr(cli, "load_config", lambda _root, _path: Config(values={}, sources=()))
+
+    code = cli.main(["report", "--work-root", str(work_root)])
+
+    assert code == 0
+    assert (work_root / "reports" / "report.main.md").exists()
+    assert (work_root / "reports" / "report.main.csv").exists()
+
+
 def test_run_yes_no_header_skips_docx_via_report_stage(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -794,6 +836,64 @@ def test_run_yes_open_shortlist_emits_contexts_without_proposal_or_report(
     assert calls == [(work_root / "shortlist.contexts.json", None)]
 
 
+def test_open_shortlist_noninteractive_prints_instruction_once(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_shortlist_open_count", lambda _work_root: 1)
+    monkeypatch.setattr(
+        cli,
+        "_shortlist_stage",
+        lambda _args: cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "open"),
+    )
+    monkeypatch.setattr("sys.stderr", io.StringIO())
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--yes",
+        ]
+    )
+
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.out.count("Open shipped-license findings: 1") == 1
+    assert "Open shipped-license findings: 1" not in captured.err
+
+
+def test_run_yes_ingests_existing_shortlist_proposals_before_halt(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work"
+    work_root.mkdir()
+    (work_root / "shortlist.proposals.json").write_text("[]\n", encoding="utf-8")
+    calls: list[tuple[Path | None, Path | None]] = []
+    open_counts = iter([1, 0])
+
+    def shortlist(args):
+        calls.append((args.emit_contexts, args.proposals))
+        return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "open")
+
+    monkeypatch.setattr(cli, "_shortlist_stage", shortlist)
+    monkeypatch.setattr(cli, "_shortlist_open_count", lambda _work_root: next(open_counts))
+    args = SimpleNamespace(runtime_config=object(), quiet=True, yes=True, timeout=None)
+
+    result = cli._run_shortlist_loop(args, work_root, interactive=False)
+
+    assert result is None
+    assert calls == [
+        (work_root / "shortlist.contexts.json", None),
+        (None, work_root / "shortlist.proposals.json"),
+    ]
+
+
 def test_run_shortlist_loop_ingests_proposals_then_human_decisions(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -821,6 +921,40 @@ def test_run_shortlist_loop_ingests_proposals_then_human_decisions(
         (None, work_root / "shortlist.proposals.json"),
         (None, None),
     ]
+
+
+def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: Path) -> None:
+    reports_dir = tmp_path / "reports"
+    reports_dir.mkdir()
+    main_md = reports_dir / "report.main.md"
+    main_csv = reports_dir / "report.main.csv"
+    appendix_md = reports_dir / "report.appendix.build-ci.md"
+    appendix_csv = reports_dir / "report.appendix.build-ci.csv"
+    for path in (main_md, main_csv, appendix_md, appendix_csv):
+        path.write_text("x\n", encoding="utf-8")
+    summary = cli.RunSummary(
+        repo_refs={"sentinel-alpha"},
+        report_rows=2,
+        failures=[cli.RunFailure("scan", "sentinel-private", "needs auth")],
+        skipped=1,
+        reports_dir=reports_dir,
+        report_paths=(main_md, main_csv),
+        appendix_rows_by_label={"build-ci": 1},
+        appendix_paths_by_label={"build-ci": (appendix_md, appendix_csv)},
+        coverage_gaps_by_label={"build-ci": {"missing_spdx_id": 1, "missing_source_url": 1}},
+        docx_skipped=True,
+    )
+
+    message = cli._run_done_message(summary)
+
+    assert "skipped/failed" not in message
+    assert "Resume skips: 1" in message
+    assert "Failures: 1" in message
+    assert "Appendix rows: build-ci=1" in message
+    assert (
+        "Coverage gaps to double-check: build-ci: missing_source_url=1, missing_spdx_id=1"
+    ) in message
+    assert "Docx skipped" in message
 
 
 def test_step_ignored_when_noninteractive(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
