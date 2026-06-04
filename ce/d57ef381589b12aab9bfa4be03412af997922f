@@ -1,0 +1,30 @@
+docs/roadmap/rpl_architecture.md
+  s_88f7ae6c4bbb59::t_300957441e7d11 32-36
+src/repolens/cli.py
+  s_88f7ae6c4bbb59::t_49e60e2418d5b1 362-369,660-663,829,831-832,859,862,864,878-961
+  s_88f7ae6c4bbb59::t_b58a477d012e6b 833-853,860
+src/repolens/resolve/stage.py
+  s_88f7ae6c4bbb59::t_86e8a534250ae4 54,66-67,88-109,112-113,174,201,251,265-272
+tests/unit/test_resolve_stage.py
+  s_88f7ae6c4bbb59::t_c5786ea7680b87 219-269,275-278,529,547,554-555
+  s_88f7ae6c4bbb59::t_72f5e5713630f7 270-274
+tests/integration/test_resolve_cli.py
+  s_88f7ae6c4bbb59::t_00837c0a3051ec 5-6,42-77
+  s_88f7ae6c4bbb59::t_5ef4e636db1c9e 80-98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "ced57ef381589b12aab9bfa4be03412af997922f",
+  "prompts": {},
+  "sessions": {
+    "s_88f7ae6c4bbb59": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e90ff-1996-7b52-b191-4b7d994a4e01",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
