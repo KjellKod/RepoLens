@@ -219,7 +219,10 @@ def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[Dis
         if spdx_id == _UNKNOWN:
             group.coverage_gaps.add("missing_spdx_id")
 
-        group.versions.add(str(record["version"]))
+        version = str(record["version"])
+        group.versions.add(version)
+        if version == "unknown":
+            group.coverage_gaps.add("missing_version")
         group.found_in.add(str(record["repo"]))
         group.modified.add(_modified_value(record["modified"]))
 

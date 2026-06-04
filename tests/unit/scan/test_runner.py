@@ -47,6 +47,15 @@ def _clone_into(options):
     return destination
 
 
+def _clone_with_pyproject(text: str):
+    def clone(options):
+        destination = _clone_into(options)
+        (destination / "pyproject.toml").write_text(text, encoding="utf-8")
+        return destination
+
+    return clone
+
+
 def _syft_ok(document: dict):
     def runner(argv, *, timeout):
         return subprocess.CompletedProcess(list(argv), 0, stdout=json.dumps(document), stderr="")
@@ -78,6 +87,414 @@ def test_maps_syft_output_to_valid_sbom(tmp_path: Path) -> None:
     assert artifact["type"] == "python"
     assert artifact["licenses"] == ["MIT"]
     assert artifact["locations"] == ["requirements.txt"]
+
+
+def test_pyproject_project_dependencies_are_added_to_sbom(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_with_pyproject(
+            """
+[project]
+dependencies = ["Sentinel_Py.Runtime[http]==1.2.3; python_version >= '3.11'"]
+"""
+        ),
+        command_runner=_syft_ok({**_syft_document(), "artifacts": []}),
+        clock=lambda: "2026-01-01T00:00:00Z",
+    )
+
+    artifact = store.read_sbom(work_root, "acme-alpha")["artifacts"][0]
+    assert artifact == {
+        "name": "sentinel-py-runtime",
+        "type": "python",
+        "version": "1.2.3",
+        "purl": "pkg:pypi/sentinel-py-runtime@1.2.3",
+        "locations": ["pyproject.toml"],
+    }
+
+
+def test_pyproject_optional_dependencies_are_added_to_sbom(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_with_pyproject(
+            """
+[project]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["Sentinel.Optional===4.5.6"]
+"""
+        ),
+        command_runner=_syft_ok({**_syft_document(), "artifacts": []}),
+    )
+
+    artifact = store.read_sbom(work_root, "acme-alpha")["artifacts"][0]
+    assert artifact["name"] == "sentinel-optional"
+    assert artifact["version"] == "4.5.6"
+    assert artifact["purl"] == "pkg:pypi/sentinel-optional@4.5.6"
+    assert artifact["locations"] == ["pyproject.toml#project.optional-dependencies.dev"]
+
+
+def test_unpinned_pyproject_dependency_lowers_version_to_null(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_with_pyproject('[project]\ndependencies = ["Sentinel.Range>=1,<2"]\n'),
+        command_runner=_syft_ok({**_syft_document(), "artifacts": []}),
+    )
+
+    artifact = store.read_sbom(work_root, "acme-alpha")["artifacts"][0]
+    assert artifact["name"] == "sentinel-range"
+    assert artifact["version"] is None
+    assert artifact["purl"] == "pkg:pypi/sentinel-range"
+
+
+def test_pyproject_dependency_parser_skips_invalid_and_direct_reference_strings(
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work-root"
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_with_pyproject(
+            """
+[project]
+dependencies = [
+  "sentinel-keep==1.0.0",
+  "bad name == 1",
+  "sentinel-direct @ https://example.invalid/pkg.tar.gz",
+  "git+https://example.invalid/repo",
+]
+"""
+        ),
+        command_runner=_syft_ok({**_syft_document(), "artifacts": []}),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == ["sentinel-keep"]
+
+
+def test_default_exclusions_drop_test_fixture_locations_but_keep_vendor(
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {"name": "sentinel-vendor", "type": "python", "locations": [{"path": "vendor/a.py"}]},
+            {
+                "name": "sentinel-test-fixture",
+                "type": "python",
+                "locations": [{"path": "tests/fixtures/a.py"}],
+            },
+            {
+                "name": "sentinel-runtime",
+                "type": "python",
+                "locations": [{"path": "src/runtime.py"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == [
+        "sentinel-vendor",
+        "sentinel-runtime",
+    ]
+
+
+def test_default_exclusions_drop_syft_root_relative_fixture_locations(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "sentinel-test-fixture",
+                "type": "python",
+                "locations": [{"path": "/tests/fixtures/a.py"}],
+            },
+            {
+                "name": "sentinel-runtime",
+                "type": "python",
+                "locations": [{"path": "/src/runtime.py"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == ["sentinel-runtime"]
+
+
+def test_default_exclusions_drop_bootstrap_fixture_locations(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "sentinel-bootstrap-fixture",
+                "type": "python",
+                "locations": [{"path": "/tests/bootstrap/fixtures/requirements.bad.txt"}],
+            },
+            {
+                "name": "sentinel-runtime",
+                "type": "python",
+                "locations": [{"path": "/src/runtime.py"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == ["sentinel-runtime"]
+
+
+def test_default_exclusions_keep_top_level_fixtures_path(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "sentinel-sample",
+                "type": "python",
+                "locations": [{"path": "fixtures/runtime.py"}],
+            }
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == ["sentinel-sample"]
+
+
+def test_default_exclusions_preserve_leading_dot_boundary(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "sentinel-dot-git",
+                "type": "python",
+                "locations": [{"path": ".git/config"}],
+            },
+            {
+                "name": "sentinel-git-dir",
+                "type": "python",
+                "locations": [{"path": "git/config"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == ["sentinel-git-dir"]
+
+
+def test_scan_config_can_override_exclusions(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {"name": "sentinel-vendor", "type": "python", "locations": [{"path": "vendor/a.py"}]},
+            {"name": "sentinel-src", "type": "python", "locations": [{"path": "src/a.py"}]},
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+        exclude_paths=("src/",),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == ["sentinel-vendor"]
+
+
+def test_scan_config_can_opt_into_vendor_exclusion(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {"name": "sentinel-vendor", "type": "python", "locations": [{"path": "vendor/a.py"}]},
+            {"name": "sentinel-src", "type": "python", "locations": [{"path": "src/a.py"}]},
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+        exclude_paths=("vendor/",),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == ["sentinel-src"]
+
+
+def test_scan_config_ignores_absolute_and_parent_escaping_exclusions(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {"name": "sentinel-vendor", "type": "python", "locations": [{"path": "vendor/a.py"}]},
+            {"name": "sentinel-src", "type": "python", "locations": [{"path": "src/a.py"}]},
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+        exclude_paths=("/repo/vendor/", "../src/"),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == [
+        "sentinel-vendor",
+        "sentinel-src",
+    ]
+
+
+def test_exclusions_keep_artifacts_with_only_untrusted_locations(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "sentinel-absolute",
+                "type": "python",
+                "locations": [{"path": "/repo/vendor/a.py"}],
+            },
+            {
+                "name": "sentinel-parent-escaping",
+                "type": "python",
+                "locations": [{"path": "../vendor/a.py"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == [
+        "sentinel-absolute",
+        "sentinel-parent-escaping",
+    ]
+
+
+def test_scan_config_override_exclusions_match_path_boundaries(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {"name": "sentinel-src", "type": "python", "locations": [{"path": "src/a.py"}]},
+            {
+                "name": "sentinel-src-sibling",
+                "type": "python",
+                "locations": [{"path": "src2/a.py"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+        exclude_paths=("src",),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert [artifact["name"] for artifact in artifacts] == ["sentinel-src-sibling"]
+
+
+def test_restricted_syft_catalogers_keep_gradle_cocoapods_swiftpm(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    seen_argv: list[str] = []
+
+    def runner(argv, *, timeout):
+        del timeout
+        seen_argv.extend(argv)
+        return subprocess.CompletedProcess(
+            list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+        )
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=runner,
+        syft_catalogers=("python-package-cataloger",),
+    )
+
+    assert "--select-catalogers" in seen_argv
+    selected = seen_argv[seen_argv.index("--select-catalogers") + 1].split(",")
+    assert "python-package-cataloger" in selected
+    assert "java-gradle-lockfile-cataloger" in selected
+    assert "cocoapods-cataloger" in selected
+    assert "swift-package-manager-cataloger" in selected
 
 
 def test_resume_skips_already_scanned_repo(tmp_path: Path) -> None:

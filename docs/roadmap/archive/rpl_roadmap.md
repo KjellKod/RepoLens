@@ -150,12 +150,16 @@ licenses (that's P3). The "planted AGPL → BLOCK" acceptance is **P4's**, not P
       sandbox canaries green** (token absent, egress blocked); a missing mobile toolchain
       degrades gracefully — it never hard-fails the run.
 - [ ] **P4** — components carry `origin`/`scope`/`distribution`; dedup correct.
-- [ ] **Round** — re-run the M1 dogfood pipeline against this repo (owner at runtime
+- [x] **Round** — re-run the M1 dogfood pipeline against this repo (owner at runtime
       only) and re-measure the coverage gaps tracked in **issue #20**: the SBOM must
       include the pyproject-declared runtime deps, and license + source-URL coverage
       must be ~complete now that ScanCode-on-unknowns exists. When met: tick M1's
       still-open inventory acceptance box and close issue #20. If a gap remains
-      (e.g. workflow-action deps), re-scope the issue to exactly what's left.
+      (e.g. workflow-action deps), re-scope the issue to exactly what's left. Re-run
+      2026-06-04 with RepoLens dogfood: 23 deps scanned, 0 shortlist items, shipped
+      runtime deps in `report.main`, and build/CI/tooling routed to the appendix. The
+      M1 inventory box stays open until intentionally unpinned pyproject deps no longer
+      leave a `missing_version` coverage gap.
 
 ### M3 — Human-in-loop + gated full report
 Deliver P5 + P6b (full: categories → main + appendices + docx, gate).

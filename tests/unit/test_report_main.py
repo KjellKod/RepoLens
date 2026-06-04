@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -145,6 +146,18 @@ def test_coverage_gaps_are_rendered_without_dropping_rows(
     assert rows[0]["version"] == "1.2.3; 1.2.4"
     assert rows[0]["source_url"] == ""
     assert rows[0]["coverage_gaps"] == "missing_category; missing_source_url; missing_spdx_id"
+
+
+def test_unknown_version_adds_missing_version_coverage_gap(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    unknown_version = {**resolved_record, "version": "unknown"}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown_version])
+
+    rows = _csv_records(render_main_report(tmp_path, tmp_path / "out", _report_config()).csv_path)
+
+    assert rows[0]["version"] == "unknown"
+    assert rows[0]["coverage_gaps"] == "missing_category; missing_version"
 
 
 def test_mixed_tags_and_modified_are_preserved_and_flagged(
@@ -324,6 +337,60 @@ def test_first_party_occurrence_never_enters_main(
     assert main_rows[0]["version"] == "1.2.3"
     assert appendix_rows[0]["origin"] == "first-party"
     assert appendix_rows[0]["version"] == "2.0.0"
+
+
+def test_report_main_md_csv_docx_share_main_row_set_without_build_ci_gap(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    _write_discovered(
+        tmp_path,
+        [
+            {
+                "name": "sentinel-report-app",
+                "name_with_owner": "sentinel-owner/sentinel-report-app",
+                "category": "runtime",
+            }
+        ],
+    )
+    ci_name = "sentinel-ci-action"
+    store.write_resolved(
+        tmp_path,
+        "sentinel-report-app",
+        [
+            {**resolved_record, "repo": "sentinel-report-app"},
+            {
+                **resolved_record,
+                "repo": "sentinel-report-app",
+                "name": ci_name,
+                "version": "v1",
+                "spdx_id": None,
+                "declared_license_raw": None,
+                "purl": "pkg:githubactions/sentinel-ci-owner/sentinel-ci-action@v1",
+                "evidence": {"source_layer": "api", "anchor": "unresolved:no_candidate"},
+                "tags": {
+                    "origin": "third-party-oss",
+                    "scope": "build",
+                    "distribution": "not-distributed",
+                },
+            },
+        ],
+    )
+
+    result = render_main_report(
+        tmp_path,
+        tmp_path / "out",
+        _report_config(include=("runtime",)),
+    )
+
+    main_rows = _csv_records(result.csv_path)
+    appendix_rows = _csv_records(tmp_path / "out" / "report.appendix.build-ci.csv")
+    markdown = result.markdown_path.read_text(encoding="utf-8")
+    docx_xml = zipfile.ZipFile(result.docx_path).read("word/document.xml").decode("utf-8")
+    assert [row["name"] for row in main_rows] == [resolved_record["name"]]
+    assert appendix_rows[0]["name"] == ci_name
+    assert ci_name not in markdown
+    assert ci_name not in docx_xml
 
 
 def _csv_records(path: Path) -> list[dict[str, str]]:

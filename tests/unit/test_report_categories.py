@@ -91,6 +91,20 @@ def test_first_party_routes_to_first_party_appendix_even_when_category_included(
     assert split.appendix_records_by_label["first-party"][0].record["repo"] == "acme-alpha"
 
 
+def test_build_not_distributed_routes_to_build_ci_appendix_not_main() -> None:
+    index = build_category_index(_discovered_repo(name="acme-alpha", category="runtime"))
+
+    split = route_occurrences(
+        [_record(repo="acme-alpha", scope="build", distribution="not-distributed")],
+        category_index=index,
+        selection=("runtime",),
+        default_category="uncategorized",
+    )
+
+    assert split.main_records == ()
+    assert split.appendix_records_by_label["build-ci"][0].record["repo"] == "acme-alpha"
+
+
 def _category(index: dict[str, str], repo: str) -> tuple[str, bool]:
     from repolens.report.categories import category_for_repo
 
@@ -119,13 +133,19 @@ def _repo(
     }
 
 
-def _record(*, repo: str, origin: str = "third-party-oss") -> dict[str, object]:
+def _record(
+    *,
+    repo: str,
+    origin: str = "third-party-oss",
+    scope: str = "runtime",
+    distribution: str = "server",
+) -> dict[str, object]:
     return {
         "schema_version": "1.0",
         "name": "acme-lib",
         "version": "1.0.0",
         "repo": repo,
         "evidence": {"source_layer": "syft"},
-        "tags": {"origin": origin, "scope": "runtime", "distribution": "server"},
+        "tags": {"origin": origin, "scope": scope, "distribution": distribution},
         "modified": "unknown",
     }

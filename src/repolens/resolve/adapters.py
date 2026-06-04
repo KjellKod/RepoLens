@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 from repolens.policy.config import Policy, load_default_policy
+from repolens.resolve.ecosystems import ECOSYSTEM_TO_DEPS_DEV, RESOLVER_SUPPORTED_ECOSYSTEMS
 from repolens.resolve.license_expression import license_resolution_id
 from repolens.resolve.models import ApiCandidate, FetchFunction, PackageFact, ResolveAdapter
 from repolens.resolve.purl import package_identity
@@ -27,23 +28,8 @@ API_ALLOWED_HOSTS = frozenset(
     }
 )
 
-ECOSYSTEM_TO_DEPS_DEV = {
-    "cargo": "cargo",
-    "golang": "go",
-    "gomod": "go",
-    "go-module": "go",
-    "maven": "maven",
-    "npm": "npm",
-    "nuget": "nuget",
-    "python": "pypi",
-    "pypi": "pypi",
-    "gem": "rubygems",
-    "ruby": "rubygems",
-    "rubygems": "rubygems",
-    "rust": "cargo",
-}
-
 _FETCH_OPTIONS = HttpFetchOptions(allowed_hosts=API_ALLOWED_HOSTS, headers={})
+_UNKNOWN_VERSION = "unknown"
 
 
 def build_default_adapters(fetcher: FetchFunction = fetch_url) -> tuple[ResolveAdapter, ...]:
@@ -62,6 +48,8 @@ class DepsDevAdapter:
     fetcher: FetchFunction
 
     def resolve(self, package: PackageFact) -> ApiCandidate | None:
+        if package.version == _UNKNOWN_VERSION:
+            return None
         ecosystem, package_name = package_identity(package.package_type, package.name, package.purl)
         system = ECOSYSTEM_TO_DEPS_DEV.get(ecosystem)
         if system is None:
@@ -109,6 +97,8 @@ class EcosysteMsAdapter:
 
     def resolve(self, package: PackageFact) -> ApiCandidate | None:
         ecosystem, package_name = package_identity(package.package_type, package.name, package.purl)
+        if ecosystem not in RESOLVER_SUPPORTED_ECOSYSTEMS:
+            return None
         url = (
             "https://api.ecosyste.ms/packages/lookup"
             f"?ecosystem={quote(ecosystem, safe='')}&name={quote(package_name, safe='')}"
@@ -118,6 +108,8 @@ class EcosysteMsAdapter:
 
 def _native_registry_url(ecosystem: str, package_name: str, version: str) -> str | None:
     if ecosystem in {"python", "pypi"}:
+        if version == _UNKNOWN_VERSION:
+            return f"https://pypi.org/pypi/{quote(package_name, safe='')}/json"
         return (
             f"https://pypi.org/pypi/{quote(package_name, safe='')}/{quote(version, safe='')}/json"
         )

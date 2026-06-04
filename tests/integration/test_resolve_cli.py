@@ -192,9 +192,9 @@ def test_resolve_cli_mobile_native_missing_sandbox_is_non_fatal(
             "source": "https://example.invalid/fixture",
             "artifacts": [
                 {
-                    "name": "fixture-lib",
+                    "name": "sentinel-lib",
                     "version": None,
-                    "type": "python",
+                    "type": "unknown",
                     "licenses": [],
                     "locations": [],
                 }

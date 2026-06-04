@@ -210,13 +210,14 @@ def _component_from_manifest(
 ) -> FixtureComponent:
     name = str(raw["name"])
     version = str(raw["version"])
+    component_ecosystem = str(raw.get("ecosystem") or ecosystem)
     return FixtureComponent(
         name=name,
         version=version,
-        ecosystem=ecosystem,
+        ecosystem=component_ecosystem,
         license=str(raw["declared_license"]),
-        purl=_purl(ecosystem, name, version),
-        location=f"{repo_id}/{_manifest_name(ecosystem)}",
+        purl=_purl(component_ecosystem, name, version),
+        location=f"{repo_id}/{_manifest_name(ecosystem, component_ecosystem)}",
     )
 
 
@@ -230,20 +231,30 @@ def _purl(ecosystem: str, name: str, version: str) -> str:
         return f"pkg:golang/{quote(name, safe='/')}@v{encoded_version}"
     if ecosystem == "rust":
         return f"pkg:cargo/{quote(name, safe='')}@{encoded_version}"
-    if ecosystem == "jvm":
+    if ecosystem in {"jvm", "maven"}:
         group, artifact = name.split(":", 1)
         return f"pkg:maven/{quote(group, safe='')}/{quote(artifact, safe='')}@{encoded_version}"
+    if ecosystem == "swift":
+        return f"pkg:swift/{quote(name, safe='')}@{encoded_version}"
+    if ecosystem == "cocoapods":
+        return f"pkg:cocoapods/{quote(name, safe='')}@{encoded_version}"
     raise RuntimeError(f"unsupported fixture ecosystem: {ecosystem}")
 
 
-def _manifest_name(ecosystem: str) -> str:
+def _manifest_name(fixture_ecosystem: str, component_ecosystem: str) -> str:
+    if fixture_ecosystem == "android":
+        return "gradle.lockfile"
+    if fixture_ecosystem == "ios" and component_ecosystem == "swift":
+        return "Package.resolved"
+    if fixture_ecosystem == "ios" and component_ecosystem == "cocoapods":
+        return "Podfile.lock"
     return {
         "python": "pyproject.toml",
         "node": "package.json",
         "go": "go.mod",
         "rust": "Cargo.toml",
         "jvm": "pom.xml",
-    }[ecosystem]
+    }[fixture_ecosystem]
 
 
 def _syft_payload(repo_id: str, components: list[FixtureComponent]) -> dict[str, object]:
@@ -353,6 +364,8 @@ def _fixture_config() -> Config:
                         "go": "tooling",
                         "rust": "tooling",
                         "jvm": "tooling",
+                        "android": "tooling",
+                        "ios": "tooling",
                     },
                 }
             },

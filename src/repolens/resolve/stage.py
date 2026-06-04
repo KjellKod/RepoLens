@@ -14,6 +14,7 @@ from repolens.resolve.adapters import (
     API_ALLOWED_HOSTS,
     build_default_adapters,
 )
+from repolens.resolve.ecosystems import is_cataloging_only_package, is_ci_only_package
 from repolens.resolve.evidence import (
     UNKNOWN_VERSION,
     has_exact_license_evidence,
@@ -48,6 +49,11 @@ DEFAULT_TAGS = {
     "origin": "third-party-oss",
     "scope": "runtime",
     "distribution": "server",
+}
+CI_ONLY_TAGS = {
+    "origin": "third-party-oss",
+    "scope": "build",
+    "distribution": "not-distributed",
 }
 
 SbomReader = Callable[[str | Path, str], dict[str, object]]
@@ -188,6 +194,43 @@ def _resolve_package(
     declared = _resolve_declared(package)
     if declared is not None:
         return _record(package, spdx_id=declared, source_layer="syft", anchor=declared)
+    cataloging_only = is_cataloging_only_package(package)
+    if (
+        cataloging_only
+        and enable_mobile_native
+        and mobile_detection.detected
+        and source_root is not None
+    ):
+        mobile = _resolve_mobile_package(
+            package,
+            detection=mobile_detection,
+            source_root=source_root,
+            mobile_enricher=mobile_enricher,
+            sandbox_runner=sandbox_runner,
+            limits=limits,
+        )
+        if mobile.candidate is not None:
+            return _record(
+                package,
+                spdx_id=mobile.candidate.spdx_id,
+                source_layer="mobile",
+                url=mobile.candidate.evidence_url,
+                anchor=mobile.candidate.evidence_anchor,
+            )
+        if mobile.unresolved_anchor is not None:
+            return _record(
+                package,
+                spdx_id=None,
+                source_layer="mobile",
+                anchor=mobile.unresolved_anchor,
+            )
+    if cataloging_only:
+        return _record(
+            package,
+            spdx_id=None,
+            source_layer="api",
+            anchor="unresolved:no_supported_catalog_license_api",
+        )
 
     mobile_anchor: str | None = None
     if not should_attempt_api_resolution(package) and source_root is None:
@@ -386,9 +429,15 @@ def _record(
         declared_license_raw=package.declared_license_raw,
         spdx_id=spdx_id,
         evidence=evidence,
-        tags=DEFAULT_TAGS,
+        tags=_default_tags_for(package),
         modified="unknown",
     )
+
+
+def _default_tags_for(package: PackageFact) -> dict[str, str]:
+    if is_ci_only_package(package):
+        return dict(CI_ONLY_TAGS)
+    return dict(DEFAULT_TAGS)
 
 
 def _declared_license(value: object) -> str | None:

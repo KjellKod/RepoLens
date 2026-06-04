@@ -248,6 +248,95 @@ def test_native_npm_url_preserves_scoped_at_and_encodes_slash(
     assert seen == [expected_url]
 
 
+def test_gradle_maven_purl_routes_to_maven() -> None:
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        seen.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"license":"Apache-2.0"}')
+
+    candidate = build_default_adapters(fetcher)[0].resolve(
+        PackageFact(
+            name="ignored-gradle-name",
+            version="3.4.5",
+            package_type="gradle",
+            repo="sentinel-repo",
+            purl="pkg:maven/invalid.sentinel/sentinel-gradle-runtime@3.4.5",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is not None
+    assert candidate.spdx_id == "Apache-2.0"
+    assert seen == [
+        (
+            "https://api.deps.dev/v3alpha/systems/maven/packages/"
+            "invalid.sentinel%2Fsentinel-gradle-runtime/versions/3.4.5"
+        )
+    ]
+
+
+def test_unversioned_pypi_package_uses_package_metadata_endpoint() -> None:
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        assert options.allowed_hosts == API_ALLOWED_HOSTS
+        seen.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"info":{"license":"MIT"}}')
+
+    package = PackageFact(
+        name="sentinel-runtime",
+        version="unknown",
+        package_type="python",
+        repo="sentinel-repo",
+        purl="pkg:pypi/sentinel-runtime",
+        declared_license_raw=None,
+    )
+
+    adapters = build_default_adapters(fetcher)
+    assert adapters[0].resolve(package) is None
+    candidate = adapters[1].resolve(package)
+
+    assert candidate is not None
+    assert candidate.spdx_id == "MIT"
+    assert seen == ["https://pypi.org/pypi/sentinel-runtime/json"]
+
+
+@pytest.mark.parametrize(
+    "package",
+    [
+        PackageFact(
+            "sentinel-swift-runtime",
+            "1.0.0",
+            "swift",
+            "sentinel-repo",
+            "pkg:swift/sentinel-swift-runtime@1.0.0",
+            None,
+        ),
+        PackageFact(
+            "SentinelPodRuntime",
+            "2.0.0",
+            "cocoapods",
+            "sentinel-repo",
+            "pkg:cocoapods/SentinelPodRuntime@2.0.0",
+            None,
+        ),
+    ],
+)
+def test_mobile_cataloging_only_ecosystems_do_not_fetch(package: PackageFact) -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del url, options
+        raise AssertionError("cataloging-only mobile packages should not hit API adapters")
+
+    assert [adapter.resolve(package) for adapter in build_default_adapters(fetcher)] == [
+        None,
+        None,
+        None,
+        None,
+    ]
+
+
 def test_adapter_order_is_deps_dev_then_targeted_fallbacks() -> None:
     names = [type(adapter).__name__ for adapter in build_default_adapters()]
 

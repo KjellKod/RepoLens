@@ -119,7 +119,14 @@ def test_p3a_resolve_blocks_allowlisted_host_resolving_private_ip() -> None:
 
 
 def test_p3a_resolve_does_not_fetch_unversioned_package() -> None:
-    package = PackageFact("acme-lib", UNKNOWN_VERSION, "python", "fixture-repo", None, None)
+    package = PackageFact(
+        "acme-lib",
+        UNKNOWN_VERSION,
+        "maven",
+        "fixture-repo",
+        "pkg:maven/example.invalid/acme-lib",
+        None,
+    )
 
     assert not should_attempt_api_resolution(package)
 

@@ -100,6 +100,8 @@ def _collect_resolved_records(work_root: Path) -> list[CollectedRecord]:
 
 
 def _is_flagged(outcome: GroupOutcome) -> bool:
+    if outcome.component.scope == "build" and outcome.component.distribution == "not-distributed":
+        return False
     return outcome.decision.tier in _FLAG_TIERS
 
 

@@ -200,6 +200,54 @@ def test_resume_lists_persisted_scan_failures(
     assert code == 1
 
 
+def test_run_scan_stage_passes_runtime_scan_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    from repolens.scan import inputs as scan_inputs
+    from repolens.scan import runner as scan_runner
+
+    work_root = tmp_path / "work"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        scan_inputs,
+        "load_discover_approved_repo_specs",
+        lambda _work_root, repo_spec_type: [
+            repo_spec_type("sentinel-alpha", "https://example.invalid/sentinel-alpha")
+        ],
+    )
+    monkeypatch.setattr(cli, "_ensure_syft_for_scan", lambda _args: tmp_path / "syft")
+
+    def fake_scan_repos(work_root_arg: Path, repos: list[object], **kwargs: object) -> ScanReport:
+        captured["work_root"] = work_root_arg
+        captured["repos"] = repos
+        captured.update(kwargs)
+        return ScanReport((RepoScanOutcome("sentinel-alpha", "scanned"),))
+
+    monkeypatch.setattr(scan_runner, "scan_repos", fake_scan_repos)
+    args = SimpleNamespace(
+        work_root=work_root,
+        runtime_config=SimpleNamespace(
+            values={
+                "scan": {
+                    "exclude_paths": ["local-only/"],
+                    "syft": {"catalogers": ["python-package-cataloger"]},
+                }
+            }
+        ),
+        quiet=True,
+        timeout=None,
+        yes=True,
+    )
+
+    report = cli._run_scan_stage(args)
+
+    assert report is not None
+    assert captured["work_root"] == work_root
+    assert captured["exclude_paths"] == ("local-only",)
+    assert captured["syft_catalogers"] == ("python-package-cataloger",)
+
+
 def test_existing_report_with_persisted_scan_failure_stays_nonzero(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

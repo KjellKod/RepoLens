@@ -304,6 +304,33 @@ Exit codes are:
 | `1` | Findings remain open, or a sanitized unexpected internal error occurred |
 | `2` | Usage, argument, or config input error |
 
+## Supported ecosystem coverage
+
+RepoLens inventories dependencies through Syft and resolves licenses through
+unauthenticated public APIs where a supported package identity exists. Mobile package
+manifests are cataloged by Syft, but RepoLens does not run native mobile tooling unless
+the explicit mobile-native resolver option is used; the default resolver keeps SwiftPM and
+CocoaPods cataloging-only when Syft did not already provide a declared license.
+
+<!-- repolens-supported-ecosystems:start -->
+| ecosystem | Syft cataloged | RepoLens API/license resolution | notes |
+|-----------|----------------|----------------------------------|-------|
+| cargo | yes | yes | Rust crates resolve through deps.dev/Crates. |
+| cocoapods | yes | no | Cataloged only; unresolved without SBOM license. |
+| githubactions | yes | no | Build/CI inventory; excluded from shipped main. |
+| go-module | yes | yes | Go modules resolve through deps.dev/proxy data. |
+| maven | yes | yes | Maven purls include Gradle-originated dependencies. |
+| npm | yes | yes | npm packages resolve through deps.dev/npm registry data. |
+| nuget | yes | yes | NuGet packages resolve through deps.dev. |
+| pypi | yes | yes | Python packages include Syft and pyproject facts. |
+| rubygems | yes | yes | Ruby gems resolve through deps.dev. |
+| swift | yes | no | Cataloged only; unresolved without SBOM license. |
+<!-- repolens-supported-ecosystems:end -->
+
+GitHub Actions package-url records are retained in inventory as `scope: build` and
+`distribution: not-distributed`. They route to the `build-ci` appendix and do not create
+shipped-license gaps in `report.main.{md,csv,docx}`.
+
 ## Step-it-yourself pipeline
 
 ```
@@ -437,10 +464,30 @@ For each repo, `scan` clones through the hardened clone primitive (depth-1, no t
 branch, no recursive submodules, hooks/symlinks/file-protocol disabled, prompts off, system
 git config off), runs the pinned Syft over the cloned path within a per-repo wall-clock
 budget, maps Syft's output onto the frozen `sbom.schema.json`, and persists it through the
-store (token-redacted, schema-validated). A completed SBOM lets a rerun **skip** that repo.
-Every successful SBOM is persisted even within a mixed run; if any repo fails the process
-exits `1` after the rest finish. Token redaction is applied to both the SBOM and
-`scan.status.json` before they are written.
+store (token-redacted, schema-validated). It also reads static root `pyproject.toml`
+project and optional dependencies without executing repository code. A completed SBOM lets
+a rerun **skip** that repo. Every successful SBOM is persisted even within a mixed run; if
+any repo fails the process exits `1` after the rest finish. Token redaction is applied to
+both the SBOM and `scan.status.json` before they are written.
+
+Default scan exclusions remove artifacts located only under clearly non-shipped paths:
+`tests/fixtures/`, `test/fixtures/`, `tests/bootstrap/fixtures/`, and `.git/`.
+Top-level `fixtures/` and `vendor/` are not excluded by default. A local config can replace
+the default list when a repository has local non-shipped sample or generated paths:
+
+```toml
+[scan]
+exclude_paths = ["generated-fixtures/"]
+```
+
+When local config restricts Syft catalogers, RepoLens preserves that restriction but also
+adds Gradle, CocoaPods, and Swift Package Manager catalogers so mobile manifests remain
+cataloged:
+
+```toml
+[scan.syft]
+catalogers = ["python-package-cataloger"]
+```
 
 During a multi-repo run, stderr shows one line when each approved repo starts, one outcome line
 when it finishes or is skipped, and a final `Done:` count. Non-TTY stderr gets plain appended
@@ -598,7 +645,9 @@ The docx header is required and must come from untracked runtime config:
 category is selected into `report.main`. When present, third-party occurrences in included
 categories go to `report.main.{md,csv,docx}`; excluded third-party categories go to
 `report.appendix.<category>.{md,csv}`. First-party occurrences always go to
-`report.appendix.first-party.{md,csv}`.
+`report.appendix.first-party.{md,csv}`. Build/CI-only occurrences tagged as
+`scope: build` and `distribution: not-distributed` always go to
+`report.appendix.build-ci.{md,csv}` instead of the shipped main report.
 
 The main markdown and CSV keep the frozen P6a columns. Category is used only for routing,
 appendix filenames, and appendix headings. If a resolved repo cannot be joined to

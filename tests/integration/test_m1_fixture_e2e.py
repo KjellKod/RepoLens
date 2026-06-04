@@ -13,12 +13,13 @@ pytestmark = [pytest.mark.offline, pytest.mark.fixtures]
 def test_m1_fixture_e2e_harness_writes_valid_deduped_report(
     tmp_path: Path, repo_root: Path
 ) -> None:
+    work_root = tmp_path / "work-root"
     result = subprocess.run(
         [
             sys.executable,
             "scripts/m1_fixture_e2e.py",
             "--work-root",
-            str(tmp_path / "work-root"),
+            str(work_root),
         ],
         cwd=repo_root,
         capture_output=True,
@@ -29,12 +30,12 @@ def test_m1_fixture_e2e_harness_writes_valid_deduped_report(
     assert result.returncode == 0, result.stderr
     summary = json.loads(result.stdout)
 
-    assert summary["approved_repos"] == 5
-    assert summary["sbom_artifacts"] == 7
-    assert summary["resolved_rows"] == 7
+    assert summary["approved_repos"] == 7
+    assert summary["sbom_artifacts"] == 10
+    assert summary["resolved_rows"] == 10
     assert summary["report_rows"] == 3
-    assert summary["appendix_rows"] == 3
-    assert summary["report_union_rows"] == 6
+    assert summary["appendix_rows"] == 6
+    assert summary["report_union_rows"] == 9
     assert summary["report_rows_with_license"] == 3
     assert summary["report_rows_with_source_url"] == 3
     assert summary["deduped_shared_component_rows"] == 1
@@ -43,3 +44,22 @@ def test_m1_fixture_e2e_harness_writes_valid_deduped_report(
     assert summary["report_docx_exists"] is True
     assert summary["appendix_csv_exists"] is True
     assert summary["appendix_md_exists"] is True
+
+    ios_sbom = json.loads(
+        (work_root / "work" / "sentinel_ios_client" / "sbom.syft.json").read_text(encoding="utf-8")
+    )
+    locations_by_name = {
+        artifact["name"]: artifact["locations"] for artifact in ios_sbom["artifacts"]
+    }
+    assert locations_by_name["sentinel-swift-runtime"] == ["sentinel_ios_client/Package.resolved"]
+    assert locations_by_name["SentinelPodRuntime"] == ["sentinel_ios_client/Podfile.lock"]
+
+    android_sbom = json.loads(
+        (work_root / "work" / "sentinel_android_app" / "sbom.syft.json").read_text(encoding="utf-8")
+    )
+    android_locations_by_name = {
+        artifact["name"]: artifact["locations"] for artifact in android_sbom["artifacts"]
+    }
+    assert android_locations_by_name["invalid.sentinel:sentinel-android-runtime"] == [
+        "sentinel_android_app/gradle.lockfile"
+    ]

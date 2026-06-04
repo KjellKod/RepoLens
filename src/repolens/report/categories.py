@@ -9,6 +9,7 @@ from typing import Any
 from repolens.exit_codes import InputError
 
 FIRST_PARTY_APPENDIX = "first-party"
+BUILD_CI_APPENDIX = "build-ci"
 MISSING_CATEGORY_GAP = "missing_category"
 
 
@@ -90,7 +91,11 @@ def route_occurrences(
         if not isinstance(tags, Mapping):
             raise InputError("resolved record tags must be an object")
         origin = str(tags.get("origin"))
-        if origin == "first-party":
+        scope = str(tags.get("scope"))
+        distribution = str(tags.get("distribution"))
+        if scope == "build" and distribution == "not-distributed":
+            appendix_records.setdefault(BUILD_CI_APPENDIX, []).append(routed)
+        elif origin == "first-party":
             appendix_records.setdefault(FIRST_PARTY_APPENDIX, []).append(routed)
         elif included_categories is None or category in included_categories:
             main_records.append(routed)

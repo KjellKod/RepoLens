@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from repolens.data import store
 from repolens.flag.dedup import build_group_outcomes
+from repolens.flag.stage import run_flag
 from repolens.policy import load_default_policy
 
 
@@ -56,3 +58,49 @@ def test_stated_reason_text_present(make_record, collected) -> None:
     assert block.reason_note == "BLOCK: canonical_id"
     assert "non_spdx_restrictive" not in block.reason_note
     assert unknown.reason_note == "UNKNOWN: empty_input"
+
+
+def test_build_not_distributed_stays_in_inventory_without_open_shortlist_item(
+    tmp_path,
+    make_record,
+) -> None:
+    store.write_resolved(
+        tmp_path,
+        "sentinel-ci",
+        [
+            make_record(
+                name="sentinel-ci-action",
+                spdx_id=None,
+                declared_license_raw=None,
+                scope="build",
+                distribution="not-distributed",
+                purl="pkg:githubactions/sentinel-ci-owner/sentinel-ci-action@v1",
+            )
+        ],
+    )
+
+    result = run_flag(tmp_path)
+
+    inventory = store.read_inventory(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    assert result.component_count == 1
+    assert inventory["components"][0]["name"] == "sentinel-ci-action"
+    assert inventory["components"][0]["scope"] == "build"
+    assert inventory["components"][0]["distribution"] == "not-distributed"
+    assert shortlist["open_count"] == 0
+    assert shortlist["items"] == []
+
+
+def test_mixed_runtime_and_build_group_remains_visible_for_review(make_record, collected) -> None:
+    outcome = _outcome(
+        collected(
+            [
+                make_record(spdx_id=None),
+                make_record(spdx_id=None, scope="build", distribution="not-distributed"),
+            ]
+        )
+    )
+
+    assert outcome.component.scope == "unknown"
+    assert outcome.component.distribution == "unknown"
+    assert outcome.decision.tier.value == "UNKNOWN"

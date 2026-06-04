@@ -1,0 +1,5 @@
+platform :ios, "15.0"
+
+target "SentinelIOSClient" do
+  pod "SentinelPodRuntime", "2.0.0"
+end
