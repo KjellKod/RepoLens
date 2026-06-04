@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from io import BytesIO
 from unittest.mock import MagicMock
 
@@ -50,6 +51,31 @@ def test_cache_miss_fetches_verifies_and_writes_proof(
     assert proof["binary_sha256"] != result.pin.artifact_sha256
 
 
+def test_cache_miss_emits_acquire_progress_in_order(
+    test_pins, acquire_factory, accepting_cosign_runner, tmp_path
+) -> None:
+    pins_path = _write_test_pins(tmp_path, test_pins)
+    phases = []
+
+    ensure_syft_cached(
+        pins_path=pins_path,
+        cache_home=tmp_path / "cache",
+        acquire=acquire_factory(),
+        cosign_runner=accepting_cosign_runner,
+        platform_key=PLATFORM,
+        progress=lambda phase, pin: phases.append((phase, pin.version)),
+    )
+
+    assert [phase for phase, _version in phases] == [
+        "download_syft",
+        "download_cosign",
+        "verify_signature",
+        "cache",
+        "ready",
+    ]
+    assert {version for _phase, version in phases} == {"1.18.1"}
+
+
 def test_cache_hit_uses_proof_without_fetch(
     test_pins, acquire_factory, accepting_cosign_runner, tmp_path
 ) -> None:
@@ -72,6 +98,32 @@ def test_cache_hit_uses_proof_without_fetch(
 
     assert second.acquired is False
     assert second.path == first.path
+
+
+def test_cache_hit_does_not_emit_acquire_progress(
+    test_pins, acquire_factory, accepting_cosign_runner, tmp_path
+) -> None:
+    pins_path = _write_test_pins(tmp_path, test_pins)
+    first = ensure_syft_cached(
+        pins_path=pins_path,
+        cache_home=tmp_path / "cache",
+        acquire=acquire_factory(),
+        cosign_runner=accepting_cosign_runner,
+        platform_key=PLATFORM,
+    )
+    phases = []
+
+    second = ensure_syft_cached(
+        pins_path=pins_path,
+        cache_home=tmp_path / "cache",
+        acquire=lambda name: (_ for _ in ()).throw(AssertionError(f"fetch {name}")),
+        cosign_runner=lambda argv: 0,
+        platform_key=PLATFORM,
+        progress=lambda phase, pin: phases.append((phase, pin.version)),
+    )
+
+    assert second.path == first.path
+    assert phases == []
 
 
 def test_offline_empty_cache_fails_without_fetch(test_pins, tmp_path) -> None:
@@ -118,6 +170,28 @@ def test_signature_failure_fails_before_cache_write(
             cache_home=tmp_path / "cache",
             acquire=acquire_factory(),
             cosign_runner=rejecting_cosign_runner,
+            platform_key=PLATFORM,
+        )
+
+    assert not syft_cache_path(pin, cache_home=tmp_path / "cache").exists()
+
+
+def test_signature_timeout_fails_with_clear_retry_message(
+    test_pins, acquire_factory, tmp_path, monkeypatch
+) -> None:
+    pins_path = _write_test_pins(tmp_path, test_pins)
+    pin = load_syft_pin(pins_path, platform_key=PLATFORM)
+
+    def timeout_run(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(cmd=["cosign"], timeout=120)
+
+    monkeypatch.setattr("repolens.bootstrap.cache.subprocess.run", timeout_run)
+
+    with pytest.raises(SignatureVerificationError, match="check network and retry"):
+        ensure_syft_cached(
+            pins_path=pins_path,
+            cache_home=tmp_path / "cache",
+            acquire=acquire_factory(),
             platform_key=PLATFORM,
         )
 

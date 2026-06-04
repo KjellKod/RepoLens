@@ -34,6 +34,9 @@ from .verify import (
 Acquire = Callable[[str], bytes]
 #: Marks a written file executable (chmod +x). Injected so tests can spy on it.
 MakeExecutable = Callable[[Path], None]
+#: Emits coarse bootstrap phases for CLI progress. Kept stringly to avoid
+#: coupling this low-level fail-closed module to operator-facing text.
+ProgressFn = Callable[[str], None]
 
 
 @dataclass(frozen=True)
@@ -79,6 +82,7 @@ def bootstrap_cosign(
     acquire: Acquire,
     make_executable: MakeExecutable,
     platform_key: str | None = None,
+    progress: ProgressFn | None = None,
 ) -> ResolvedTool:
     """Acquire + checksum-gate cosign, then make it executable.
 
@@ -91,6 +95,8 @@ def bootstrap_cosign(
     pin = pins.tool("cosign")
     artifact: PlatformArtifact = pin.artifact_for(plat)
 
+    if progress is not None:
+        progress("download_cosign")
     data = acquire(artifact.artifact)
     # GATE 1 — raises ChecksumMismatch before write/chmod/exec.
     digest = verify_checksum(data, artifact.sha256)
@@ -115,6 +121,8 @@ def bootstrap_syft(
     runner: CommandRunner | None = None,
     platform_key: str | None = None,
     workdir: Path | None = None,
+    artifact_data: bytes | None = None,
+    progress: ProgressFn | None = None,
 ) -> ResolvedTool:
     """Bootstrap Syft with strict fail-closed ordering.
 
@@ -134,7 +142,12 @@ def bootstrap_syft(
 
     # 1. acquire the binary artifact + the signed checksums material (no network
     #    here; `acquire` is injected).
-    data = acquire(artifact.artifact)
+    if artifact_data is None:
+        if progress is not None:
+            progress("download_syft")
+        data = acquire(artifact.artifact)
+    else:
+        data = artifact_data
 
     # 2. GATE 1 — checksum. Raises ChecksumMismatch before anything is written
     #    or made executable.
@@ -146,6 +159,8 @@ def bootstrap_syft(
     #    installed binary in `dest`.
     with tempfile.TemporaryDirectory(dir=base, prefix=".syft-verify-") as tmp:
         work = Path(tmp)
+        if progress is not None:
+            progress("verify_signature")
         checksums_text = acquire(sig.checksums_file).decode("utf-8")
         checksums_path = work / sig.checksums_file
         signature_path = work / sig.checksums_sig

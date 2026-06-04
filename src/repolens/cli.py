@@ -7,16 +7,18 @@ import math
 import re
 import shlex
 import sys
+import threading
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING, Protocol, TextIO
 from urllib.parse import unquote
 
 from repolens.bootstrap.cache import (
     DOC_LINK,
+    SyftCacheResult,
     SyftPinSummary,
     cached_syft_path,
     ensure_syft_cached,
@@ -524,25 +526,47 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
 
 
 class _ScanProgressPrinter:
-    def __init__(self, *, quiet: bool, stream: TextIO) -> None:
+    def __init__(
+        self,
+        *,
+        quiet: bool,
+        stream: TextIO,
+        heartbeat_interval: float = 30.0,
+        heartbeat_factory: Callable[[float, Callable[[float], None]], _HeartbeatHandle]
+        | None = None,
+    ) -> None:
         self._quiet = quiet
         self._stream = stream
         self._tty = bool(getattr(stream, "isatty", lambda: False)())
         self._started_at = time.monotonic()
         self._last_line_length = 0
+        self._heartbeat_interval = heartbeat_interval
+        self._heartbeat_factory = heartbeat_factory or _make_heartbeat
+        self._clone_heartbeat: _HeartbeatHandle | None = None
 
     def __call__(self, event: ScanProgressEvent) -> None:
         if self._quiet:
             return
         if event.kind == "start":
+            self._stop_clone_heartbeat()
             self._write_progress_line(_scan_start_line(event), newline=not self._tty)
+            self._clone_heartbeat = self._heartbeat_factory(
+                self._heartbeat_interval,
+                lambda elapsed: self._write_progress_line(
+                    f"still cloning {event.repo_ref} ({int(elapsed)}s)…",
+                    newline=True,
+                ),
+            )
+            self._clone_heartbeat.start()
             return
         if event.kind == "outcome":
+            self._stop_clone_heartbeat()
             self._write_progress_line(_scan_outcome_line(event), newline=True)
 
     def finish(self, report: ScanReport) -> None:
         if self._quiet:
             return
+        self._stop_clone_heartbeat()
         total = len(report.outcomes)
         elapsed = _format_seconds(time.monotonic() - self._started_at)
         line = (
@@ -563,6 +587,46 @@ class _ScanProgressPrinter:
         else:
             text = f"{line}\n"
         print(text, end="", file=self._stream, flush=True)
+
+    def _stop_clone_heartbeat(self) -> None:
+        if self._clone_heartbeat is not None:
+            self._clone_heartbeat.stop()
+            self._clone_heartbeat = None
+
+
+class _Heartbeat:
+    def __init__(self, *, interval_seconds: float, write: Callable[[float], None]) -> None:
+        self._interval_seconds = interval_seconds
+        self._write = write
+        self._started_at = time.monotonic()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+
+    def start(self) -> None:
+        if self._interval_seconds > 0:
+            self._thread.start()
+
+    def stop(self) -> None:
+        self._stop.set()
+        if self._thread.is_alive():
+            self._thread.join(timeout=0.2)
+
+    def _run(self) -> None:
+        while not self._stop.wait(self._interval_seconds):
+            self._write(time.monotonic() - self._started_at)
+
+
+class _HeartbeatHandle(Protocol):
+    def start(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+
+def _make_heartbeat(
+    interval_seconds: float,
+    write: Callable[[float], None],
+) -> _HeartbeatHandle:
+    return _Heartbeat(interval_seconds=interval_seconds, write=write)
 
 
 def _scan_start_line(event: ScanProgressEvent) -> str:
@@ -645,20 +709,78 @@ def _ensure_syft_for_scan(args: argparse.Namespace) -> Path:
         else:
             raise InputError(_syft_declined_message(pin, interactive=False))
 
-    print(
-        f"Acquiring and verifying RepoLens Syft {pin.version} (sha256 {pin.short_sha256}...) ... ",
-        end="",
-        file=sys.stderr,
-        flush=True,
-    )
+    progress = _SyftAcquireProgressPrinter(quiet=args.quiet, stream=sys.stderr)
+    progress.notice(pin)
     try:
-        result = ensure_syft_cached()
+        result = ensure_syft_cached(progress=progress)
     except UsageError as exc:
         raise InputError(str(exc)) from exc
     except IntegrityError as exc:
         raise InternalError(f"Syft bootstrap integrity failure: {exc}") from exc
-    print("ok", file=sys.stderr)
+    progress.finish(result)
     return result.path
+
+
+class _SyftAcquireProgressPrinter:
+    _PHASE_LABELS = {
+        "download_syft": lambda pin: f"downloading syft {pin.version}",
+        "download_cosign": lambda pin: "downloading cosign",
+        "verify_signature": lambda pin: "verifying signature",
+        "cache": lambda pin: "caching",
+    }
+
+    def __init__(self, *, quiet: bool, stream: TextIO, heartbeat_interval: float = 10.0) -> None:
+        self._quiet = quiet
+        self._stream = stream
+        self._heartbeat_interval = heartbeat_interval
+        self._heartbeat: _Heartbeat | None = None
+        self._phase_label: str | None = None
+        self._ready_printed = False
+
+    def notice(self, pin: SyftPinSummary) -> None:
+        if self._quiet:
+            return
+        print(
+            "First run: fetching RepoLens's pinned Syft "
+            f"v{pin.version} — one-time, ~a minute, cached afterward.",
+            file=self._stream,
+            flush=True,
+        )
+
+    def __call__(self, phase: str, pin: SyftPinSummary) -> None:
+        if self._quiet:
+            return
+        if phase == "ready":
+            self._stop_heartbeat()
+            print(f"✓ Syft {pin.version} ready", file=self._stream, flush=True)
+            self._ready_printed = True
+            return
+        label_factory = self._PHASE_LABELS.get(phase)
+        if label_factory is None:
+            return
+        self._stop_heartbeat()
+        self._phase_label = label_factory(pin)
+        print(f"• {self._phase_label}…", file=self._stream, flush=True)
+        self._heartbeat = _Heartbeat(
+            interval_seconds=self._heartbeat_interval,
+            write=lambda elapsed: self._write_still(elapsed),
+        )
+        self._heartbeat.start()
+
+    def finish(self, result: SyftCacheResult) -> None:
+        self._stop_heartbeat()
+        if not self._quiet and not self._ready_printed:
+            print(f"✓ Syft {result.pin.version} ready", file=self._stream, flush=True)
+
+    def _write_still(self, elapsed: float) -> None:
+        if self._phase_label is None:
+            return
+        print(f"still {self._phase_label} ({int(elapsed)}s)…", file=self._stream, flush=True)
+
+    def _stop_heartbeat(self) -> None:
+        if self._heartbeat is not None:
+            self._heartbeat.stop()
+            self._heartbeat = None
 
 
 def _syft_not_installed_message(pin: SyftPinSummary) -> str:

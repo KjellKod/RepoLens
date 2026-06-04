@@ -15,10 +15,11 @@ import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .errors import IntegrityError, UsageError
+from .errors import IntegrityError, SignatureVerificationError, UsageError
 from .orchestrate import default_make_executable
 from .pins import DEFAULT_PINS_PATH, Pins, SignatureSpec, current_platform, load_pins
 from .syft import Acquire, MakeExecutable, bootstrap_cosign, bootstrap_syft
@@ -27,6 +28,8 @@ from .verify import CommandRunner, CosignVerifier, compute_file_sha256
 PROOF_SCHEMA = "repolens.syft-cache-proof/v1"
 DOC_LINK = "docs/usage.md#tool-bootstrap"
 MAX_PINNED_ARTIFACT_BYTES = 250 * 1024 * 1024
+COSIGN_VERIFY_TIMEOUT_SECONDS = 120.0
+SyftCacheProgress = Callable[[str, "SyftPinSummary"], None]
 
 
 @dataclass(frozen=True)
@@ -155,6 +158,7 @@ def ensure_syft_cached(
     make_executable: MakeExecutable = default_make_executable,
     platform_key: str | None = None,
     offline: bool = False,
+    progress: SyftCacheProgress | None = None,
 ) -> SyftCacheResult:
     """Return a verified shared-cache Syft path, acquiring it when allowed."""
 
@@ -175,12 +179,17 @@ def ensure_syft_cached(
 
     with tempfile.TemporaryDirectory(prefix=".syft-cache-", dir=target_root) as tmp:
         staging = Path(tmp)
+        syft_tool = pins.tool("syft")
+        syft_artifact = syft_tool.artifact_for(pin.platform_key)
+        _emit_progress(progress, "download_syft", pin)
+        syft_data = acquirer(syft_artifact.artifact)
         cosign_tool = bootstrap_cosign(
             pins,
             staging / "cosign",
             acquire=acquirer,
             make_executable=make_executable,
             platform_key=pin.platform_key,
+            progress=lambda phase: _emit_progress(progress, phase, pin),
         )
         resolved = bootstrap_syft(
             pins,
@@ -190,6 +199,8 @@ def ensure_syft_cached(
             make_executable=make_executable,
             platform_key=pin.platform_key,
             workdir=staging,
+            artifact_data=syft_data,
+            progress=lambda phase: _emit_progress(progress, phase, pin),
         )
         binary_sha256 = compute_file_sha256(resolved.path)
         (staging / "syft.proof.json").write_text(
@@ -197,6 +208,7 @@ def ensure_syft_cached(
             encoding="utf-8",
         )
 
+        _emit_progress(progress, "cache", pin)
         if target_dir.exists():
             shutil.rmtree(target_dir)
         target_dir.mkdir(parents=True)
@@ -210,7 +222,17 @@ def ensure_syft_cached(
     )
     if cached_after_write is None:
         raise IntegrityError("Syft cache proof failed after verified acquisition.")
+    _emit_progress(progress, "ready", pin)
     return SyftCacheResult(path=cached_after_write, pin=pin, acquired=True)
+
+
+def _emit_progress(
+    progress: SyftCacheProgress | None,
+    phase: str,
+    pin: SyftPinSummary,
+) -> None:
+    if progress is not None:
+        progress(phase, pin)
 
 
 def _syft_pin_from_pins(pins: Pins, *, platform_key: str | None = None) -> SyftPinSummary:
@@ -303,4 +325,13 @@ def _artifact_url(pins: Pins, name: str) -> str:
 
 
 def _default_command_runner(argv: list[str]) -> int:
-    return subprocess.run(list(argv), check=False).returncode
+    try:
+        return subprocess.run(
+            list(argv),
+            check=False,
+            timeout=COSIGN_VERIFY_TIMEOUT_SECONDS,
+        ).returncode
+    except subprocess.TimeoutExpired as exc:
+        raise SignatureVerificationError(
+            "verifying Syft signature timed out — check network and retry"
+        ) from exc
