@@ -1,0 +1,20 @@
+tests/unit/test_resolve_stage.py
+  s_f4b459b80a8fc7::t_cd92a90a8fad42 1084-1101,1105-1137,1139-1141,1144-1145
+  s_f4b459b80a8fc7::t_27a3d21808084f 1102-1104,1138,1142-1143
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "9be81d6b751e5c87143007a607fee145a6500447",
+  "prompts": {},
+  "sessions": {
+    "s_f4b459b80a8fc7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9496-4cdc-72f2-be27-190a2aac07f9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
