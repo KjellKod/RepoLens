@@ -1,0 +1,49 @@
+.skills/repolens/SKILL.md
+  s_0e5de9d187786f::t_5084f1e1e3a7ec 60-63
+src/repolens/scan/runner.py
+  s_0e5de9d187786f::t_b6338e75d89923 396,399-401,404-416
+tests/unit/shortlist/test_proposals.py
+  s_0e5de9d187786f::t_e65588ca161ee6 5-6,8,161-175
+.skills/repolens/reference/proposal-schema.md
+  s_0e5de9d187786f::t_5084f1e1e3a7ec 5-9
+docs/data-model.md
+  s_0e5de9d187786f::t_21e63d72c1fd93 13,30-31
+docs/usage.md
+  s_0e5de9d187786f::t_21e63d72c1fd93 682-684
+src/repolens/shortlist/proposals.py
+  s_0e5de9d187786f::t_386a7a0f2cf19a 13,68
+.agents/skills/repolens/SKILL.md
+  s_0e5de9d187786f::t_49a4cd02d86082 6-9
+tests/unit/test_schema_validation.py
+  s_0e5de9d187786f::t_e65588ca161ee6 18,94-102
+tests/unit/scan/test_runner.py
+  s_0e5de9d187786f::t_7fae0962a168a1 251-293
+src/repolens/data/schemas/shortlist_proposals.schema.json
+  s_0e5de9d187786f::t_b23f7e7ec39764 1-22
+.claude/skills/repolens/SKILL.md
+  s_0e5de9d187786f::t_b6e8f57f0c7a7c 7-9
+tests/conftest.py
+  s_0e5de9d187786f::t_e65588ca161ee6 171-191
+tests/unit/test_skill_references.py
+  s_0e5de9d187786f::t_f7fa2a32c31f73 1-24,26-29,31-32
+  s_0e5de9d187786f::t_5084f1e1e3a7ec 30
+  s_0e5de9d187786f::t_3d2b31cfd22f45 25
+src/repolens/data/validation.py
+  s_0e5de9d187786f::t_b23f7e7ec39764 15-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e99b04b7b07e3f84c3a68a6cb7b912c2db6904e7",
+  "prompts": {},
+  "sessions": {
+    "s_0e5de9d187786f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e93c9-c28b-7a80-be45-dff667876d94",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
