@@ -15,13 +15,12 @@ them**, and adds the workflow, policy, evidence, and reporting on top.
 
 ```bash
 pip install -e .                                       # install the `repolens` command (editable)
-repolens --help                                        # the stages, and the typical run
+repolens --help                                        # the recommended run command and stages
 python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene guard works
 ```
 
-`repolens --help` shows the full pipeline (`discover → scan → resolve → flag → shortlist
-→ report`), and each stage's own `--help` explains what to run before it, an example, its
-output, and the next step. All six stages run real orchestration today.
+`repolens --help` leads with `repolens run`, the one-command pipeline. Each stage's own
+`--help` remains available for stepping through, debugging, or re-running one stage.
 
 ## Requirements
 
@@ -74,21 +73,29 @@ with **anchored evidence under human approval**, never guessed.
 
 ## Usage
 
-Each stage reads the previous stage's output from the same `--work-root`, so a normal run
-is just the stages in order:
+For a normal run, use the single front-door command:
 
 ```
-repolens discover --owner <OWNER> --work-root work   # find + categorize repos -> approval checklist
-repolens scan      --work-root work                  # verify/cache pinned Syft, then inventory checked repos
-repolens resolve   --work-root work                  # resolve scanned repos cheapest-source-first
-repolens flag      --work-root work                  # apply policy, flag risk/unknowns -> shortlist queue
-repolens shortlist --work-root work                  # settle flagged items with evidence + your approval
-repolens report    --work-root work --out-dir reports # assemble the gated disclosure (md/csv/docx)
+repolens run --work-root work --owner <OWNER> --out-dir reports
 ```
 
-For offline runs, `repolens bootstrap` pre-seeds the verified Syft cache before `scan`.
+`run` pauses inline after discovery so you can untick repos in `work/repos.candidate.md`,
+then resumes after Enter. If the shortlist has open items, it pauses again until you mark
+each item in `work/shortlist.md` with `[x]` approve or `[r]` reject. Rerun the same
+command after an interruption; existing artifacts decide where to resume.
 
-Concrete example — scan a few specific repos under an owner and build the report:
+For automation, pass `--yes`. It proceeds past the discover gate and tool-consent prompts,
+but it **never** approves shortlist items: if any remain open, `run` exits non-zero before
+writing reports.
+
+```
+repolens run --work-root work --owner <OWNER> --out-dir reports --yes
+```
+
+For offline runs, `repolens bootstrap` pre-seeds the verified Syft cache before `run` or
+`scan`.
+
+To step through manually, or to re-run one stage while debugging, use the stage commands:
 
 ```
 repolens discover --owner <OWNER> --repos "sentinel-alpha, sentinel-beta" --work-root work
@@ -96,6 +103,7 @@ repolens discover --owner <OWNER> --repos "sentinel-alpha, sentinel-beta" --work
 repolens scan    --work-root work
 repolens resolve --work-root work
 repolens flag    --work-root work
+repolens shortlist --work-root work
 repolens report  --work-root work --out-dir reports
 ```
 

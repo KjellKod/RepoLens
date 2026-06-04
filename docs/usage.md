@@ -1,8 +1,9 @@
 # RepoLens — usage
 
-> All six pipeline stages (`discover → scan → resolve → flag → shortlist → report`) are
-> shipped. For the design behind them see [docs/roadmap](roadmap/rpl_README.md); the
-> original build plan is archived under [docs/roadmap/archive](roadmap/archive/rpl_roadmap.md).
+> `repolens run` drives all six shipped stages (`discover → scan → resolve → flag →
+> shortlist → report`) with inline human pauses and resume. For the design behind them see
+> [docs/roadmap](roadmap/rpl_README.md); the original build plan is archived under
+> [docs/roadmap/archive](roadmap/archive/rpl_roadmap.md).
 
 ## Prerequisites
 
@@ -244,11 +245,56 @@ shared `.git` directory. Prefer placing the file in the main checkout, e.g.
 `~/ws/extra/RepoLens/.name-hygiene.local.json`, so every worktree uses the same private
 denylist.
 
+## Recommended: `repolens run`
+
+Use `run` for the normal end-to-end workflow:
+
+```bash
+repolens run --work-root work --owner <OWNER> --out-dir reports
+```
+
+What happens:
+
+1. `discover` writes `work/discovered.json` and `work/repos.candidate.md`.
+2. `run` pauses: review `work/repos.candidate.md`, untick repos to exclude, then press Enter.
+3. `scan` inventories checked repos with RepoLens's verified Syft.
+4. `resolve` runs for every successfully scanned repo; you do not call `--repo-ref` manually.
+5. `flag` writes `inventory.json`, `shortlist.json`, and `shortlist.md`.
+6. If the shortlist has open items, `run` pauses: mark each item in `work/shortlist.md` with
+   `[x]` approve or `[r]` reject, then press Enter. It re-ingests the file and repeats until
+   `open_count == 0`.
+7. `report` writes `report.main.{md,csv,docx}` and appendices under `reports`.
+
+Resume is artifact-based. Rerun the same command after Ctrl-C, a closed terminal, or a crash:
+existing SBOMs, `resolved.ndjson`, `inventory.json`, a clear shortlist, and report files decide
+where the pipeline resumes. Once scan artifacts exist, `run` does not regenerate
+`repos.candidate.md`, so human unticks are preserved.
+
+For inspection after every stage, add `--step` in an interactive terminal:
+
+```bash
+repolens run --work-root work --owner <OWNER> --out-dir reports --step
+```
+
+For automation, add `--yes`:
+
+```bash
+repolens run --work-root work --owner <OWNER> --out-dir reports --yes
+```
+
+`--yes` never approves the shortlist. In non-interactive mode, open shortlist items produce a
+deterministic non-zero exit and no report is written until a human edits `shortlist.md`.
+
+`run` continues past per-repo scan or resolve failures when other repos succeeded. It lists the
+failed repos in the final summary, writes reports for successfully resolved repos, and exits
+non-zero overall so automation can surface the partial failure.
+
 ## CLI stages
 
-`repolens --help` is the primary health check for the shipped CLI entry point. The
-pipeline subcommands are registered as stage routes; `discover`, `scan`, `resolve`,
-`flag`, `shortlist`, and `report` all run real orchestration.
+`repolens --help` is the primary health check for the shipped CLI entry point. `run` is the
+recommended route. The stage subcommands remain available for stepping through, debugging,
+or re-running one stage; `discover`, `scan`, `resolve`, `flag`, `shortlist`, and `report`
+all run real orchestration.
 
 Exit codes are:
 
@@ -258,7 +304,7 @@ Exit codes are:
 | `1` | Findings remain open, or a sanitized unexpected internal error occurred |
 | `2` | Usage, argument, or config input error |
 
-## The pipeline at a glance
+## Step-it-yourself pipeline
 
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist

@@ -1,0 +1,680 @@
+from __future__ import annotations
+
+import io
+import os
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from repolens import cli
+from repolens.data import store
+from repolens.scan.runner import RepoScanOutcome, ScanReport
+
+
+class _TtyStringIO(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+def _discover_result(work_root: Path) -> SimpleNamespace:
+    return SimpleNamespace(
+        repository_count=2,
+        candidate_count=2,
+        hard_exclusion_count=0,
+        discovered_path=work_root / "discovered.json",
+        candidate_path=work_root / "repos.candidate.md",
+    )
+
+
+def _write_report(out_dir: Path, rows: int = 1) -> cli.CommandResult:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    lines = ["name,spdx_id"]
+    lines.extend(f"sentinel-lib-{index},MIT" for index in range(rows))
+    (out_dir / "report.main.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (out_dir / "report.main.md").write_text("# report\n", encoding="utf-8")
+    (out_dir / "report.main.docx").write_bytes(b"docx")
+    return cli.CommandResult(cli.CommandStatus.SUCCESS, "wrote report")
+
+
+def _set_mtime(path: Path, timestamp: float) -> None:
+    os.utime(path, (timestamp, timestamp))
+
+
+def _patch_common_success(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    work_root = tmp_path / "work"
+    monkeypatch.setattr(cli, "load_config", lambda _root, _path: object())
+    monkeypatch.setattr(cli, "run_discover", lambda **_kwargs: _discover_result(work_root))
+    monkeypatch.setattr(
+        cli,
+        "_run_scan_stage",
+        lambda _args: ScanReport((RepoScanOutcome("sentinel-alpha", "scanned"),)),
+    )
+
+    def resolve(args, summary):
+        summary.repo_refs.add("sentinel-alpha")
+        return {"sentinel-alpha"}
+
+    monkeypatch.setattr(cli, "_run_resolve_stage", resolve)
+    monkeypatch.setattr(
+        cli,
+        "_flag_stage",
+        lambda _args: cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "flagged 0 open"),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_shortlist_stage",
+        lambda _args: cli.CommandResult(cli.CommandStatus.SUCCESS, "settled"),
+    )
+    monkeypatch.setattr(cli, "_shortlist_open_count", lambda _work_root: 0)
+    monkeypatch.setattr(cli, "_report", lambda args: _write_report(Path(args.out_dir), rows=1))
+    return work_root
+
+
+def test_run_full_pipeline_writes_report(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    out_dir = tmp_path / "reports"
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(out_dir),
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+    assert (out_dir / "report.main.csv").exists()
+
+
+def test_run_resolve_stage_resolves_every_scanned_repo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sbom: dict[str, object]
+) -> None:
+    for repo_ref in ("sentinel-alpha", "sentinel-beta"):
+        store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
+    calls: list[str] = []
+
+    def fake_resolve(work_root: Path, repo_ref: str) -> Path:
+        calls.append(repo_ref)
+        store.write_resolved(
+            work_root,
+            repo_ref,
+            [
+                {
+                    "name": f"{repo_ref}-lib",
+                    "version": "1.0.0",
+                    "repo": repo_ref,
+                    "purl": f"pkg:pypi/{repo_ref}-lib@1.0.0",
+                    "declared_license_raw": "MIT",
+                    "spdx_id": "MIT",
+                    "evidence": {
+                        "source_layer": "syft",
+                        "url": "https://example.invalid/sentinel-license",
+                        "anchor": "MIT",
+                    },
+                    "tags": {
+                        "origin": "third-party-oss",
+                        "scope": "runtime",
+                        "distribution": "server",
+                    },
+                    "modified": "unknown",
+                }
+            ],
+        )
+        return tmp_path / "work" / repo_ref / "resolved.ndjson"
+
+    monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
+    args = SimpleNamespace(work_root=tmp_path, quiet=True)
+    summary = cli.RunSummary()
+
+    resolved = cli._run_resolve_stage(args, summary)
+
+    assert resolved == {"sentinel-alpha", "sentinel-beta"}
+    assert calls == ["sentinel-alpha", "sentinel-beta"]
+
+
+def test_resume_with_scan_artifact_does_not_regenerate_candidates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    candidate = work_root / "repos.candidate.md"
+    candidate.parent.mkdir(parents=True)
+    candidate.write_text("sentinel unticked state\n", encoding="utf-8")
+    store.write_sbom(work_root, "sentinel-alpha", _empty_sbom("sentinel-alpha"))
+
+    def fail_discover(**_kwargs):
+        raise AssertionError("discover should not run on resume after scan artifacts")
+
+    monkeypatch.setattr(cli, "run_discover", fail_discover)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+    assert candidate.read_text(encoding="utf-8") == "sentinel unticked state\n"
+
+
+def test_resume_lists_persisted_scan_failures(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    (work_root / "repos.candidate.md").parent.mkdir(parents=True)
+    (work_root / "repos.candidate.md").write_text("sentinel state\n", encoding="utf-8")
+    store.write_sbom(work_root, "sentinel-ok", _empty_sbom("sentinel-ok"))
+    failed_dir = store.repo_dir(work_root, "sentinel-private")
+    failed_dir.mkdir(parents=True)
+    store.atomic_write_json(
+        failed_dir / "scan.status.json",
+        {"status": "failed", "error": "private repo needs auth"},
+    )
+    monkeypatch.setattr(cli, "_run_scan_stage", lambda _args: None)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--yes",
+        ]
+    )
+
+    assert code == 1
+
+
+def test_existing_report_with_persisted_scan_failure_stays_nonzero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    out_dir = tmp_path / "reports"
+    store.write_sbom(work_root, "sentinel-ok", _empty_sbom("sentinel-ok"))
+    resolved_dir = store.repo_dir(work_root, "sentinel-ok")
+    resolved_dir.mkdir(parents=True, exist_ok=True)
+    (resolved_dir / "resolved.ndjson").write_text("{}\n", encoding="utf-8")
+    failed_dir = store.repo_dir(work_root, "sentinel-private")
+    failed_dir.mkdir(parents=True)
+    store.atomic_write_json(
+        failed_dir / "scan.status.json",
+        {"status": "failed", "error": "private repo needs auth"},
+    )
+    _write_report(out_dir, rows=1)
+
+    def fail_scan(_args):
+        raise AssertionError("completed report resume should not rerun scan")
+
+    monkeypatch.setattr(cli, "_run_scan_stage", fail_scan)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(out_dir),
+            "--yes",
+        ]
+    )
+
+    assert code == 1
+
+
+def test_partial_report_artifact_does_not_short_circuit_fresh_run(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    out_dir = tmp_path / "reports"
+    out_dir.mkdir()
+    (out_dir / "report.main.md").write_text("stale partial report\n", encoding="utf-8")
+    calls: list[str] = []
+
+    def discover(**_kwargs):
+        calls.append("discover")
+        return _discover_result(work_root)
+
+    monkeypatch.setattr(cli, "run_discover", discover)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(out_dir),
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+    assert calls == ["discover"]
+    assert (out_dir / "report.main.csv").exists()
+
+
+def test_complete_report_without_work_artifacts_does_not_short_circuit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    out_dir = tmp_path / "reports"
+    _write_report(out_dir, rows=1)
+    calls: list[str] = []
+
+    def discover(**_kwargs):
+        calls.append("discover")
+        return _discover_result(work_root)
+
+    monkeypatch.setattr(cli, "run_discover", discover)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(out_dir),
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+    assert calls == ["discover"]
+
+
+def test_complete_report_without_shortlist_state_runs_flag_shortlist(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    out_dir = tmp_path / "reports"
+    store.write_sbom(work_root, "sentinel-alpha", _empty_sbom("sentinel-alpha"))
+    resolved_dir = store.repo_dir(work_root, "sentinel-alpha")
+    resolved_dir.mkdir(parents=True, exist_ok=True)
+    (resolved_dir / "resolved.ndjson").write_text("{}\n", encoding="utf-8")
+    _write_report(out_dir, rows=1)
+    calls: list[str] = []
+
+    def flag(_args):
+        calls.append("flag")
+        return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "flagged")
+
+    def shortlist(_args):
+        calls.append("shortlist")
+        return cli.CommandResult(cli.CommandStatus.SUCCESS, "settled")
+
+    monkeypatch.setattr(cli, "_flag_stage", flag)
+    monkeypatch.setattr(cli, "_shortlist_stage", shortlist)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(out_dir),
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+    assert calls == ["flag", "shortlist"]
+
+
+def test_stale_flag_outputs_rerun_after_new_resolved_artifact(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    store.write_sbom(work_root, "sentinel-alpha", _empty_sbom("sentinel-alpha"))
+    resolved_dir = store.repo_dir(work_root, "sentinel-alpha")
+    resolved_dir.mkdir(parents=True, exist_ok=True)
+    resolved_path = resolved_dir / "resolved.ndjson"
+    resolved_path.write_text("{}\n", encoding="utf-8")
+    (work_root / "inventory.json").write_text("{}\n", encoding="utf-8")
+    (work_root / "shortlist.json").write_text('{"open_count":0,"items":[]}\n', encoding="utf-8")
+    (work_root / "shortlist.md").write_text("settled\n", encoding="utf-8")
+    for stale_path in (
+        work_root / "inventory.json",
+        work_root / "shortlist.json",
+        work_root / "shortlist.md",
+    ):
+        _set_mtime(stale_path, 10)
+    _set_mtime(resolved_path, 20)
+    calls: list[str] = []
+
+    def flag(_args):
+        calls.append("flag")
+        return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "flagged")
+
+    monkeypatch.setattr(cli, "_flag_stage", flag)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+    assert calls == ["flag"]
+
+
+def test_stale_report_reruns_when_inputs_are_newer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    out_dir = tmp_path / "reports"
+    store.write_sbom(work_root, "sentinel-alpha", _empty_sbom("sentinel-alpha"))
+    resolved_dir = store.repo_dir(work_root, "sentinel-alpha")
+    resolved_dir.mkdir(parents=True, exist_ok=True)
+    resolved_path = resolved_dir / "resolved.ndjson"
+    resolved_path.write_text("{}\n", encoding="utf-8")
+    (work_root / "inventory.json").write_text("{}\n", encoding="utf-8")
+    (work_root / "shortlist.json").write_text('{"open_count":0,"items":[]}\n', encoding="utf-8")
+    (work_root / "shortlist.md").write_text("settled\n", encoding="utf-8")
+    _write_report(out_dir, rows=1)
+    _set_mtime(resolved_path, 20)
+    for input_path in (
+        work_root / "inventory.json",
+        work_root / "shortlist.json",
+        work_root / "shortlist.md",
+    ):
+        _set_mtime(input_path, 30)
+    for report_path in out_dir.iterdir():
+        _set_mtime(report_path, 25)
+    calls: list[str] = []
+
+    def report(args):
+        calls.append("report")
+        return _write_report(Path(args.out_dir), rows=1)
+
+    monkeypatch.setattr(cli, "_report", report)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(out_dir),
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+    assert calls == ["report"]
+
+
+def test_interactive_discover_pause_proceeds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    stderr = _TtyStringIO()
+    monkeypatch.setattr("sys.stdin", _TtyStringIO("\n"))
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+        ]
+    )
+
+    assert code == 0
+    assert "Review" in stderr.getvalue()
+
+
+def test_yes_does_not_prompt_at_discover(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+
+    def fail_readline() -> str:
+        raise AssertionError("run --yes must not read stdin")
+
+    monkeypatch.setattr("sys.stdin.readline", fail_readline)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--yes",
+        ]
+    )
+
+    assert code == 0
+
+
+def test_no_tty_without_yes_does_not_prompt(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    class FailReadlineStringIO(io.StringIO):
+        def readline(self, *_args: object, **_kwargs: object) -> str:
+            raise AssertionError("non-interactive run without --yes must not read stdin")
+
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    monkeypatch.setattr("sys.stdin", FailReadlineStringIO())
+    monkeypatch.setattr("sys.stderr", io.StringIO())
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+        ]
+    )
+
+    assert code == 0
+
+
+def test_open_shortlist_noninteractive_exits_without_report(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    monkeypatch.setattr(cli, "_shortlist_open_count", lambda _work_root: 1)
+
+    def fail_report(_args):
+        raise AssertionError("report must not run while shortlist is open")
+
+    monkeypatch.setattr(cli, "_report", fail_report)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--yes",
+        ]
+    )
+
+    assert code == 1
+    assert not (tmp_path / "reports" / "report.main.csv").exists()
+
+
+def test_step_ignored_when_noninteractive(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+
+    def fail_readline() -> str:
+        raise AssertionError("--step must not read stdin in non-interactive mode")
+
+    monkeypatch.setattr("sys.stdin.readline", fail_readline)
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--yes",
+            "--step",
+        ]
+    )
+
+    assert code == 0
+
+
+def test_partial_scan_failure_reports_successes_and_exits_nonzero(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    work_root = _patch_common_success(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        cli,
+        "_run_scan_stage",
+        lambda _args: ScanReport(
+            (
+                RepoScanOutcome("sentinel-ok", "scanned"),
+                RepoScanOutcome("sentinel-private", "failed", error="needs auth"),
+            )
+        ),
+    )
+
+    code = cli.main(
+        [
+            "run",
+            "--work-root",
+            str(work_root),
+            "--owner",
+            "sentinel-owner",
+            "--out-dir",
+            str(tmp_path / "reports"),
+            "--yes",
+        ]
+    )
+
+    assert code == 1
+    assert (tmp_path / "reports" / "report.main.csv").exists()
+
+
+def test_run_config_after_subcommand_is_loaded(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config_path = tmp_path / "repolens.local.toml"
+    config_path.write_text("", encoding="utf-8")
+    seen: list[Path | None] = []
+
+    monkeypatch.setattr(cli, "load_config", lambda _root, path: seen.append(path) or object())
+    monkeypatch.setattr(
+        cli,
+        "_run_command",
+        lambda _args: cli.CommandResult(cli.CommandStatus.SUCCESS, "ok"),
+    )
+
+    assert (
+        cli.main(
+            [
+                "run",
+                "--config",
+                str(config_path),
+                "--work-root",
+                "work",
+                "--owner",
+                "sentinel-owner",
+            ]
+        )
+        == 0
+    )
+    assert seen == [config_path]
+
+
+def test_global_config_before_run_is_loaded(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    config_path = tmp_path / "repolens.local.toml"
+    config_path.write_text("", encoding="utf-8")
+    seen: list[Path | None] = []
+
+    monkeypatch.setattr(cli, "load_config", lambda _root, path: seen.append(path) or object())
+    monkeypatch.setattr(
+        cli,
+        "_run_command",
+        lambda _args: cli.CommandResult(cli.CommandStatus.SUCCESS, "ok"),
+    )
+
+    assert (
+        cli.main(
+            [
+                "--config",
+                str(config_path),
+                "run",
+                "--work-root",
+                "work",
+                "--owner",
+                "sentinel-owner",
+            ]
+        )
+        == 0
+    )
+    assert seen == [config_path]
+
+
+def test_run_help_and_stage_help_cross_reference_run(capsys: pytest.CaptureFixture[str]) -> None:
+    assert cli.main(["--help"]) == 0
+    top = capsys.readouterr().out
+    assert "repolens run --work-root work --owner <OWNER>" in top
+
+    assert cli.main(["run", "--help"]) == 0
+    run_help = capsys.readouterr().out
+    assert "--yes never approves shortlist items" in run_help
+
+    assert cli.main(["resolve", "--help"]) == 0
+    stage_help = capsys.readouterr().out
+    assert "repolens run --work-root <WORK> --owner <OWNER>" in stage_help
+
+
+def _empty_sbom(repo_ref: str) -> dict[str, object]:
+    return {
+        "schema_version": "1.0",
+        "repo": repo_ref,
+        "generated_at": "2026-01-01T00:00:00Z",
+        "tool": {"name": "syft", "version": "1.0.0"},
+        "source": "https://example.invalid/sentinel-source",
+        "artifacts": [],
+    }

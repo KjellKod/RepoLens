@@ -6,11 +6,12 @@ import argparse
 import math
 import re
 import shlex
+import shutil
 import sys
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, TextIO
@@ -55,6 +56,27 @@ CommandHandler = Callable[[argparse.Namespace], CommandResult]
 
 
 STAGE_COMMANDS = ("discover", "scan", "resolve", "flag", "shortlist", "report")
+REPORT_MAIN_FILENAMES = ("report.main.md", "report.main.csv", "report.main.docx")
+
+
+@dataclass
+class RunFailure:
+    stage: str
+    repo_ref: str | None
+    message: str
+
+
+@dataclass
+class RunSummary:
+    repo_refs: set[str] = field(default_factory=set)
+    report_rows: int = 0
+    failures: list[RunFailure] = field(default_factory=list)
+    skipped: int = 0
+    reports_dir: Path | None = None
+
+    @property
+    def has_failures(self) -> bool:
+        return bool(self.failures)
 
 
 @dataclass(frozen=True)
@@ -65,7 +87,10 @@ class StageHelp:
 
 
 def _stage_epilog(before: str, example: str, output: str, next_step: str) -> str:
-    return f"Before: {before}\nExample: {example}\nOutput: {output}\nNext: {next_step}"
+    return (
+        f"Before: {before}\nExample: {example}\nOutput: {output}\nNext: {next_step}\n"
+        "Also: `repolens run --work-root <WORK> --owner <OWNER>` drives the pipeline end-to-end."
+    )
 
 
 # Per-stage help, shown in `repolens --help` and each stage's own --help.
@@ -156,7 +181,8 @@ _STAGE_HELP = {
 _DESCRIPTION = (
     "RepoLens — an open-source license disclosure across every repository under an owner.\n"
     "It inventories dependencies in any language, flags commercial-use risks, and\n"
-    "assembles an evidence-backed disclosure. Run the stages below in order."
+    "assembles an evidence-backed disclosure. Start with `repolens run` for the\n"
+    "one-command pipeline, or run the individual stages below when debugging."
 )
 
 _EPILOG = (
@@ -168,7 +194,10 @@ _EPILOG = (
     "  Use stage options such as --work-root for output directories; --config is\n"
     "  only for local config files.\n"
     "\n"
-    "typical run:\n"
+    "recommended:\n"
+    "  repolens run --work-root work --owner <OWNER> --out-dir reports\n"
+    "\n"
+    "step it yourself:\n"
     "  1. repolens discover --owner <OWNER>                     find + approve the repos\n"
     "  2. repolens scan --work-root work                        inventory approved dependencies\n"
     "  3. repolens resolve --work-root work                     resolve scanned repos\n"
@@ -217,6 +246,23 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     bootstrap_parser.set_defaults(handler=_bootstrap_command)
+
+    run_parser = subparsers.add_parser(
+        "run",
+        help="Recommended: run the full pipeline with inline pauses and resume.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Recommended entry point — discover, scan, resolve, flag, shortlist, and report "
+            "with human pauses only where review is required."
+        ),
+        epilog=(
+            "Example: repolens run --work-root work --owner <OWNER> --out-dir reports\n"
+            "Automation: repolens run --work-root work --owner <OWNER> --out-dir reports --yes\n"
+            "Resume: rerun the same command; existing artifacts decide the next stage.\n"
+            "Note: --yes never approves shortlist items."
+        ),
+    )
+    _configure_run_parser(run_parser)
 
     for command_name in STAGE_COMMANDS:
         stage_help = _STAGE_HELP[command_name]
@@ -330,6 +376,68 @@ def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.set_defaults(handler=_handle_scan)
 
 
+def _configure_run_parser(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument(
+        "--work-root",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Pipeline work root for all artifacts.",
+    )
+    subparser.add_argument(
+        "--owner",
+        required=True,
+        metavar="OWNER",
+        help="Runtime owner/org to enumerate with gh; never store this in source.",
+    )
+    subparser.add_argument(
+        "--repos",
+        metavar="LIST",
+        help="Comma-separated repo names under --owner; omitted means enumerate the owner.",
+    )
+    subparser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=Path("reports"),
+        metavar="PATH",
+        help="Directory for report.main.{md,csv,docx} and appendix artifacts.",
+    )
+    subparser.add_argument(
+        "--config",
+        dest="run_config",
+        type=Path,
+        metavar="PATH",
+        help="Local config file; equivalent to global `--config PATH` before `run`.",
+    )
+    subparser.add_argument(
+        "--step",
+        action="store_true",
+        help="Pause after every stage in interactive mode so artifacts can be inspected.",
+    )
+    subparser.add_argument(
+        "--yes",
+        "-y",
+        action="store_true",
+        help=(
+            "Automation mode: pass discovery and tool-consent gates, but never approve "
+            "shortlist items."
+        ),
+    )
+    subparser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress run stage banners and scan progress output on stderr.",
+    )
+    subparser.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help="Per-repo wall-clock budget for the Syft scan (default: clone timeout).",
+    )
+    subparser.set_defaults(handler=_run_command)
+
+
 def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--work-root",
@@ -415,7 +523,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             parser.print_help()
             return int(ExitCode.SUCCESS)
 
-        args.runtime_config = load_config(Path.cwd(), args.config)
+        config_path = getattr(args, "run_config", None) or args.config
+        args.runtime_config = load_config(Path.cwd(), config_path)
         result = args.handler(args)
         if result.message:
             print(result.message)
@@ -486,6 +595,448 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
             f"Next CLI stage: {scan_command}"
         ),
     )
+
+
+def _run_command(args: argparse.Namespace) -> CommandResult:
+    if args.timeout is not None and (not math.isfinite(args.timeout) or args.timeout <= 0):
+        raise InputError("--timeout must be a positive number of seconds")
+
+    work_root = Path(args.work_root)
+    out_dir = Path(args.out_dir)
+    summary = RunSummary(reports_dir=out_dir)
+    interactive = _run_interactive(args)
+
+    persisted_failures = _persisted_scan_failures(work_root)
+    resolved_refs = _resolved_repo_refs(work_root)
+    if _report_resume_complete(work_root, out_dir, resolved_refs):
+        summary.report_rows = _report_row_count(out_dir)
+        summary.repo_refs.update(resolved_refs)
+        summary.failures.extend(persisted_failures)
+        status = CommandStatus.FINDINGS_OPEN if summary.has_failures else CommandStatus.SUCCESS
+        return CommandResult(status, _run_done_message(summary))
+
+    if not _has_scan_artifacts(work_root):
+        if not _discover_artifacts_exist(work_root):
+            repos = parse_repos_option(args.repos) if args.repos is not None else None
+            _run_banner(args, "discover", "starting")
+            result = run_discover(
+                owner=args.owner,
+                work_root=work_root,
+                config=args.runtime_config,
+                repos=repos,
+                force_candidate=False,
+            )
+            _run_banner(
+                args,
+                "discover",
+                f"{result.repository_count} repos, {result.candidate_count} checked",
+            )
+        else:
+            _run_banner(args, "discover", "using existing candidate review")
+        if interactive:
+            _run_pause(
+                f"Review {work_root / 'repos.candidate.md'} (untick to exclude), "
+                "then press Enter to continue.",
+                interactive=True,
+            )
+    else:
+        _run_banner(args, "discover", "skipped (scan artifacts exist)")
+    _run_step_pause(args, "discover")
+
+    scan_report = _run_scan_stage(args)
+    if scan_report is not None:
+        summary.repo_refs.update(outcome.repo_ref for outcome in scan_report.scanned)
+        summary.repo_refs.update(outcome.repo_ref for outcome in scan_report.skipped)
+        for outcome in scan_report.failed:
+            summary.failures.append(
+                RunFailure(
+                    "scan",
+                    outcome.repo_ref,
+                    _sanitize(str(outcome.error or "unknown error"), redact_paths=True),
+                )
+            )
+    else:
+        summary.failures.extend(persisted_failures)
+    summary.repo_refs.update(_sbom_repo_refs(work_root))
+    _run_step_pause(args, "scan")
+
+    resolved_refs = _run_resolve_stage(args, summary)
+    if not resolved_refs:
+        return CommandResult(CommandStatus.FINDINGS_OPEN, _run_done_message(summary))
+    _run_step_pause(args, "resolve")
+
+    if _flag_outputs_current(work_root, resolved_refs):
+        _run_banner(args, "flag", "skipped (inventory/shortlist current)")
+    else:
+        flag_result = _flag_stage(_stage_args(args, work_root=work_root))
+        _run_banner(args, "flag", _first_line(flag_result.message))
+    _run_step_pause(args, "flag")
+
+    while True:
+        _shortlist_stage(_stage_args(args, work_root=work_root))
+        open_count = _shortlist_open_count(work_root)
+        _run_banner(args, "shortlist", f"{open_count} open item(s)")
+        if open_count == 0:
+            break
+        instruction = (
+            f"{open_count} items need a decision in {work_root / 'shortlist.md'} "
+            "([x] approve / [r] reject), then press Enter."
+        )
+        if not interactive:
+            print(
+                f"{open_count} items still need review in {work_root / 'shortlist.md'}",
+                file=sys.stderr,
+            )
+            return CommandResult(CommandStatus.FINDINGS_OPEN, instruction)
+        _run_pause(instruction, interactive=True)
+
+    _run_step_pause(args, "shortlist")
+
+    report_root = _report_work_root(work_root, resolved_refs, summary)
+    report_result = _report(_stage_args(args, work_root=report_root, out_dir=out_dir))
+    if report_result.status is CommandStatus.FINDINGS_OPEN:
+        return report_result
+    summary.report_rows = _report_row_count(out_dir)
+    _run_banner(args, "report", f"{summary.report_rows} rows")
+
+    status = CommandStatus.FINDINGS_OPEN if summary.has_failures else CommandStatus.SUCCESS
+    return CommandResult(status, _run_done_message(summary))
+
+
+def _run_scan_stage(args: argparse.Namespace) -> ScanReport | None:
+    work_root = Path(args.work_root)
+    if _scan_complete_or_failed(work_root):
+        _run_banner(args, "scan", "skipped (artifacts already exist)")
+        return None
+
+    from repolens.githost import resolve_clone_credential_result
+    from repolens.scan import runner as scan_runner
+    from repolens.scan.inputs import load_discover_approved_repo_specs
+
+    repos = load_discover_approved_repo_specs(work_root, scan_runner.RepoSpec)
+    scan_args = _stage_args(args, work_root=work_root)
+    syft_path = _ensure_syft_for_scan(scan_args)
+    progress = _ScanProgressPrinter(quiet=args.quiet, stream=sys.stderr)
+    extra = {"timeout_seconds": args.timeout} if args.timeout is not None else {}
+    try:
+        report = scan_runner.scan_repos(
+            work_root,
+            repos,
+            syft_path=syft_path,
+            credential_provider=resolve_clone_credential_result,
+            progress=progress,
+            **extra,
+        )
+    except scan_runner.ScanBatchError as exc:
+        report = exc.report
+    progress.finish(report)
+    _run_banner(
+        args,
+        "scan",
+        (
+            f"{len(report.outcomes)} repos, {len(report.scanned)} scanned, "
+            f"{len(report.skipped)} skipped, {len(report.failed)} failed"
+        ),
+    )
+    return report
+
+
+def _run_resolve_stage(args: argparse.Namespace, summary: RunSummary) -> set[str]:
+    from repolens.resolve import run_resolve
+
+    work_root = Path(args.work_root)
+    resolved_refs = set(_resolved_repo_refs(work_root))
+    for repo_ref in sorted(_sbom_repo_refs(work_root), key=str.casefold):
+        if repo_ref in resolved_refs:
+            summary.skipped += 1
+            summary.repo_refs.add(repo_ref)
+            continue
+        try:
+            _run_banner(args, "resolve", f"{repo_ref} starting")
+            run_resolve(work_root, repo_ref)
+        except Exception as exc:
+            summary.failures.append(
+                RunFailure("resolve", repo_ref, _sanitize(str(exc), redact_paths=True))
+            )
+            continue
+        resolved_refs.add(repo_ref)
+        summary.repo_refs.add(repo_ref)
+        _run_banner(args, "resolve", f"{repo_ref} done")
+    return resolved_refs
+
+
+def _stage_args(
+    source: argparse.Namespace,
+    *,
+    work_root: Path,
+    out_dir: Path | None = None,
+) -> argparse.Namespace:
+    return argparse.Namespace(
+        work_root=work_root,
+        out_dir=out_dir,
+        runtime_config=source.runtime_config,
+        quiet=getattr(source, "quiet", False),
+        yes=getattr(source, "yes", False),
+        timeout=getattr(source, "timeout", None),
+        repos=None,
+        offline=False,
+        repo_ref=None,
+        source_root=None,
+        enable_mobile_native=False,
+        identity=None,
+    )
+
+
+def _run_interactive(args: argparse.Namespace) -> bool:
+    return (
+        not args.yes
+        and bool(getattr(sys.stdin, "isatty", lambda: False)())
+        and bool(getattr(sys.stderr, "isatty", lambda: False)())
+    )
+
+
+def _run_banner(args: argparse.Namespace, stage: str, detail: str) -> None:
+    if args.quiet:
+        return
+    print(f"> {stage} ... {detail}", file=sys.stderr)
+
+
+def _run_pause(message: str, *, interactive: bool) -> None:
+    print(message, file=sys.stderr)
+    if interactive:
+        sys.stdin.readline()
+
+
+def _run_step_pause(args: argparse.Namespace, stage: str) -> None:
+    if not args.step or not _run_interactive(args):
+        return
+    _run_pause(f"Review artifacts after {stage}, then press Enter to continue.", interactive=True)
+
+
+def _discover_artifacts_exist(work_root: Path) -> bool:
+    root = Path(work_root)
+    return (root / "discovered.json").exists() and (root / "repos.candidate.md").exists()
+
+
+def _has_scan_artifacts(work_root: Path) -> bool:
+    work_dir = Path(work_root) / "work"
+    if not work_dir.is_dir():
+        return False
+    return any(
+        path.is_dir()
+        and ((path / "sbom.syft.json").exists() or (path / "scan.status.json").exists())
+        for path in work_dir.iterdir()
+    )
+
+
+def _scan_complete_or_failed(work_root: Path) -> bool:
+    from repolens.scan import runner as scan_runner
+    from repolens.scan.inputs import load_discover_approved_repo_specs
+
+    if not _discover_artifacts_exist(work_root):
+        return False
+    try:
+        repos = load_discover_approved_repo_specs(Path(work_root), scan_runner.RepoSpec)
+    except InputError:
+        return False
+    if not repos:
+        return False
+    return all(_repo_scan_terminal(work_root, spec.repo_ref) for spec in repos)
+
+
+def _repo_scan_terminal(work_root: Path, repo_ref: str) -> bool:
+    directory = _repo_artifact_dir(work_root, repo_ref)
+    return (directory / "sbom.syft.json").exists() or _failed_scan_status(directory)
+
+
+def _failed_scan_status(repo_directory: Path) -> bool:
+    status_path = repo_directory / "scan.status.json"
+    if not status_path.exists():
+        return False
+    try:
+        import json
+
+        raw = json.loads(status_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(raw, dict) and raw.get("status") == "failed"
+
+
+def _persisted_scan_failures(work_root: Path) -> list[RunFailure]:
+    work_dir = Path(work_root) / "work"
+    if not work_dir.is_dir():
+        return []
+    failures: list[RunFailure] = []
+    for path in sorted(
+        (item for item in work_dir.iterdir() if item.is_dir()),
+        key=lambda item: item.name.casefold(),
+    ):
+        status_path = path / "scan.status.json"
+        if not status_path.exists():
+            continue
+        try:
+            import json
+
+            raw = json.loads(status_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(raw, dict) or raw.get("status") != "failed":
+            continue
+        failures.append(
+            RunFailure(
+                "scan",
+                unquote(path.name),
+                _sanitize(str(raw.get("error") or "unknown error"), redact_paths=True),
+            )
+        )
+    return failures
+
+
+def _sbom_repo_refs(work_root: Path) -> set[str]:
+    return _repo_refs_with_artifact(work_root, "sbom.syft.json")
+
+
+def _resolved_repo_refs(work_root: Path) -> set[str]:
+    return _repo_refs_with_artifact(work_root, "resolved.ndjson")
+
+
+def _repo_refs_with_artifact(work_root: Path, artifact_name: str) -> set[str]:
+    work_dir = Path(work_root) / "work"
+    if not work_dir.is_dir():
+        return set()
+    return {
+        unquote(path.name)
+        for path in work_dir.iterdir()
+        if path.is_dir() and (path / artifact_name).exists()
+    }
+
+
+def _shortlist_open_count(work_root: Path) -> int:
+    from repolens.data.store import read_shortlist
+
+    try:
+        value = read_shortlist(work_root)
+    except FileNotFoundError:
+        return 0
+    open_count = value.get("open_count", 0)
+    return open_count if isinstance(open_count, int) else 0
+
+
+def _report_work_root(work_root: Path, resolved_refs: set[str], summary: RunSummary) -> Path:
+    if not summary.has_failures:
+        return work_root
+    target = Path(work_root) / ".run-report-view"
+    if target.exists():
+        shutil.rmtree(target)
+    (target / "work").mkdir(parents=True)
+    for filename in ("discovered.json", "shortlist.json"):
+        source = Path(work_root) / filename
+        if source.exists():
+            shutil.copy2(source, target / filename)
+    for repo_ref in sorted(resolved_refs, key=str.casefold):
+        source_dir = _repo_artifact_dir(work_root, repo_ref)
+        target_dir = _repo_artifact_dir(target, repo_ref)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        source = source_dir / "resolved.ndjson"
+        if source.exists():
+            shutil.copy2(source, target_dir / "resolved.ndjson")
+    return target
+
+
+def _repo_artifact_dir(work_root: Path, repo_ref: str) -> Path:
+    from repolens.data.store import repo_dir
+
+    return repo_dir(work_root, repo_ref)
+
+
+def _report_resume_complete(
+    work_root: Path, out_dir: Path, resolved_refs: set[str] | None = None
+) -> bool:
+    refs = resolved_refs if resolved_refs is not None else _resolved_repo_refs(work_root)
+    return (
+        bool(refs)
+        and _shortlist_complete(work_root)
+        and _report_outputs_current(out_dir, _report_input_paths(work_root, refs))
+    )
+
+
+def _shortlist_complete(work_root: Path) -> bool:
+    root = Path(work_root)
+    return (
+        (root / "inventory.json").exists()
+        and (root / "shortlist.json").exists()
+        and (root / "shortlist.md").exists()
+        and _shortlist_open_count(root) == 0
+    )
+
+
+def _flag_outputs_current(work_root: Path, resolved_refs: set[str]) -> bool:
+    return _artifacts_current(
+        _flag_output_paths(work_root), _resolved_artifact_paths(work_root, resolved_refs)
+    )
+
+
+def _report_outputs_current(out_dir: Path, input_paths: Sequence[Path]) -> bool:
+    output_paths = tuple(Path(out_dir) / filename for filename in REPORT_MAIN_FILENAMES)
+    return _artifacts_current(output_paths, input_paths)
+
+
+def _flag_output_paths(work_root: Path) -> tuple[Path, Path, Path]:
+    root = Path(work_root)
+    return root / "inventory.json", root / "shortlist.json", root / "shortlist.md"
+
+
+def _report_input_paths(work_root: Path, resolved_refs: set[str]) -> tuple[Path, ...]:
+    return (*_resolved_artifact_paths(work_root, resolved_refs), *_flag_output_paths(work_root))
+
+
+def _resolved_artifact_paths(work_root: Path, resolved_refs: set[str]) -> tuple[Path, ...]:
+    return tuple(
+        _repo_artifact_dir(work_root, repo_ref) / "resolved.ndjson"
+        for repo_ref in sorted(resolved_refs, key=str.casefold)
+    )
+
+
+def _artifacts_current(output_paths: Sequence[Path], input_paths: Sequence[Path]) -> bool:
+    if not output_paths or not input_paths:
+        return False
+    try:
+        output_mtime = min(path.stat().st_mtime for path in output_paths)
+        input_mtime = max(path.stat().st_mtime for path in input_paths)
+    except FileNotFoundError:
+        return False
+    return output_mtime >= input_mtime
+
+
+def _report_row_count(out_dir: Path) -> int:
+    csv_path = Path(out_dir) / "report.main.csv"
+    if not csv_path.exists():
+        return 0
+    text = csv_path.read_text(encoding="utf-8")
+    lines = [line for line in text.splitlines() if line.strip()]
+    return max(0, len(lines) - 1)
+
+
+def _run_done_message(summary: RunSummary) -> str:
+    failed = len(summary.failures)
+    skipped_failed = summary.skipped + failed
+    reports = summary.reports_dir if summary.reports_dir is not None else Path("reports")
+    prefix = (
+        f"Done - {len(summary.repo_refs)} repos, {summary.report_rows} in report, "
+        f"{skipped_failed} skipped/failed; {reports}/ written."
+    )
+    if not summary.failures:
+        return prefix
+    details = "\n".join(
+        f"  - {failure.stage}"
+        f"{f' {failure.repo_ref}' if failure.repo_ref else ''}: {failure.message}"
+        for failure in summary.failures
+    )
+    return f"{prefix}\nFailures:\n{details}"
+
+
+def _first_line(value: str) -> str:
+    return value.splitlines()[0] if value else "done"
 
 
 def _handle_scan(args: argparse.Namespace) -> CommandResult:
