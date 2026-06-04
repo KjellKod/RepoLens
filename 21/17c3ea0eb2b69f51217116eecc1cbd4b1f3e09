@@ -1,0 +1,22 @@
+src/repolens/config.py
+  s_853eb455586efb::t_a5db5be65449e4 331,340,350,367,378
+  s_853eb455586efb::t_1184be6b6b7e44 73-74,322
+src/repolens/data/validation.py
+  s_853eb455586efb::t_0fbe250e91cc3e 39-41,50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "2117c3ea0eb2b69f51217116eecc1cbd4b1f3e09",
+  "prompts": {},
+  "sessions": {
+    "s_853eb455586efb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e94a7-867e-7881-aa54-d0c218023533",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
