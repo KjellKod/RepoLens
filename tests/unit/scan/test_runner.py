@@ -248,6 +248,49 @@ dependencies = ["Sentinel_Py.Runtime[http]==1.2.3; python_version >= '3.11'"]
     assert "declared_version_status" not in artifact
 
 
+def test_pyproject_project_dependency_merges_with_existing_lockfile_artifact(
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work-root"
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_with_pyproject(
+            """
+[project]
+dependencies = ["Sentinel_Shared==1.2.3"]
+"""
+        ),
+        command_runner=_syft_ok(
+            {
+                **_syft_document(),
+                "artifacts": [
+                    {
+                        "name": "sentinel-shared",
+                        "version": "1.2.3",
+                        "type": "python",
+                        "purl": "pkg:pypi/sentinel-shared@1.2.3",
+                        "locations": [{"path": "/requirements-dev.txt"}],
+                    }
+                ],
+            }
+        ),
+        clock=lambda: "2026-01-01T00:00:00Z",
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert len(artifacts) == 1
+    assert artifacts[0] == {
+        "name": "sentinel-shared",
+        "type": "python",
+        "version": "1.2.3",
+        "purl": "pkg:pypi/sentinel-shared@1.2.3",
+        "locations": ["/requirements-dev.txt", "pyproject.toml"],
+    }
+
+
 def test_pyproject_optional_dependencies_are_added_to_sbom(tmp_path: Path) -> None:
     work_root = tmp_path / "work-root"
 

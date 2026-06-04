@@ -2,6 +2,11 @@
 
 Write `shortlist.proposals.json` as a JSON array.
 
+The packaged JSON Schema is
+`src/repolens/data/schemas/shortlist_proposals.schema.json`. It validates the
+artifact container, known fields, and field types. RepoLens still parses each proposal
+fail-closed so missing proposal fields remain explicit `proposal:invalid_*` reasons.
+
 Resolution proposal:
 
 ```json

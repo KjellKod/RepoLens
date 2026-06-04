@@ -57,7 +57,10 @@ repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
 
 Read `work/shortlist.contexts.json`. For each row, inspect only `component_ref`,
 `wrapped_context`, and read-only `triage`. Write `work/shortlist.proposals.json` as a JSON
-array. Use the schema in `.skills/repolens/reference/proposal-schema.md`.
+array. From the RepoLens repository root, load the human-facing proposal reference at
+`.skills/repolens/reference/proposal-schema.md` and the machine-readable schema at
+`src/repolens/data/schemas/shortlist_proposals.schema.json` before writing proposals. Also
+load `.skills/repolens/reference/triage-cheatsheet.md` when judging distribution/scope risk.
 
 Run a BLOCK sanity pass before writing the file:
 

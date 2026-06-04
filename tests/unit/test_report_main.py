@@ -163,6 +163,23 @@ def test_coverage_gaps_are_rendered_without_dropping_rows(
     assert len(rows) == 1
     assert rows[0]["spdx_id"] == "UNKNOWN"
     assert rows[0]["version"] == "1.2.3; 1.2.4"
+    assert rows[0]["source_url"] == "pkg:pypi/acme-lib@1.2.3"
+    assert rows[0]["coverage_gaps"] == "missing_category; missing_source_url; missing_spdx_id"
+
+
+def test_missing_evidence_url_without_purl_still_renders_empty_source_url(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    no_url = {
+        **resolved_record,
+        "spdx_id": None,
+        "evidence": {"source_layer": "syft"},
+    }
+    no_url.pop("purl")
+    store.write_resolved(tmp_path, "acme-alpha", [no_url])
+
+    rows = _csv_records(render_main_report(tmp_path, tmp_path / "out", _report_config()).csv_path)
+
     assert rows[0]["source_url"] == ""
     assert rows[0]["coverage_gaps"] == "missing_category; missing_source_url; missing_spdx_id"
 
@@ -534,6 +551,10 @@ def test_report_main_md_csv_docx_share_main_row_set_without_build_ci_gap(
     docx_xml = zipfile.ZipFile(result.docx_path).read("word/document.xml").decode("utf-8")
     assert [row["name"] for row in main_rows] == [resolved_record["name"]]
     assert appendix_rows[0]["name"] == ci_name
+    assert (
+        appendix_rows[0]["source_url"]
+        == "pkg:githubactions/sentinel-ci-owner/sentinel-ci-action@v1"
+    )
     assert ci_name not in markdown
     assert ci_name not in docx_xml
     assert result.appendices[0].label == "build-ci"

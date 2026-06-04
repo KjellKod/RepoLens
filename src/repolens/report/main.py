@@ -357,6 +357,9 @@ def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[Dis
         source_url = _optional_text(evidence.get("url"))
         if source_url is None:
             group.coverage_gaps.add("missing_source_url")
+            package_url = _optional_text(record.get("purl"))
+            if package_url is not None:
+                group.source_urls.add(package_url)
         else:
             group.source_urls.add(source_url)
 

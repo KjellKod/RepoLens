@@ -168,3 +168,24 @@ def shortlist() -> dict[str, Any]:
             }
         ],
     }
+
+
+@pytest.fixture
+def shortlist_proposals() -> list[dict[str, Any]]:
+    return [
+        {
+            "component_ref": "acme-lib|MIT",
+            "spdx_id": "MIT",
+            "evidence_url": "https://api.deps.dev/v3alpha/systems/pypi/packages/acme-lib/versions/1.2.3",
+            "evidence_anchor": "MIT",
+            "disposition": "allow",
+            "confidence": 0.95,
+            "rationale": "Registry metadata anchors MIT.",
+            "sanity_check": "No BLOCK terms found.",
+        },
+        {
+            "component_ref": "acme-lib|UNKNOWN",
+            "abstain": True,
+            "reason": "No fetchable evidence URL in context.",
+        },
+    ]

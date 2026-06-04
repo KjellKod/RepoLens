@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from functools import lru_cache
+from importlib import resources
 from pathlib import Path
 from typing import Any
 
@@ -64,6 +67,7 @@ def load_proposals(path: Path) -> tuple[ProposalRecord, ...]:
     raw = store.load_json_capped(path, max_bytes=max_bytes_for("shortlist"))
     if not isinstance(raw, list):
         raise SchemaValidationError("proposal artifact must be a JSON array")
+    _validate_proposal_artifact_shape(raw)
     records: list[ProposalRecord] = []
     for entry in raw:
         records.append(_parse_entry(entry))
@@ -157,6 +161,54 @@ def _group_by_ref(records: Sequence[ProposalRecord]) -> dict[str, tuple[Proposal
     for record in records:
         grouped.setdefault(record.component_ref, []).append(record)
     return {key: tuple(value) for key, value in grouped.items()}
+
+
+@lru_cache
+def _proposal_schema_properties() -> dict[str, set[str]]:
+    schema_path = resources.files("repolens.data").joinpath(
+        "schemas/shortlist_proposals.schema.json"
+    )
+    schema = json.loads(schema_path.read_text(encoding="utf-8"))
+    items = schema.get("items", {})
+    properties = items.get("properties", {})
+    if not isinstance(properties, dict):
+        raise SchemaValidationError("shortlist_proposals schema properties must be an object")
+    parsed: dict[str, set[str]] = {}
+    for field, spec in properties.items():
+        if not isinstance(field, str) or not isinstance(spec, dict):
+            continue
+        raw_type = spec.get("type")
+        if isinstance(raw_type, str):
+            parsed[field] = {raw_type}
+        elif isinstance(raw_type, list):
+            parsed[field] = {item for item in raw_type if isinstance(item, str)}
+    return parsed
+
+
+def _validate_proposal_artifact_shape(raw: list[object]) -> None:
+    properties = _proposal_schema_properties()
+    for index, entry in enumerate(raw):
+        if not isinstance(entry, Mapping):
+            raise SchemaValidationError(f"shortlist_proposals.{index}: expected object")
+        for field, value in entry.items():
+            expected = properties.get(str(field))
+            if expected is None:
+                raise SchemaValidationError(
+                    f"shortlist_proposals.{index}: unexpected field {field!r}"
+                )
+            if not _matches_schema_type(value, expected):
+                expected_text = " or ".join(sorted(expected))
+                raise SchemaValidationError(
+                    f"shortlist_proposals.{index}.{field}: expected {expected_text}"
+                )
+
+
+def _matches_schema_type(value: object, expected: set[str]) -> bool:
+    if "boolean" in expected and isinstance(value, bool):
+        return True
+    if "string" in expected and isinstance(value, str):
+        return True
+    return "number" in expected and isinstance(value, int | float) and not isinstance(value, bool)
 
 
 def _parse_entry(entry: object) -> ProposalRecord:

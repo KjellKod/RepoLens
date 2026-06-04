@@ -393,13 +393,27 @@ def _append_new_artifacts(
     artifacts: list[dict[str, Any]],
     candidates: Sequence[dict[str, Any]],
 ) -> None:
-    seen = {_artifact_identity(artifact) for artifact in artifacts}
+    seen = {_artifact_identity(artifact): artifact for artifact in artifacts}
     for candidate in candidates:
         identity = _artifact_identity(candidate)
-        if identity in seen:
+        existing = seen.get(identity)
+        if existing is not None:
+            _merge_artifact_metadata(existing, candidate)
             continue
         artifacts.append(candidate)
-        seen.add(identity)
+        seen[identity] = candidate
+
+
+def _merge_artifact_metadata(target: dict[str, Any], source: dict[str, Any]) -> None:
+    locations = target.setdefault("locations", [])
+    if not isinstance(locations, list):
+        locations = []
+        target["locations"] = locations
+    for location in source.get("locations", []):
+        if isinstance(location, str) and location not in locations:
+            locations.append(location)
+    if source.get("declared_version_status") == DECLARED_UNPINNED_STATUS:
+        target["declared_version_status"] = DECLARED_UNPINNED_STATUS
 
 
 def _artifact_identity(artifact: dict[str, Any]) -> tuple[str, str, str | None, str | None]:
