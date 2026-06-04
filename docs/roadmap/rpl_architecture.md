@@ -105,8 +105,10 @@ manifest can be validated offline with `python3 -m repolens.bootstrap --dry-run`
 ## Scan execution model & sandbox scope
 
 `scan` runs clone + Syft **in-process** with a hardened git environment, an ephemeral
-per-repo workdir (guaranteed `finally` cleanup), a per-repo wall-clock timeout, and no
-secrets (no GitHub token) in the child environment. No untrusted code from a scanned
+per-repo workdir (guaranteed `finally` cleanup), separate clone and Syft wall-clock
+timeouts, and no secrets (no GitHub token) in the child environment. Clone uses partial
+clone plus sparse checkout for dependency manifests, lockfiles, `.gitmodules`, and
+license/copying files before Syft reads the checkout. No untrusted code from a scanned
 repository executes — clone hooks/symlinks/file-protocol are disabled and Syft is a static
 inventory.
 

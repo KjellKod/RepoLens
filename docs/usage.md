@@ -458,8 +458,8 @@ produces one SBOM per repo. It does **not** re-run discovery and is independentl
 rerunnable.
 
 ```
-repolens scan --work-root work [--timeout SECONDS] [--yes] [--offline] [--quiet]
-repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [--yes] [--quiet]
+repolens scan --work-root work [--timeout SECONDS] [--clone-timeout SECONDS] [--yes] [--offline] [--quiet]
+repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [--clone-timeout SECONDS] [--yes] [--quiet]
 ```
 
 - `--work-root` — the pipeline work root. Per-repo artifacts land under
@@ -473,6 +473,9 @@ repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [
   ```json
   { "repos": [ { "repo_ref": "<repo>", "clone_url": "https://<host>/<owner>/<repo>.git" } ] }
   ```
+- `--timeout` — per-repo wall-clock budget for the Syft inventory scan.
+- `--clone-timeout` — per-repo wall-clock budget for hardened Git clone. Defaults to 300
+  seconds and can also be set in local config as `scan.clone_timeout_seconds`.
 - `--yes` / `-y` — pre-consent for automation. If the verified cache is empty, scan
   downloads RepoLens's pinned Syft, verifies it, caches it, and continues.
 - `--offline` — require the verified shared cache. Scan never downloads or prompts; if the
@@ -487,11 +490,16 @@ For the default bridge, checked rows in `repos.candidate.md` are joined back to
 `https://github.com/<name_with_owner>.git`, then validated through the same HTTPS,
 no-credentials checks used by explicit `--repos` input.
 
-For each repo, `scan` clones through the hardened clone primitive (depth-1, no tags, single
-branch, no recursive submodules, hooks/symlinks/file-protocol disabled, prompts off, system
-git config off), runs the pinned Syft over the cloned path within a per-repo wall-clock
-budget, maps Syft's output onto the frozen `sbom.schema.json`, and persists it through the
-store (token-redacted, schema-validated). It also reads static root `pyproject.toml`
+For each repo, `scan` clones through the hardened clone primitive using partial clone
+(`--filter=blob:none --no-checkout`) plus sparse checkout for supported dependency
+manifests, lockfiles, `.gitmodules`, and license/copying files. If the initial remote
+clearly does not support partial-clone filtering, RepoLens falls back to the same hardened
+full shallow clone path; sparse-checkout, checkout, auth, access, rate-limit, timeout, and
+security failures do not fall back. The clone remains depth-1, no tags, single branch, no
+recursive submodules, hooks/symlinks/file-protocol disabled, prompts off, and system git
+config off. RepoLens then runs the pinned Syft over the cloned path within the Syft
+`--timeout`, maps Syft's output onto the frozen `sbom.schema.json`, and persists it through
+the store (token-redacted, schema-validated). It also reads static root `pyproject.toml`
 project and optional dependencies without executing repository code. A completed SBOM lets
 a rerun **skip** that repo. Every successful SBOM is persisted even within a mixed run; if
 any repo fails the process exits `1` after the rest finish. Token redaction is applied to
@@ -505,6 +513,7 @@ the default list when a repository has local non-shipped sample or generated pat
 ```toml
 [scan]
 exclude_paths = ["generated-fixtures/"]
+clone_timeout_seconds = 300
 ```
 
 When local config restricts Syft catalogers, RepoLens preserves that restriction but also
@@ -526,10 +535,10 @@ the existing bootstrap gates (checksum → signature → provenance, all before 
 exposed); the scanner then consumes that already-verified binary.
 
 `scan` runs clone + Syft **in-process** with a hardened git environment, an ephemeral
-per-repo workdir, a per-repo wall-clock timeout, and no secrets in the child environment;
-no untrusted repo code executes (clone hooks/symlinks/file-protocol disabled, Syft is a
-static inventory). Full container/VM runner-layer isolation is a deliberate scope boundary
-layered at the runner — see
+per-repo workdir, separate clone and Syft wall-clock timeouts, and no secrets in the child
+environment; no untrusted repo code executes (clone hooks/symlinks/file-protocol disabled,
+Syft is a static inventory). Full container/VM runner-layer isolation is a deliberate scope
+boundary layered at the runner — see
 [architecture → Scan execution model & sandbox scope](roadmap/rpl_architecture.md#scan-execution-model--sandbox-scope).
 
 ## `resolve` — license ladder → `resolved.ndjson`
