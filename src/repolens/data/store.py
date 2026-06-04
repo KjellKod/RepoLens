@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 from collections.abc import Iterable
 from contextlib import suppress
@@ -27,6 +28,12 @@ def repo_dir(work_root: str | Path, repo_ref: str) -> Path:
     """Return the per-repository artifact directory."""
 
     return Path(work_root) / "work" / _repo_ref_dirname(repo_ref)
+
+
+def source_snapshot_dir(work_root: str | Path, repo_ref: str) -> Path:
+    """Return the scan-owned bounded source sidecar directory."""
+
+    return repo_dir(work_root, repo_ref) / "source.snapshot"
 
 
 def _repo_ref_dirname(repo_ref: str) -> str:
@@ -214,6 +221,42 @@ def read_first_party(work_root: str | Path, repo_ref: str) -> frozenset[str]:
     if not isinstance(raw_names, list):
         return frozenset()
     return frozenset(name for name in raw_names if isinstance(name, str) and name)
+
+
+def read_source_snapshot(work_root: str | Path, repo_ref: str) -> Path | None:
+    """Return the stored source sidecar if present; tolerate old work-roots."""
+
+    path = source_snapshot_dir(work_root, repo_ref)
+    try:
+        if path.is_dir():
+            return path.resolve()
+    except OSError:
+        return None
+    return None
+
+
+def replace_source_snapshot(
+    work_root: str | Path,
+    repo_ref: str,
+    staged_dir: str | Path | None,
+) -> Path | None:
+    """Replace the scan-owned source sidecar with ``staged_dir`` or remove it.
+
+    The caller is responsible for staging only bounded, policy-approved files.
+    This helper owns cleanup/replacement under the per-repo artifact directory.
+    """
+
+    target = source_snapshot_dir(work_root, repo_ref)
+    if target.is_dir():
+        shutil.rmtree(target)
+    elif target.exists():
+        target.unlink()
+    if staged_dir is None:
+        return None
+    staged = Path(staged_dir)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(staged, target)
+    return target
 
 
 def read_sbom(work_root: str | Path, repo_ref: str) -> dict[str, Any]:

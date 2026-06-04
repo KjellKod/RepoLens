@@ -136,6 +136,90 @@ def test_scan_writes_empty_first_party_set_when_no_workspaces(tmp_path: Path) ->
     assert store.read_first_party(work_root, "acme-alpha") == frozenset()
 
 
+def test_scan_writes_bounded_source_snapshot_from_sparse_manifest_paths(
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work-root"
+    token = "ghp_" + "A" * 24
+
+    def clone(options):
+        destination = _clone_into(options)
+        package_dir = destination / "vendor" / "fixture-lib"
+        package_dir.mkdir(parents=True)
+        (package_dir / "package.json").write_text('{"name":"fixture-lib"}\n', encoding="utf-8")
+        (package_dir / "LICENSE").write_text("MIT\n", encoding="utf-8")
+        (package_dir / "requirements-token.txt").write_text(token, encoding="utf-8")
+        (destination / ".git").mkdir()
+        (destination / ".git" / "config").write_text(
+            f"url = https://{token}@github.com/acme/private.git\n", encoding="utf-8"
+        )
+        (destination / "src").mkdir()
+        (destination / "src" / "private.py").write_text("SECRET = 1\n", encoding="utf-8")
+        (destination / "dist").mkdir()
+        (destination / "dist" / "bundle.js").write_text("compiled\n", encoding="utf-8")
+        (package_dir / "LICENSE.link").symlink_to(package_dir / "LICENSE")
+        return destination
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=clone,
+        command_runner=_syft_ok(_syft_document()),
+    )
+
+    snapshot = store.read_source_snapshot(work_root, "acme-alpha")
+    assert snapshot is not None
+    assert (snapshot / "vendor" / "fixture-lib" / "package.json").read_text(
+        encoding="utf-8"
+    ) == '{"name":"fixture-lib"}\n'
+    assert (snapshot / "vendor" / "fixture-lib" / "LICENSE").read_text(encoding="utf-8") == "MIT\n"
+    assert not (snapshot / ".git" / "config").exists()
+    assert not (snapshot / "src" / "private.py").exists()
+    assert not (snapshot / "dist" / "bundle.js").exists()
+    assert not (snapshot / "vendor" / "fixture-lib" / "LICENSE.link").exists()
+    assert not (snapshot / "vendor" / "fixture-lib" / "requirements-token.txt").exists()
+    snapshot_text = "\n".join(
+        path.read_text(encoding="utf-8") for path in snapshot.rglob("*") if path.is_file()
+    )
+    assert token not in snapshot_text
+
+
+def test_full_materialized_checkout_snapshot_remains_sparse_policy_bounded(
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work-root"
+    token = "ghp_" + "B" * 24
+
+    def clone(options):
+        destination = _clone_into(options)
+        package_dir = destination / "packages" / "fixture-lib"
+        package_dir.mkdir(parents=True)
+        (package_dir / "package.json").write_text('{"name":"fixture-lib"}\n', encoding="utf-8")
+        (package_dir / "package-lock.json").write_bytes(b"{" + b" " * (600 * 1024) + b"}")
+        (package_dir / "index.js").write_text("module.exports = 1\n", encoding="utf-8")
+        (destination / ".git").mkdir()
+        (destination / ".git" / "config").write_text(
+            f"extraheader = Authorization: Basic {token}\n", encoding="utf-8"
+        )
+        return destination
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=clone,
+        command_runner=_syft_ok(_syft_document()),
+    )
+
+    snapshot = store.read_source_snapshot(work_root, "acme-alpha")
+    assert snapshot is not None
+    assert (snapshot / "packages" / "fixture-lib" / "package.json").is_file()
+    assert not (snapshot / "packages" / "fixture-lib" / "package-lock.json").exists()
+    assert not (snapshot / "packages" / "fixture-lib" / "index.js").exists()
+    assert not (snapshot / ".git" / "config").exists()
+
+
 def test_pyproject_project_dependencies_are_added_to_sbom(tmp_path: Path) -> None:
     work_root = tmp_path / "work-root"
 

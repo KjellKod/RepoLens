@@ -59,6 +59,7 @@ CI_ONLY_TAGS = {
 SbomReader = Callable[[str | Path, str], dict[str, object]]
 ResolvedWriter = Callable[[str | Path, str, Sequence[dict[str, object]]], Path]
 FirstPartyReader = Callable[[str | Path, str], frozenset[str]]
+SourceSnapshotReader = Callable[[str | Path, str], Path | None]
 ResolveProgress = Callable[[int, int, str], None]
 
 
@@ -86,6 +87,7 @@ def run_resolve(
     sbom_reader: SbomReader | None = None,
     resolved_writer: ResolvedWriter | None = None,
     first_party_reader: FirstPartyReader | None = None,
+    source_snapshot_reader: SourceSnapshotReader | None = None,
     limits: SecurityLimits = DEFAULT_LIMITS,
 ) -> Path:
     """Resolve a Syft SBOM into frozen-schema ``resolved.ndjson`` records."""
@@ -98,7 +100,12 @@ def run_resolve(
     # loop, after _resolved_dict builds the record, covers every resolution path
     # (declared, api, scancode, mobile, unresolved) with a single touch-point.
     first_party_names = read_first_party(work_root, repo_ref)
-    resolved_source_root = _validated_source_root(source_root)
+    resolved_source_root = _effective_source_root(
+        work_root,
+        repo_ref,
+        source_root=source_root,
+        source_snapshot_reader=source_snapshot_reader,
+    )
     detection = detect_mobile(resolved_source_root, limits=limits)
     packages = _package_facts(sbom, repo_ref)
     records: list[dict[str, object]] = []
@@ -150,6 +157,15 @@ def _first_party_reader(reader: FirstPartyReader | None) -> FirstPartyReader:
     from repolens.data.store import read_first_party
 
     return read_first_party
+
+
+def _source_snapshot_reader(reader: SourceSnapshotReader | None) -> SourceSnapshotReader:
+    if reader is not None:
+        return reader
+
+    from repolens.data.store import read_source_snapshot
+
+    return read_source_snapshot
 
 
 def _resolved_dict(item: ResolvedItem) -> dict[str, object]:
@@ -487,6 +503,18 @@ def _validated_source_root(source_root: str | Path | None) -> Path | None:
     if not root.is_dir():
         return None
     return root
+
+
+def _effective_source_root(
+    work_root: str | Path,
+    repo_ref: str,
+    *,
+    source_root: str | Path | None,
+    source_snapshot_reader: SourceSnapshotReader | None,
+) -> Path | None:
+    if source_root is not None:
+        return _validated_source_root(source_root)
+    return _source_snapshot_reader(source_snapshot_reader)(work_root, repo_ref)
 
 
 def _version_or_unknown(value: object) -> str:

@@ -40,7 +40,12 @@ from repolens.githost import (
     rate_limited_message,
 )
 from repolens.scan.first_party import collect_first_party_names
-from repolens.security.clone import CloneCredential, CloneOptions, hardened_clone
+from repolens.security.clone import (
+    CloneCredential,
+    CloneOptions,
+    hardened_clone,
+    is_sparse_manifest_path,
+)
 from repolens.security.errors import (
     CloneAccessDenied,
     CloneAuthRequired,
@@ -50,7 +55,11 @@ from repolens.security.errors import (
     CloneTransient,
 )
 from repolens.security.limits import DEFAULT_LIMITS, SecurityLimits
-from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
+from repolens.security.redaction import (
+    committed_token_patterns,
+    redact_tokens,
+    redact_tokens_from_structure,
+)
 from repolens.security.retry import DEFAULT_BASE_DELAY, retry_with_backoff
 
 SCHEMA_VERSION = "1.0"
@@ -80,6 +89,8 @@ CloneFn = Callable[[CloneOptions], Path]
 ProgressFn = Callable[["ScanProgressEvent"], None]
 #: Resolves a read-only credential once per run (lazily, on first private repo).
 CredentialProvider = Callable[[], "CloneCredential | CloneCredentialResolution | None"]
+#: Replaces the scan-owned bounded source sidecar.
+SourceSnapshotWriter = Callable[[str | Path, str, str | Path | None], Path | None]
 
 #: Clone-retry bounds. The attempt cap is the primary wall-clock bound: each
 #: attempt is itself capped at ``clone_timeout_seconds`` by the hardened clone
@@ -88,6 +99,9 @@ CredentialProvider = Callable[[], "CloneCredential | CloneCredentialResolution |
 #: subprocess timeout overshoot.
 CLONE_RETRY_MAX_ATTEMPTS = 2
 _CLONE_ELAPSED_BUDGET_FACTOR = float(CLONE_RETRY_MAX_ATTEMPTS)
+_MAX_SOURCE_SNAPSHOT_FILES = 256
+_MAX_SOURCE_SNAPSHOT_TOTAL_BYTES = 4 * 1024 * 1024
+_MAX_SOURCE_SNAPSHOT_FILE_BYTES = 512 * 1024
 
 
 @dataclass(frozen=True)
@@ -568,6 +582,7 @@ def _scan_one(
     write_sbom_fn: Callable[..., Path],
     write_status_fn: Callable[[str | Path, Any], None],
     write_first_party_fn: Callable[..., Path],
+    write_source_snapshot_fn: SourceSnapshotWriter,
     get_credential: CredentialProvider,
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
@@ -632,6 +647,13 @@ def _scan_one(
         # that survives the `finally` rmtree of the ephemeral workdir. Persisted
         # under repo_dir, not workdir, so later checkout-free stages can read it.
         write_first_party_fn(work_root, repo.repo_ref, _detect_first_party(clone_path))
+        _persist_source_snapshot(
+            work_root,
+            repo.repo_ref,
+            clone_path,
+            repo_dir=repo_dir,
+            write_source_snapshot_fn=write_source_snapshot_fn,
+        )
         _write_status(
             repo_dir,
             write_status_fn,
@@ -679,6 +701,80 @@ def _detect_first_party(clone_path: Path) -> list[str]:
         return collect_first_party_names(clone_path)
     except Exception:
         return []
+
+
+def _persist_source_snapshot(
+    work_root: str | Path,
+    repo_ref: str,
+    clone_path: Path,
+    *,
+    repo_dir: Path,
+    write_source_snapshot_fn: SourceSnapshotWriter,
+) -> None:
+    staged_parent = Path(tempfile.mkdtemp(prefix=".source-snapshot-", dir=repo_dir))
+    staged = staged_parent / "source.snapshot"
+    staged.mkdir()
+    copied = 0
+    total_bytes = 0
+    try:
+        for source, relative_path in _iter_snapshot_candidates(clone_path):
+            try:
+                stat = source.stat()
+            except OSError:
+                continue
+            if stat.st_size > _MAX_SOURCE_SNAPSHOT_FILE_BYTES:
+                continue
+            if copied >= _MAX_SOURCE_SNAPSHOT_FILES:
+                continue
+            if total_bytes + stat.st_size > _MAX_SOURCE_SNAPSHOT_TOTAL_BYTES:
+                continue
+            try:
+                data = source.read_bytes()
+            except OSError:
+                continue
+            if _contains_token_sentinel(data):
+                continue
+            destination = staged / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(data)
+            copied += 1
+            total_bytes += stat.st_size
+        write_source_snapshot_fn(work_root, repo_ref, staged if copied else None)
+        staged = Path()
+    finally:
+        if staged_parent.exists():
+            shutil.rmtree(staged_parent, ignore_errors=True)
+
+
+def _iter_snapshot_candidates(clone_path: Path) -> Sequence[tuple[Path, PurePosixPath]]:
+    candidates: list[tuple[Path, PurePosixPath]] = []
+    root = clone_path.resolve()
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        dirnames[:] = [
+            name for name in dirnames if name != ".git" and not (Path(dirpath) / name).is_symlink()
+        ]
+        current = Path(dirpath)
+        for filename in filenames:
+            source = current / filename
+            if source.is_symlink() or not source.is_file():
+                continue
+            try:
+                relative = source.relative_to(root)
+            except ValueError:
+                continue
+            relative_posix = PurePosixPath(relative.as_posix())
+            if is_sparse_manifest_path(relative_posix.as_posix()):
+                candidates.append((source, relative_posix))
+    return tuple(candidates)
+
+
+def _contains_token_sentinel(data: bytes) -> bool:
+    text = data.decode("utf-8", errors="ignore")
+    return any(pattern.search(text) for pattern in committed_token_patterns())
+
+
+def _skip_source_snapshot(*_args: object) -> Path | None:
+    return None
 
 
 def _clone_with_retry(
@@ -797,6 +893,7 @@ def scan_repos(
     write_sbom_fn: Callable[..., Path] | None = None,
     write_status_fn: Callable[[str | Path, Any], None] | None = None,
     write_first_party_fn: Callable[..., Path] | None = None,
+    write_source_snapshot_fn: SourceSnapshotWriter | None = None,
     progress: ProgressFn | None = None,
     exclude_paths: Sequence[str] = DEFAULT_EXCLUDE_PATHS,
     syft_catalogers: Sequence[str] | None = None,
@@ -823,12 +920,20 @@ def scan_repos(
     sleep = sleep or time.sleep
     monotonic = monotonic or time.monotonic
 
-    if None in (is_scanned_fn, repo_dir_fn, write_sbom_fn, write_status_fn, write_first_party_fn):
+    store_needed = None in (
+        is_scanned_fn,
+        repo_dir_fn,
+        write_sbom_fn,
+        write_status_fn,
+        write_first_party_fn,
+    )
+    if store_needed:
         # Lazy: importing the store pulls jsonschema (absent from the lock-only
         # security-canaries env). Canaries inject all store seams to avoid this.
         from repolens.data.store import (
             atomic_write_json,
             is_repo_scanned,
+            replace_source_snapshot,
             repo_dir,
             write_first_party,
             write_sbom,
@@ -839,6 +944,9 @@ def scan_repos(
         write_sbom_fn = write_sbom_fn or write_sbom
         write_status_fn = write_status_fn or atomic_write_json
         write_first_party_fn = write_first_party_fn or write_first_party
+        write_source_snapshot_fn = write_source_snapshot_fn or replace_source_snapshot
+    else:
+        write_source_snapshot_fn = write_source_snapshot_fn or _skip_source_snapshot
 
     get_credential = _memoized_credential_provider(credential_provider)
 
@@ -881,6 +989,7 @@ def scan_repos(
             write_sbom_fn=write_sbom_fn,
             write_status_fn=write_status_fn,
             write_first_party_fn=write_first_party_fn,
+            write_source_snapshot_fn=write_source_snapshot_fn,
             get_credential=get_credential,
             sleep=sleep,
             monotonic=monotonic,

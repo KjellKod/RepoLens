@@ -253,6 +253,63 @@ def test_run_resolve_stage_resolves_every_scanned_repo(
     assert calls == ["sentinel-alpha", "sentinel-beta"]
 
 
+def test_run_resolve_stage_writes_scancode_record_from_stored_snapshot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repo_ref = "sentinel-alpha"
+    store.write_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "schema_version": "1.0",
+            "repo": repo_ref,
+            "generated_at": "2026-01-01T00:00:00Z",
+            "tool": {"name": "syft", "version": "1.0.0"},
+            "source": "https://example.invalid/sentinel-alpha",
+            "artifacts": [
+                {
+                    "name": "fixture-lib",
+                    "version": None,
+                    "type": "unknown",
+                    "licenses": [],
+                    "locations": ["vendor/fixture-lib/package.json"],
+                }
+            ],
+        },
+    )
+    staged = tmp_path / "staged-source"
+    package_dir = staged / "vendor" / "fixture-lib"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text('{"name":"fixture-lib"}\n', encoding="utf-8")
+    store.replace_source_snapshot(tmp_path, repo_ref, staged)
+
+    def runner(argv: list[str], *, timeout: float):
+        del argv, timeout
+        return type(
+            "Completed",
+            (),
+            {
+                "returncode": 0,
+                "stdout": '{"files":[{"license_expression_spdx":"Apache-2.0"}]}',
+                "stderr": "",
+            },
+        )()
+
+    monkeypatch.setattr(
+        "repolens.resolve.stage.resolve_scancode_path",
+        lambda work_root: Path(work_root) / "tools" / "scancode",
+    )
+    monkeypatch.setattr("repolens.resolve.scancode._default_command_runner", runner)
+    summary = cli.RunSummary()
+
+    resolved = cli._run_resolve_stage(SimpleNamespace(work_root=tmp_path, quiet=True), summary)
+
+    records = list(store.iter_resolved(tmp_path / "work" / repo_ref / "resolved.ndjson"))
+    assert resolved == {repo_ref}
+    assert records[0]["spdx_id"] == "Apache-2.0"
+    assert records[0]["evidence"]["source_layer"] == "scancode"
+
+
 def test_resume_with_scan_artifact_does_not_regenerate_candidates(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

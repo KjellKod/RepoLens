@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from repolens.data.store import iter_resolved, write_sbom
+from repolens.data.store import iter_resolved, replace_source_snapshot, write_sbom
 from repolens.exit_codes import InputError
 from repolens.resolve.adapters import API_ALLOWED_HOSTS
 from repolens.resolve.mobile import MobileEnrichmentOutcome
@@ -932,25 +932,85 @@ def test_fetch_security_failure_lowers_unresolved(tmp_path: Path, repo_ref: str)
     assert record["evidence"]["anchor"] == "unresolved:evidence_mismatch"
 
 
-def test_p3b_default_path_does_not_run_scancode_without_source_root(
+def test_default_path_uses_stored_source_snapshot_for_scancode(
     tmp_path: Path, repo_ref: str
 ) -> None:
-    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "fixture-lib",
+            "version": None,
+            "type": "unknown",
+            "licenses": [],
+            "locations": ["vendor/fixture-lib/package.json"],
+        },
+    )
+    staged = tmp_path / "staged-source"
+    package_dir = staged / "vendor" / "fixture-lib"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text('{"name":"fixture-lib"}\n', encoding="utf-8")
+    replace_source_snapshot(tmp_path, repo_ref, staged)
 
-    def fail_scancode(*args: object, **kwargs: object) -> object:
-        raise AssertionError("ScanCode should require an explicit source root")
+    def runner(argv: list[str], *, timeout: float):
+        del argv, timeout
+        return type(
+            "Completed",
+            (),
+            {
+                "returncode": 0,
+                "stdout": '{"files":[{"license_expression_spdx":"Apache-2.0"}]}',
+                "stderr": "",
+            },
+        )()
 
     run_resolve(
         tmp_path,
         repo_ref,
         adapters=[],
-        scancode_runner=fail_scancode,  # type: ignore[arg-type]
+        scancode_runner=runner,
+        scancode_executable_provider=lambda work_root: Path(work_root) / "tools" / "scancode",
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == "Apache-2.0"
+    assert record["evidence"]["source_layer"] == "scancode"
+
+
+def test_root_manifest_only_stored_snapshot_does_not_scan_repo_root(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "fixture-lib",
+            "version": None,
+            "type": "unknown",
+            "licenses": [],
+            "locations": ["package.json"],
+        },
+    )
+    staged = tmp_path / "staged-source"
+    staged.mkdir()
+    (staged / "package.json").write_text('{"name":"root"}\n', encoding="utf-8")
+    replace_source_snapshot(tmp_path, repo_ref, staged)
+
+    def fail_runner(*args: object, **kwargs: object) -> object:
+        raise AssertionError("root-only manifest must not invoke ScanCode over repo root")
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[],
+        scancode_runner=fail_runner,  # type: ignore[arg-type]
+        scancode_executable_provider=lambda work_root: Path(work_root) / "tools" / "scancode",
     )
 
     record = read_single_resolved(tmp_path, repo_ref)
     assert record["spdx_id"] is None
-    assert record["evidence"]["source_layer"] == "api"
-    assert record["evidence"]["anchor"] == "unresolved:no_candidate"
+    assert record["evidence"]["source_layer"] == "scancode"
+    assert record["evidence"]["anchor"] == "unresolved:scancode_no_target"
 
 
 def test_resolver_coverage_fixture_moves_targets_from_no_candidate_to_resolved(
