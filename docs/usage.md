@@ -421,10 +421,13 @@ For the resolution stage, scan must already have written SBOMs under
 repolens resolve --work-root <WORK>
 ```
 
-By default, `resolve` processes every scanned repo with an SBOM under
-`<WORK>/work/` and writes `<WORK>/work/<repo_ref>/resolved.ndjson` for each one.
-Use `--repo-ref <REPO_REF>` only when you intentionally want to resolve a single
-repo artifact directory.
+By default, when `discovered.json` and `repos.candidate.md` exist, `resolve`
+uses the checked repo list and resolves the checked repos that already have scan
+SBOMs. Checked repos without SBOMs are skipped with a warning so stale approval
+files do not block available scan output. If discover artifacts are absent,
+mismatched, or none of the checked repos have SBOMs, `resolve` falls back to
+every available SBOM under `<WORK>/work/`. Use `--repo-ref <REPO_REF>` only when
+you intentionally want to resolve a single repo artifact directory.
 
 That normal form preserves the API-layer behavior: Syft-declared licenses and
 verified metadata API evidence are written to `resolved.ndjson`; unresolved records

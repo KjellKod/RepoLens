@@ -58,7 +58,7 @@ class CliTests(unittest.TestCase):
                 self.assertIn("Output:", help_text)
                 self.assertIn("Next:", help_text)
 
-    def test_resolve_help_explains_all_repo_default(self) -> None:
+    def test_resolve_help_explains_default_repo_selection(self) -> None:
         stdout = io.StringIO()
         with redirect_stdout(stdout):
             code = cli.main(["resolve", "--help"])
@@ -66,8 +66,8 @@ class CliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         help_text = stdout.getvalue()
         self.assertIn("Syft SBOMs from scan at <WORK>/work/*/sbom.syft.json", help_text)
-        self.assertIn("omit to resolve every", help_text)
-        self.assertIn("scanned repo", help_text)
+        self.assertIn("omit to resolve checked", help_text)
+        self.assertIn("scan output", help_text)
         self.assertIn("repolens resolve --work-root <WORK>", help_text)
 
     def test_resolve_without_repo_ref_resolves_all_scanned_repos(self) -> None:
@@ -565,7 +565,13 @@ class ScanCliTests(unittest.TestCase):
         repos_path.write_text(json.dumps({"repos": repos}), encoding="utf-8")
         return repos_path
 
-    def _discover_bridge_scaffold(self, work_root: Path, *, checked: bool = True) -> None:
+    def _discover_bridge_scaffold(
+        self,
+        work_root: Path,
+        *,
+        checked: bool = True,
+        repo_names: tuple[str, ...] = ("sentinel-alpha",),
+    ) -> None:
         (work_root / "tools").mkdir(parents=True, exist_ok=True)
         (work_root / "tools" / "syft").write_text("#!/bin/sh\n", encoding="utf-8")
         store.write_discovered(
@@ -574,14 +580,14 @@ class ScanCliTests(unittest.TestCase):
                 "schema_version": "1.0",
                 "generated_at": "2026-01-01T00:00:00Z",
                 "owner": "sentinel-owner",
-                "repository_count": 1,
-                "candidate_count": 1,
+                "repository_count": len(repo_names),
+                "candidate_count": len(repo_names),
                 "hard_exclusion_count": 0,
                 "repositories": [
                     {
-                        "name": "sentinel-alpha",
-                        "name_with_owner": "sentinel-owner/sentinel-alpha",
-                        "url": "https://example.invalid/sentinel-alpha",
+                        "name": repo_name,
+                        "name_with_owner": f"sentinel-owner/{repo_name}",
+                        "url": f"https://example.invalid/{repo_name}",
                         "description": "",
                         "topics": [],
                         "archived": False,
@@ -591,6 +597,7 @@ class ScanCliTests(unittest.TestCase):
                         "hard_excluded": False,
                         "exclusion_reason": None,
                     }
+                    for repo_name in repo_names
                 ],
             },
         )
@@ -602,9 +609,10 @@ class ScanCliTests(unittest.TestCase):
                     "",
                     "## Candidates",
                     "",
-                    (
-                        f"- [{checkbox}] `sentinel-owner/sentinel-alpha` "
+                    *(
+                        f"- [{checkbox}] `sentinel-owner/{repo_name}` "
                         "- category `runtime-bucket` (`default`)"
+                        for repo_name in repo_names
                     ),
                     "",
                     "## Hard exclusions",
@@ -635,6 +643,88 @@ class ScanCliTests(unittest.TestCase):
             self.assertIn(f"Next CLI stage: repolens flag --work-root {work_root}", output)
             self.assertTrue((work_root / "work" / "sentinel-alpha" / "resolved.ndjson").exists())
             self.assertFalse((work_root / "work" / "sentinel-stale" / "resolved.ndjson").exists())
+
+    def test_resolve_skips_checked_repos_missing_sboms(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            self._discover_bridge_scaffold(
+                work_root,
+                repo_names=("sentinel-alpha", "sentinel-missing"),
+            )
+            store.write_sbom(work_root, "sentinel-alpha", _repo_sbom("sentinel-alpha"))
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli.main(["resolve", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 0)
+            self.assertIn("wrote resolved.ndjson", stdout.getvalue())
+            self.assertIn(
+                "Warning: resolve skipped checked repos without SBOMs: sentinel-missing",
+                stderr.getvalue(),
+            )
+            self.assertTrue((work_root / "work" / "sentinel-alpha" / "resolved.ndjson").exists())
+            self.assertFalse((work_root / "work" / "sentinel-missing" / "resolved.ndjson").exists())
+
+    def test_resolve_falls_back_to_available_sboms_when_checked_artifacts_are_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            self._discover_bridge_scaffold(work_root, repo_names=("sentinel-missing",))
+            store.write_sbom(work_root, "sentinel-available", _repo_sbom("sentinel-available"))
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli.main(["resolve", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 0)
+            self.assertIn("wrote resolved.ndjson", stdout.getvalue())
+            self.assertIn(
+                "Warning: resolve skipped checked repos without SBOMs: sentinel-missing",
+                stderr.getvalue(),
+            )
+            self.assertTrue(
+                (work_root / "work" / "sentinel-available" / "resolved.ndjson").exists()
+            )
+            self.assertFalse((work_root / "work" / "sentinel-missing" / "resolved.ndjson").exists())
+
+    def test_resolve_falls_back_to_available_sboms_when_approvals_are_mismatched(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp) / "work-root"
+            self._discover_bridge_scaffold(work_root, repo_names=("sentinel-alpha",))
+            (work_root / "repos.candidate.md").write_text(
+                "\n".join(
+                    [
+                        "# Repository candidates",
+                        "",
+                        "## Candidates",
+                        "",
+                        "- [x] `sentinel-owner/sentinel-missing` "
+                        "- category `runtime-bucket` (`default`)",
+                        "",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            store.write_sbom(work_root, "sentinel-available", _repo_sbom("sentinel-available"))
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr):
+                code = cli.main(["resolve", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 0)
+            self.assertIn("wrote resolved.ndjson", stdout.getvalue())
+            self.assertIn(
+                "Warning: resolve could not use checked discover approvals",
+                stderr.getvalue(),
+            )
+            self.assertTrue(
+                (work_root / "work" / "sentinel-available" / "resolved.ndjson").exists()
+            )
 
     def test_scan_happy_path_persists_sbom_and_exits_zero(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
