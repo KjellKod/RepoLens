@@ -1,0 +1,45 @@
+src/repolens/config.py
+  s_853eb455586efb::t_3cb827b3af4403 139-143,149-151
+  s_853eb455586efb::t_e75fc9f1f74abe 45,56-59,230-231,234,259,268-269
+src/repolens/cli.py
+  s_853eb455586efb::t_e883d67154302f 212-213,1064-1065,1081
+  s_853eb455586efb::t_0d1fb73100ab5b 410-411,937-939,943,946-948
+  s_853eb455586efb::t_d8c27f3dfc98e4 876,977,1135-1165
+  s_853eb455586efb::t_09c4bfa6cc7b94 973-974
+  s_853eb455586efb::t_b5bde5e170b13f 1028-1029
+  s_853eb455586efb::t_009647db14abf2 412-416,1017-1023,1045-1049,1054
+tests/unit/test_cli_config.py
+  s_853eb455586efb::t_be2b8e4eaba378 258-275,277-295,297-299
+  s_853eb455586efb::t_4080fb1703c8a8 276
+  s_983976488e6d82::t_e41357071fd33a 296
+  s_853eb455586efb::t_5bcbc8f9f8cb05 31,174,178-179
+  s_853eb455586efb::t_6c3c43b7a00392 225-243,306-323
+  s_853eb455586efb::t_cc6687357eb2da 33,219-224,244-257,300-305,324-329
+  s_983976488e6d82::t_4d98ec80198125 156
+tests/unit/test_config.py
+  s_853eb455586efb::t_ed767a44650aec 4,8,114,118-132
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "51804b37786384d74a68b49712e540ee9233c2fd",
+  "prompts": {},
+  "sessions": {
+    "s_853eb455586efb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e94a7-867e-7881-aa54-d0c218023533",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_983976488e6d82": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019e94a7-867e-7881-aa54-d0c218023533",
+        "model": "unknown"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
