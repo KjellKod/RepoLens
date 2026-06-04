@@ -114,6 +114,67 @@ def test_declared_spdx_license_writes_syft_resolved_record(tmp_path: Path, repo_
     assert record["evidence"]["source_layer"] == "syft"
 
 
+def test_first_party_name_gets_origin_first_party(tmp_path: Path, repo_ref: str) -> None:
+    # An unpublished workspace member: no declared license, no API candidate, so it
+    # stays UNKNOWN — exactly the case that must be tagged first-party regardless of
+    # resolution path.
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[],
+        first_party_reader=lambda _root, _ref: frozenset({"acme-lib"}),
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] is None
+    assert record["tags"]["origin"] == "first-party"
+
+
+def test_declared_first_party_name_gets_origin_first_party(tmp_path: Path, repo_ref: str) -> None:
+    # The single stamp in run_resolve also covers the declared (syft) path.
+    write_test_sbom(tmp_path, repo_ref, licenses=["MIT"])
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[FailingAdapter()],
+        first_party_reader=lambda _root, _ref: frozenset({"acme-lib"}),
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == "MIT"
+    assert record["tags"]["origin"] == "first-party"
+
+
+def test_name_absent_from_first_party_set_stays_third_party(tmp_path: Path, repo_ref: str) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=["MIT"])
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[FailingAdapter()],
+        first_party_reader=lambda _root, _ref: frozenset({"some-other-pkg"}),
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"]["origin"] == "third-party-oss"
+
+
+def test_default_first_party_reader_treats_absent_sidecar_as_empty(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    # No first_party.json (old work-root): the default reader yields an empty set,
+    # so every row stays third-party-oss.
+    write_test_sbom(tmp_path, repo_ref, licenses=["MIT"])
+
+    run_resolve(tmp_path, repo_ref, adapters=[FailingAdapter()])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["tags"]["origin"] == "third-party-oss"
+
+
 def test_api_candidate_requires_validated_matching_evidence(tmp_path: Path, repo_ref: str) -> None:
     write_test_sbom(tmp_path, repo_ref, licenses=[])
     adapter = CandidateAdapter(

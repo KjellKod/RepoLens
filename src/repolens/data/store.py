@@ -174,6 +174,48 @@ def write_resolved(
     return path
 
 
+def write_first_party(work_root: str | Path, repo_ref: str, names: Iterable[str]) -> Path:
+    """Persist the repo's own first-party package names as a per-repo sidecar.
+
+    ``first_party.json`` is an internal sidecar (not a frozen contract artifact),
+    so it is intentionally **not** schema-validated — that also keeps this path
+    free of ``jsonschema`` for the scan import-discipline gate. It is still
+    redacted at the write boundary for store-wide discipline (names won't carry
+    tokens, but the cost is trivial). Always written on a fresh scan, even with an
+    empty name set, so "a fresh scan ran" is observable.
+    """
+
+    path = repo_dir(work_root, repo_ref) / "first_party.json"
+    payload = redact_tokens_from_structure(
+        {"schema_version": SCHEMA_VERSION, "names": sorted(set(names))}
+    )
+    atomic_write_json(path, payload)
+    return path
+
+
+def read_first_party(work_root: str | Path, repo_ref: str) -> frozenset[str]:
+    """Return persisted first-party names; tolerate an absent or garbled sidecar.
+
+    An old work-root written before this feature has no ``first_party.json``; a
+    missing or unreadable file yields an empty set so resolve leaves every row
+    ``third-party-oss`` (the fresh-scan-only caveat) and never raises.
+    """
+
+    path = repo_dir(work_root, repo_ref) / "first_party.json"
+    if not path.exists():
+        return frozenset()
+    try:
+        data = load_json_capped(path, max_bytes=max_bytes_for("sbom"))
+    except (CorruptArtifactError, LimitExceeded, OSError):
+        return frozenset()
+    if not isinstance(data, dict):
+        return frozenset()
+    raw_names = data.get("names")
+    if not isinstance(raw_names, list):
+        return frozenset()
+    return frozenset(name for name in raw_names if isinstance(name, str) and name)
+
+
 def read_sbom(work_root: str | Path, repo_ref: str) -> dict[str, Any]:
     return _read_json_artifact(work_root, "sbom", repo_ref=repo_ref)
 

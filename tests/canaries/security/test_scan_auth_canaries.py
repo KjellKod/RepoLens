@@ -87,6 +87,7 @@ def test_scan_auth_credential_present_in_clone_env_absent_from_tool_env_and_arti
         repo_dir_fn=lambda root, ref: Path(root) / ref,
         write_sbom_fn=lambda root, ref, value: sboms.append(value) or Path("sbom"),
         write_status_fn=lambda path, value: statuses.append(value),
+        write_first_party_fn=lambda *_: Path("first_party"),
     )
 
     # POSITIVE control: the credential genuinely reaches the clone subprocess env.
@@ -160,6 +161,7 @@ def test_scan_auth_token_never_in_status_sbom_or_stderr(tmp_path: Path) -> None:
             repo_dir_fn=lambda root, ref: Path(root) / ref,
             write_sbom_fn=lambda root, ref, value: sboms.append(value) or Path("sbom"),
             write_status_fn=lambda path, value: statuses.append(value),
+            write_first_party_fn=lambda *_: Path("first_party"),
         )
 
     report = exc_info.value.report
