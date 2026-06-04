@@ -57,6 +57,37 @@ network-class errors. If still unrecoverable, the repo surfaces
 access (403) failures are never retried — they surface their distinct, actionable message
 immediately.
 
+## Scan source snapshot for resolve
+
+`scan` deletes its temporary checkout after Syft finishes, but it now keeps a bounded
+per-repo source sidecar at:
+
+```
+<WORK>/work/<repo-ref>/source.snapshot/
+```
+
+This sidecar lets default `resolve` and `run` use ScanCode fallback without requiring
+`resolve --source-root` for normal scan-produced work-roots. `resolve` chooses the source
+root in this order:
+
+1. an explicit `--source-root`, when provided;
+2. the stored `source.snapshot/` sidecar from the scan stage;
+3. no source root, which keeps the existing fail-closed unresolved behavior.
+
+The sidecar is deliberately sparse. Even if Git had to materialize a full fallback
+checkout, RepoLens copies only regular files whose repo-relative paths match the hardened
+sparse-manifest policy used for scan cloning: package manifests, lockfiles, and nearby
+license files. It does not copy `.git`, symlinks, clone credential config, token-shaped
+files, arbitrary source files, or files above the per-file/per-repo snapshot caps. If no
+file passes those checks, `scan` removes the sidecar for that fresh scan.
+
+This is a retention tradeoff: the sidecar intentionally stores selected manifest and
+license file contents so ScanCode can inspect package-local targets later. RepoLens does
+not promise to redact arbitrary text inside retained manifests; the privacy boundary is
+that retention is path-bounded, size-bounded, token-pattern guarded, and separate from any
+clone URL or Git credential metadata. ScanCode still runs only through RepoLens's pinned
+bootstrap proof and still scans only package-local targets derived from SBOM locations.
+
 ## Tool bootstrap
 
 Before any scan runs, RepoLens pins and integrity-verifies its own toolchain; it never
