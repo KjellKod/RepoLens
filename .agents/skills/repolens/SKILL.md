@@ -57,7 +57,7 @@ repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
 
 Read `work/shortlist.contexts.json`. For each row, inspect only `component_ref`,
 `wrapped_context`, and read-only `triage`. Write `work/shortlist.proposals.json` as a JSON
-array. Use the schema in `reference/proposal-schema.md`.
+array. Use the schema in `.skills/repolens/reference/proposal-schema.md`.
 
 Run a BLOCK sanity pass before writing the file:
 
