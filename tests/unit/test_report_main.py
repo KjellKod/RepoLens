@@ -179,6 +179,26 @@ def test_unknown_version_adds_missing_version_coverage_gap(
     assert rows[0]["coverage_gaps"] == "missing_category; missing_version"
 
 
+def test_declared_unpinned_version_renders_status_without_missing_version_gap(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    declared_unpinned = {
+        **resolved_record,
+        "version": "unknown",
+        "declared_version_status": "declared-unpinned",
+    }
+    store.write_resolved(tmp_path, "acme-alpha", [declared_unpinned])
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+    rows = _csv_records(result.csv_path)
+    markdown = result.markdown_path.read_text(encoding="utf-8")
+
+    assert rows[0]["version"] == "declared-unpinned"
+    assert rows[0]["coverage_gaps"] == "missing_category"
+    assert "declared-unpinned" in markdown
+    assert "missing_version" not in rows[0]["coverage_gaps"]
+
+
 def test_mixed_tags_and_modified_are_preserved_and_flagged(
     tmp_path: Path, resolved_record: dict[str, Any]
 ) -> None:

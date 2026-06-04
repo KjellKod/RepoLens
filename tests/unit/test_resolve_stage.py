@@ -573,6 +573,56 @@ def test_non_pypi_missing_or_null_version_becomes_unknown_without_api_fetch(
     assert record["version"] == "unknown"
     assert record["spdx_id"] is None
     assert record["evidence"]["anchor"] == "unresolved:missing_version"
+    assert "declared_version_status" not in record
+
+
+def test_declared_unpinned_pyproject_status_is_stamped_after_resolution(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-runtime",
+            "version": None,
+            "type": "python",
+            "purl": "pkg:pypi/sentinel-runtime",
+            "licenses": [],
+            "locations": ["pyproject.toml"],
+            "declared_version_status": "declared-unpinned",
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[CandidateAdapter(None)])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["version"] == "unknown"
+    assert record["declared_version_status"] == "declared-unpinned"
+    assert record["evidence"]["anchor"] == "unresolved:no_candidate"
+
+
+def test_declared_unpinned_marker_on_exact_version_is_not_stamped(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-runtime",
+            "version": "1.2.3",
+            "type": "python",
+            "purl": "pkg:pypi/sentinel-runtime@1.2.3",
+            "licenses": ["MIT"],
+            "locations": ["pyproject.toml"],
+            "declared_version_status": "declared-unpinned",
+        },
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[FailingAdapter()])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["version"] == "1.2.3"
+    assert "declared_version_status" not in record
 
 
 def test_unversioned_pypi_package_resolves_from_package_metadata(

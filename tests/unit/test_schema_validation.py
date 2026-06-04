@@ -66,6 +66,25 @@ def test_sbom_allows_unversioned_artifact(sbom: dict[str, object]) -> None:
     validate_artifact(sbom, "sbom")
 
 
+def test_resolved_accepts_declared_unpinned_status(
+    resolved_record: dict[str, object],
+) -> None:
+    resolved_record["version"] = "unknown"
+    resolved_record["declared_version_status"] = "declared-unpinned"
+
+    validate_artifact(resolved_record, "resolved")
+
+
+def test_resolved_rejects_unknown_declared_version_status(
+    resolved_record: dict[str, object],
+) -> None:
+    resolved_record["version"] = "unknown"
+    resolved_record["declared_version_status"] = "not-a-known-status"
+
+    with pytest.raises(SchemaValidationError, match="declared_version_status"):
+        validate_artifact(resolved_record, "resolved")
+
+
 def test_shortlist_open_count_must_match_open_items(shortlist: dict[str, object]) -> None:
     shortlist["open_count"] = 0
 

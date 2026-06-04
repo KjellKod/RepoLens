@@ -50,6 +50,7 @@ DEFAULT_TAGS = {
     "scope": "runtime",
     "distribution": "server",
 }
+DECLARED_UNPINNED_STATUS = "declared-unpinned"
 CI_ONLY_TAGS = {
     "origin": "third-party-oss",
     "scope": "build",
@@ -132,6 +133,11 @@ def run_resolve(
         tags = record["tags"]
         if package.name in first_party_names and isinstance(tags, dict):
             tags["origin"] = "first-party"
+        if (
+            package.declared_version_status == DECLARED_UNPINNED_STATUS
+            and record["version"] == UNKNOWN_VERSION
+        ):
+            record["declared_version_status"] = DECLARED_UNPINNED_STATUS
         records.append(record)
         if progress is not None:
             progress(index, total, package.name)
@@ -198,6 +204,9 @@ def _package_facts(sbom: dict[str, object], repo_ref: str) -> tuple[PackageFact,
                 purl=_optional_string(artifact.get("purl")),
                 declared_license_raw=_declared_license(artifact.get("licenses")),
                 locations=_locations(artifact.get("locations")),
+                declared_version_status=_declared_version_status(
+                    artifact.get("declared_version_status")
+                ),
             )
         )
     return tuple(facts)
@@ -494,6 +503,12 @@ def _locations(value: object) -> tuple[str, ...]:
         if isinstance(item, str) and item.strip():
             out.append(item.strip())
     return tuple(out)
+
+
+def _declared_version_status(value: object) -> str | None:
+    if value == DECLARED_UNPINNED_STATUS:
+        return DECLARED_UNPINNED_STATUS
+    return None
 
 
 def _validated_source_root(source_root: str | Path | None) -> Path | None:

@@ -53,6 +53,7 @@ DOCX_SKIPPED_NOTICE = (
     "docx skipped (no report.header); md/csv contain all the data — "
     "add report.header config or run interactively to generate it."
 )
+DECLARED_UNPINNED_STATUS = "declared-unpinned"
 
 
 @dataclass(frozen=True)
@@ -344,7 +345,7 @@ def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[Dis
         if spdx_id == _UNKNOWN:
             group.coverage_gaps.add("missing_spdx_id")
 
-        version = str(record["version"])
+        version = _version_display(record)
         group.versions.add(version)
         if version == "unknown":
             group.coverage_gaps.add("missing_version")
@@ -461,6 +462,13 @@ def _modified_value(value: object) -> str:
     if value is False:
         return "false"
     return str(value)
+
+
+def _version_display(record: dict[str, Any]) -> str:
+    version = str(record["version"])
+    if version == "unknown" and record.get("declared_version_status") == DECLARED_UNPINNED_STATUS:
+        return DECLARED_UNPINNED_STATUS
+    return version
 
 
 def _sorted_values(values: Iterable[str]) -> tuple[str, ...]:

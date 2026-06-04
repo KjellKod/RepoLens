@@ -245,6 +245,7 @@ dependencies = ["Sentinel_Py.Runtime[http]==1.2.3; python_version >= '3.11'"]
         "purl": "pkg:pypi/sentinel-py-runtime@1.2.3",
         "locations": ["pyproject.toml"],
     }
+    assert "declared_version_status" not in artifact
 
 
 def test_pyproject_optional_dependencies_are_added_to_sbom(tmp_path: Path) -> None:
@@ -288,6 +289,7 @@ def test_unpinned_pyproject_dependency_lowers_version_to_null(tmp_path: Path) ->
     assert artifact["name"] == "sentinel-range"
     assert artifact["version"] is None
     assert artifact["purl"] == "pkg:pypi/sentinel-range"
+    assert artifact["declared_version_status"] == "declared-unpinned"
 
 
 def test_pyproject_dependency_parser_skips_invalid_and_direct_reference_strings(

@@ -11,6 +11,7 @@ Distribution = Literal["server", "client-or-mobile", "not-distributed", "unknown
 PolicyTier = Literal["ALLOW", "REVIEW", "BLOCK", "UNKNOWN"]
 SchemaVersion = Literal["1.0"]
 Modified = bool | Literal["unknown"]
+DeclaredVersionStatus = Literal["declared-unpinned"]
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class ResolvedItem:
     purl: str | None = None
     declared_license_raw: str | None = None
     modified: Modified = "unknown"
+    declared_version_status: DeclaredVersionStatus | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {key: value for key, value in self.__dict__.items() if value is not None}
