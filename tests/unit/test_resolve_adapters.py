@@ -77,6 +77,12 @@ def test_adapter_carries_compound_spdx_expression_candidate() -> None:
     assert candidate.evidence_anchor == "Apache-2.0 OR MIT"
 
 
+def test_license_resolution_id_accepts_apache_with_llvm_exception() -> None:
+    expression = "Apache-2.0 WITH LLVM-exception"
+
+    assert license_resolution_id(expression, load_default_policy()) == expression
+
+
 def test_deep_compound_expression_fails_closed() -> None:
     expression = ("(" * 2_000) + "MIT" + (")" * 2_000)
 
@@ -138,6 +144,34 @@ def test_adapter_carries_known_with_exception_candidate() -> None:
     assert candidate is not None
     assert candidate.spdx_id == "GPL-3.0-only WITH Autoconf-exception-3.0"
     assert candidate.evidence_anchor == "GPL-3.0-only WITH Autoconf-exception-3.0"
+
+
+def test_adapter_carries_apache_with_llvm_exception_candidate() -> None:
+    expression = "Apache-2.0 WITH LLVM-exception"
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=b'{"license":"Apache-2.0 WITH LLVM-exception"}',
+        )
+
+    candidate = build_default_adapters(fetcher)[0].resolve(
+        PackageFact(
+            name="acme-lib",
+            version="1.2.3",
+            package_type="cargo",
+            repo="acme-alpha",
+            purl="pkg:cargo/acme-lib@1.2.3",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is not None
+    assert candidate.spdx_id == expression
+    assert candidate.evidence_anchor == expression
 
 
 @pytest.mark.parametrize(

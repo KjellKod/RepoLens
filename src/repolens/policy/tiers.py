@@ -85,6 +85,10 @@ def caveats_for_license(license_id: str | None, policy: Policy) -> tuple[str, ..
         return tuple()
 
     caveats: list[str] = []
+    exact_note = policy.caveats.get(license_id)
+    if exact_note:
+        caveats.append(exact_note)
+
     if license_id.startswith("BUSL-"):
         note = policy.caveats.get("BUSL")
         if note:

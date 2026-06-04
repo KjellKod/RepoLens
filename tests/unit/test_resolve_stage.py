@@ -362,6 +362,31 @@ def test_known_with_exception_resolves_and_verifies(tmp_path: Path, repo_ref: st
     assert record["evidence"]["anchor"] == expression
 
 
+def test_known_llvm_exception_resolves_and_verifies(tmp_path: Path, repo_ref: str) -> None:
+    expression = "Apache-2.0 WITH LLVM-exception"
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    adapter = CandidateAdapter(
+        ApiCandidate(
+            spdx_id=expression,
+            evidence_url="https://api.deps.dev/v3alpha/systems/cargo/packages/acme-lib/versions/1.2.3",
+            evidence_anchor=expression,
+        )
+    )
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[adapter],
+        fetcher=fetcher_with_body(b'{"license":"Apache-2.0 WITH LLVM-exception"}'),
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == expression
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == expression
+
+
 def test_api_candidate_lowers_mismatched_evidence(tmp_path: Path, repo_ref: str) -> None:
     write_test_sbom(tmp_path, repo_ref, licenses=[])
     adapter = CandidateAdapter(

@@ -93,6 +93,17 @@ def test_with_exception_downgrades_to_explicit_target_tier() -> None:
     assert autoconf.tier == PolicyTier.ALLOW
 
 
+def test_apache_with_llvm_exception_uses_explicit_exception_table() -> None:
+    decision = classify_license_input(
+        "Apache-2.0 WITH LLVM-exception",
+        policy=load_default_policy(),
+    )
+
+    assert decision.tier == PolicyTier.ALLOW
+    assert decision.effective_tier == PolicyTier.ALLOW
+    assert "compound_expression" in decision.reasons
+
+
 def test_expression_equivalence_tolerates_or_operand_order() -> None:
     assert equivalent_expressions(
         "Apache-2.0 OR MIT",
@@ -123,6 +134,16 @@ def test_unknown_with_restrictive_exception_does_not_allow_base_tier() -> None:
 def test_exception_override_does_not_apply_to_unlisted_block_license() -> None:
     decision = classify_license_input(
         "AGPL-3.0-only WITH Autoconf-exception-3.0",
+        policy=load_default_policy(),
+    )
+
+    assert decision.tier == PolicyTier.UNKNOWN
+    assert decision.effective_tier == PolicyTier.BLOCK
+
+
+def test_llvm_exception_does_not_apply_to_unlisted_block_license() -> None:
+    decision = classify_license_input(
+        "GPL-3.0-only WITH LLVM-exception",
         policy=load_default_policy(),
     )
 

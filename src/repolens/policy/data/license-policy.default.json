@@ -1,5 +1,5 @@
 {
-  "policy_version": "2026.06.01-f5",
+  "policy_version": "2026.06.04-f5",
   "default_unknown_action": "BLOCK",
   "tiers": {
     "ALLOW": [
@@ -43,7 +43,8 @@
       "CECILL-2.1",
       "CC-BY-SA-4.0",
       "CPL-1.0",
-      "IPL-1.0"
+      "IPL-1.0",
+      "Unicode-3.0"
     ],
     "BLOCK": [
       "AGPL-3.0-only",
@@ -117,10 +118,16 @@
       "license_id": "GPL-3.0-only",
       "exception_id": "Autoconf-exception-3.0",
       "target_tier": "ALLOW"
+    },
+    {
+      "license_id": "Apache-2.0",
+      "exception_id": "LLVM-exception",
+      "target_tier": "ALLOW"
     }
   ],
   "caveats": {
     "LGPL": "LGPL review depends on static versus dynamic linking.",
-    "BUSL": "BUSL includes a Change Date that must be reviewed."
+    "BUSL": "BUSL includes a Change Date that must be reviewed.",
+    "Unicode-3.0": "Unicode-3.0 requires legal review before allowlisting."
   }
 }
