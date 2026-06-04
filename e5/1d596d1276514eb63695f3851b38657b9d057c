@@ -1,0 +1,21 @@
+.skills/repolens/SKILL.md
+  s_a5507ba659a071::t_4c562a79ed67ca 60
+.agents/skills/repolens/SKILL.md
+  s_a5507ba659a071::t_4c562a79ed67ca 60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e51d596d1276514eb63695f3851b38657b9d057c",
+  "prompts": {},
+  "sessions": {
+    "s_a5507ba659a071": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9110-3cda-7d22-93f2-675a84e2ac4b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
