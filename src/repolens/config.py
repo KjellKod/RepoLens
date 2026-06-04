@@ -42,7 +42,7 @@ def load_config(
     """
 
     if explicit_path is not None:
-        source = Path(explicit_path)
+        source = Path(explicit_path).expanduser()
         values = _read_config_file(source)
         return Config(
             values=values,
@@ -53,7 +53,10 @@ def load_config(
             explicit=True,
         )
 
-    searched = _discovery_candidates(Path(base_dir), None if work_root is None else Path(work_root))
+    searched = _discovery_candidates(
+        Path(base_dir).expanduser(),
+        None if work_root is None else Path(work_root).expanduser(),
+    )
     found = tuple(path for path in searched if path.exists())
     active = found[0] if found else None
     values = _read_config_file(active) if active is not None else {}
@@ -133,14 +136,19 @@ def human_schema_text() -> str:
             f"default={DEFAULT_CLONE_TIMEOUT_SECONDS}",
             "    Impact: positive hardened-clone timeout per repo.",
             "  scan.syft.catalogers: array<string>, optional, default=all Syft catalogers",
-            "    Impact: restricts Syft catalogers; RepoLens still preserves mobile catalogers.",
+            "    Impact: optional advanced restriction to named Syft scanners, such as "
+            "python-package-cataloger or java-gradle-lockfile-cataloger. Leave absent "
+            "to use all catalogers. Restrict only for narrower/faster known-ecosystem "
+            "scans; too narrow can miss dependencies. RepoLens still preserves mobile "
+            "catalogers.",
             "",
             "  report: object, optional, default={}",
             "    Operational impact: main report category selection and optional docx cover text.",
             "  report.selection.include: array<string>, optional, "
             "default=all categories in main report",
-            "    Impact: categories included in the main report; other categories route "
-            "to appendices.",
+            "    Impact: category labels included in report.main.*. Leave absent to "
+            "include all categories. Use values from your taxonomy, such as PRODUCTION "
+            "or INTERNAL. Other third-party categories route to appendices, not dropped.",
             "  report.header.org_name: string, required only when report.header is present",
             "    Impact: optional docx cover organization text.",
             "  report.header.legal_text: string, required only when report.header is present",
@@ -219,10 +227,11 @@ def config_discovery_lines(config: Config) -> list[str]:
 def validate_config_file_message(path: Path | str) -> str:
     """Validate exactly one JSON local config file and return a readable summary."""
 
-    config = load_config(explicit_path=Path(path))
+    requested_path = Path(path).expanduser()
+    config = load_config(explicit_path=requested_path)
     return "\n".join(
         (
-            f"Config valid: {_display_path(config.active_path or Path(path))}",
+            f"Config valid: {_display_path(config.active_path or requested_path)}",
             "Found:",
             *(f"  {line}" for line in config_value_summary_lines(config.values)),
         )
@@ -247,6 +256,7 @@ def _discovery_candidates(base_dir: Path, work_root: Path | None) -> tuple[Path,
 
 
 def _read_config_file(path: Path) -> dict[str, Any]:
+    path = path.expanduser()
     if path.is_dir():
         raise InputError(
             f"Config path is a directory, not a config file: {_display_path(path)}. "
@@ -255,8 +265,8 @@ def _read_config_file(path: Path) -> dict[str, Any]:
     if not path.is_file():
         raise InputError(
             f"Config file not found: {_display_path(path)}. "
-            "--config expects a JSON local config file; use --work-root <DIR> "
-            "for output directories."
+            "Expected a JSON local config file. Check the path or run "
+            "`repolens config init --out <path>`."
         )
     if path.suffix.lower() != ".json":
         raise InputError(

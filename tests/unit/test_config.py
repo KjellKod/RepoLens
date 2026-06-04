@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from repolens.config import (
     Config,
@@ -109,9 +111,25 @@ class ConfigTests(unittest.TestCase):
 
             with self.assertRaisesRegex(
                 InputError,
-                "Config file not found.*--config expects a JSON local config file.*--work-root",
+                "Config file not found.*Expected a JSON local config file",
             ):
                 load_config(root, root / "missing.local.json")
+
+    def test_explicit_config_and_validate_expand_tilde(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            home = root / "home"
+            home.mkdir()
+            path = home / ".repolens.local.json"
+            path.write_text(json.dumps({"scan": {"exclude_paths": [".github/"]}}), encoding="utf-8")
+
+            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+                config = load_config(root, "~/.repolens.local.json")
+                message = validate_config_file_message("~/.repolens.local.json")
+
+        self.assertEqual(config.active_path, path)
+        self.assertEqual(config.sources, (path,))
+        self.assertIn(f"Config valid: {path}", message)
 
     def test_unknown_config_key_is_rejected_with_path_and_hint(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

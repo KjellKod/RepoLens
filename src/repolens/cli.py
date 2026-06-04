@@ -209,6 +209,8 @@ _DESCRIPTION = (
     "one-command pipeline, or run the individual stages below when debugging."
 )
 
+_DEFAULT_REPORT_LEGAL_TEXT = "Confidential. Prepared for license compliance review."
+
 _EPILOG = (
     "recommended:\n"
     "  repolens run --work-root work --owner <OWNER>\n"
@@ -405,8 +407,13 @@ def _configure_config_parser(subparser: argparse.ArgumentParser) -> None:
             "only the fields you select.\n"
             "\n"
             "Prompt entries use key=value, for example owner/repo=production or\n"
-            "obsolete-*=retired. At the interactive prompt, do not add shell quotes\n"
-            "around glob patterns; type obsolete-*=retired."
+            "obsolete-*=OBSOLETE. At the interactive prompt, do not add shell quotes\n"
+            "around glob patterns; type obsolete-*=OBSOLETE. For dead repos, you can\n"
+            "enter repo-a,repo-b and then provide one reason for all listed repos.\n"
+            "\n"
+            "Optional advanced prompts can be left blank. For example, leave Syft\n"
+            "catalogers blank to use all catalogers, and leave main report categories\n"
+            "blank to include all categories in the main report."
         ),
         epilog=(
             "Examples:\n"
@@ -866,7 +873,7 @@ def _prompt_config_path(
             input_stream=input_stream,
             output_stream=output_stream,
         )
-        path = Path(answer)
+        path = Path(answer).expanduser()
         if path.suffix.lower() == ".json":
             return path
         print(
@@ -927,15 +934,18 @@ def _prompt_taxonomy(*, input_stream: TextIO, output_stream: TextIO) -> dict[str
 
     print(
         "\nPatterns are glob rules checked after explicit repo matches. At this prompt, "
-        "type glob patterns without shell quotes, for example obsolete-*=retired.",
+        "the left side is a repo-name glob and the right side is any category label "
+        "you choose. For example: obsolete-*=OBSOLETE or internal-*=INTERNAL. "
+        "Do not add shell quotes around the glob.",
         file=output_stream,
     )
     patterns = _prompt_parsed(
-        "Pattern categories (example obsolete-*=retired)",
+        "Pattern categories (examples obsolete-*=OBSOLETE, internal-*=INTERNAL)",
         parser=_parse_patterns,
         retry_hint=(
-            "Use glob=category pairs such as obsolete-*=retired. Do not add quotes in "
-            "the prompt. Press Enter to skip."
+            "Use glob=category pairs such as obsolete-*=OBSOLETE or internal-*=INTERNAL. "
+            "The category label is your own report/category name. Do not add quotes in the "
+            "prompt. Press Enter to skip."
         ),
         input_stream=input_stream,
         output_stream=output_stream,
@@ -960,13 +970,11 @@ def _prompt_taxonomy(*, input_stream: TextIO, output_stream: TextIO) -> dict[str
 
     print(
         "\nDead repos are exact repos to hard-exclude with a visible reason; use this only "
-        "for retired/dead repos.",
+        "for retired/dead repos. Enter owner/repo=reason pairs, or enter a comma-separated "
+        "repo list and RepoLens will ask for one reason to apply to all of them.",
         file=output_stream,
     )
-    dead = _prompt_parsed(
-        "Dead repos (example owner/repo=retired)",
-        parser=lambda value: _parse_mapping(value, label="dead repo"),
-        retry_hint="Use owner/repo=reason pairs such as owner/repo=retired. Press Enter to skip.",
+    dead = _prompt_dead_repos(
         input_stream=input_stream,
         output_stream=output_stream,
     )
@@ -1006,13 +1014,19 @@ def _prompt_scan_config(*, input_stream: TextIO, output_stream: TextIO) -> dict[
         scan["clone_timeout_seconds"] = clone_timeout
 
     print(
-        "\nscan.syft.catalogers is an optional restricted cataloger list; RepoLens still "
-        "preserves mobile catalogers.",
+        "\nscan.syft.catalogers is optional and advanced. A Syft cataloger is a scanner "
+        "for one package ecosystem or manifest type. Leave this blank to use all Syft "
+        "catalogers, which is recommended for most runs. Restrict it only when you want "
+        "a narrower scan, less noise, or faster scanning for known ecosystems. Examples: "
+        "python-package-cataloger, java-gradle-lockfile-cataloger. Too narrow can miss "
+        "dependencies. RepoLens still adds mobile catalogers for Gradle, CocoaPods, and "
+        "Swift Package Manager.",
         file=output_stream,
     )
     catalogers = _parse_csv_values(
         _prompt(
-            "Syft catalogers, comma-separated",
+            "Syft catalogers (optional; examples python-package-cataloger, "
+            "java-gradle-lockfile-cataloger)",
             default="",
             input_stream=input_stream,
             output_stream=output_stream,
@@ -1028,12 +1042,16 @@ def _prompt_report_config(*, input_stream: TextIO, output_stream: TextIO) -> dic
     report: dict[str, object] = {}
 
     print(
-        "\nreport.selection.include is the category list included in the main report.",
+        "\nreport.selection.include is optional. It controls which taxonomy categories "
+        "go into report.main.*. Leave this blank to include all categories in the main "
+        "report. Use it when you want a narrower shipped-product report, for example "
+        "PRODUCTION,INTERNAL. Categories not listed are not dropped; third-party rows "
+        "route to report.appendix.<category>.*.",
         file=output_stream,
     )
     include = _parse_csv_values(
         _prompt(
-            "Main report categories, comma-separated",
+            "Main report categories (optional; examples PRODUCTION, INTERNAL)",
             default="",
             input_stream=input_stream,
             output_stream=output_stream,
@@ -1043,7 +1061,8 @@ def _prompt_report_config(*, input_stream: TextIO, output_stream: TextIO) -> dic
         report["selection"] = {"include": include}
 
     print(
-        "\nreport.header.org_name and report.header.legal_text are optional docx cover text.",
+        "\nreport.header.org_name and report.header.legal_text are optional docx cover text. "
+        f"Default legal_text: {_DEFAULT_REPORT_LEGAL_TEXT}",
         file=output_stream,
     )
     if _confirm(
@@ -1059,7 +1078,7 @@ def _prompt_report_config(*, input_stream: TextIO, output_stream: TextIO) -> dic
         )
         legal_text = _prompt(
             "Report header legal_text",
-            default="",
+            default=_DEFAULT_REPORT_LEGAL_TEXT,
             input_stream=input_stream,
             output_stream=output_stream,
         )
@@ -1111,6 +1130,39 @@ def _prompt_parsed(
         except InputError as exc:
             print(f"Invalid input: {exc}", file=output_stream)
             print(f"Try again. {retry_hint}", file=output_stream)
+
+
+def _prompt_dead_repos(*, input_stream: TextIO, output_stream: TextIO) -> dict[str, str]:
+    while True:
+        value = _prompt(
+            "Dead repos (examples owner/repo=retired or repo-a,repo-b then one reason)",
+            default="",
+            input_stream=input_stream,
+            output_stream=output_stream,
+        )
+        try:
+            return _parse_mapping(value, label="dead repo")
+        except InputError as exc:
+            repos = _parse_csv_values(value)
+            if repos and all("=" not in repo for repo in repos):
+                print(
+                    "Dead repos need a visible reason. You entered repo names without reasons.",
+                    file=output_stream,
+                )
+                reason = _prompt(
+                    "Reason to apply to all listed dead repos (blank retries the list)",
+                    default="",
+                    input_stream=input_stream,
+                    output_stream=output_stream,
+                )
+                if reason:
+                    return {repo: reason for repo in repos}
+            print(f"Invalid input: {exc}", file=output_stream)
+            print(
+                "Try again. Use owner/repo=reason pairs such as owner/repo=retired, "
+                "or enter repo-a,repo-b and then provide one reason. Press Enter to skip.",
+                file=output_stream,
+            )
 
 
 def _parse_csv_values(value: str) -> list[str]:

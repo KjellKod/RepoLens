@@ -28,8 +28,9 @@ def test_config_init_help_explains_pattern_input(capsys: pytest.CaptureFixture[s
 
     out = capsys.readouterr().out
     assert "owner/repo=production" in out
-    assert "obsolete-*=retired" in out
+    assert "obsolete-*=OBSOLETE" in out
     assert "do not add shell quotes" in out
+    assert "repo-a,repo-b and then provide one reason" in out
     assert "invalid entries are explained and re-prompted" in out
 
 
@@ -152,7 +153,7 @@ def test_config_init_reprompts_invalid_pattern_input(
                 "PRODUCTION",
                 "",
                 "obsolete-*",
-                "obsolete-*=retired",
+                "obsolete-*=OBSOLETE",
                 "",
                 "",
                 "",
@@ -170,11 +171,12 @@ def test_config_init_reprompts_invalid_pattern_input(
 
     values = json.loads(path.read_text(encoding="utf-8"))
     assert values["discover"]["taxonomy"]["patterns"] == [
-        {"category": "retired", "glob": "obsolete-*"}
+        {"category": "OBSOLETE", "glob": "obsolete-*"}
     ]
     out = capsys.readouterr().out
     assert "Invalid input: pattern category entries must use key=value" in out
-    assert "Use glob=category pairs such as obsolete-*=retired" in out
+    assert "Use glob=category pairs such as obsolete-*=OBSOLETE" in out
+    assert "category label is your own report/category name" in out
     assert "Do not add quotes in the prompt" in out
 
 
@@ -212,6 +214,119 @@ def test_config_init_reprompts_invalid_clone_timeout(
     out = capsys.readouterr().out
     assert "Invalid input: scan.clone_timeout_seconds must be a positive number" in out
     assert "Use a positive number such as 300" in out
+
+
+def test_config_init_accepts_dead_repo_list_then_prompts_for_reason(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / ".repolens.local.json"
+    answers = (
+        "\n".join(
+            [
+                "",
+                "",
+                "",
+                "",
+                "",
+                "developer,node-onfleet",
+                "retired SDK",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+        + "\n"
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO(answers))
+
+    assert cli.main(["config", "init", "--out", str(path)]) == 0
+
+    values = json.loads(path.read_text(encoding="utf-8"))
+    assert values["discover"]["taxonomy"]["dead"] == {
+        "developer": "retired SDK",
+        "node-onfleet": "retired SDK",
+    }
+    out = capsys.readouterr().out
+    assert "Dead repos need a visible reason" in out
+    assert "Reason to apply to all listed dead repos" in out
+
+
+def test_config_init_defaults_report_legal_text(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / ".repolens.local.json"
+    answers = (
+        "\n".join(
+            [
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "y",
+                "Sentinel",
+                "",
+                "",
+            ]
+        )
+        + "\n"
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO(answers))
+
+    assert cli.main(["config", "init", "--out", str(path)]) == 0
+
+    values = json.loads(path.read_text(encoding="utf-8"))
+    assert values["report"]["header"] == {
+        "org_name": "Sentinel",
+        "legal_text": "Confidential. Prepared for license compliance review.",
+    }
+    out = capsys.readouterr().out
+    assert (
+        "Report header legal_text [Confidential. Prepared for license compliance review.]:" in out
+    )
+
+
+def test_config_init_expands_tilde_in_prompted_output_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    answers = (
+        "\n".join(
+            [
+                "~/.repolens.local.json",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+        + "\n"
+    )
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr("sys.stdin", io.StringIO(answers))
+
+    assert cli.main(["config", "init", "--force"]) == 0
+
+    assert (home / ".repolens.local.json").exists()
 
 
 def test_config_init_refuses_overwrite_without_confirmation(
