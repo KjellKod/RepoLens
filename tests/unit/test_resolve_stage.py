@@ -1081,6 +1081,68 @@ def test_default_path_uses_stored_source_snapshot_for_scancode(
     assert record["evidence"]["source_layer"] == "scancode"
 
 
+def test_android_mobile_repo_unresolved_dependency_falls_back_to_scancode(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "invalid.sentinel:sentinel-android-runtime",
+            "version": "3.1.4",
+            "type": "maven",
+            "purl": "pkg:maven/invalid.sentinel/sentinel-android-runtime@3.1.4",
+            "licenses": [],
+            "locations": ["app/gradle.lockfile"],
+        },
+    )
+    staged = tmp_path / "staged-source"
+    app_dir = staged / "app"
+    app_dir.mkdir(parents=True)
+    (staged / "settings.gradle").write_text(
+        'pluginManagement { repositories {} }\n', encoding="utf-8"
+    )
+    (staged / "build.gradle").write_text(
+        "plugins { id 'com.android.application' version '8.0.0' apply false }\n",
+        encoding="utf-8",
+    )
+    (app_dir / "gradle.lockfile").write_text(
+        "invalid.sentinel:sentinel-android-runtime:3.1.4=runtimeClasspath\n",
+        encoding="utf-8",
+    )
+    replace_source_snapshot(tmp_path, repo_ref, staged)
+    calls: list[list[str]] = []
+
+    def runner(argv: list[str], *, timeout: float):
+        del timeout
+        calls.append(argv)
+        return type(
+            "Completed",
+            (),
+            {
+                "returncode": 0,
+                "stdout": '{"files":[{"license_expression_spdx":"Apache-2.0"}]}',
+                "stderr": "",
+            },
+        )()
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[],
+        scancode_runner=runner,
+        scancode_executable_provider=lambda work_root: Path(work_root) / "tools" / "scancode",
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    snapshot_app_dir = tmp_path / "work" / repo_ref / "source.snapshot" / "app"
+    assert record["spdx_id"] == "Apache-2.0"
+    assert record["evidence"]["source_layer"] == "scancode"
+    assert calls
+    assert str(snapshot_app_dir.resolve()) in calls[0]
+    assert str((tmp_path / "work" / repo_ref / "source.snapshot").resolve()) not in calls[0]
+
+
 def test_root_manifest_only_stored_snapshot_does_not_scan_repo_root(
     tmp_path: Path, repo_ref: str
 ) -> None:
