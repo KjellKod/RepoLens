@@ -42,10 +42,14 @@ Proposal `evidence_url` values must use hosts from RepoLens's resolver allowlist
 - `https://repo.maven.apache.org/maven2/...`
 - `https://api.clearlydefined.io/definitions/...`
 - `https://api.ecosyste.ms/packages/lookup?...`
+- `https://trunk.cocoapods.org/api/v1/pods/.../specs/...`
+- `https://raw.githubusercontent.com/CocoaPods/Specs/.../*.podspec.json` only when it is
+  the guarded CocoaPods trunk exact-spec redirect target.
 
-Do not cite package homepages, raw GitHub files, vendor marketing pages, or private
-commercial-license records in `shortlist.proposals.json`; RepoLens will not verify them as
-proposal evidence. Mention useful non-verifiable context only in `shortlist.review.md`.
+Do not cite package homepages, arbitrary raw GitHub files, vendor marketing pages, or
+private commercial-license records in `shortlist.proposals.json`; RepoLens will not verify
+them as proposal evidence. Mention useful non-verifiable context only in
+`shortlist.review.md`.
 
 ## Per-Item Process
 

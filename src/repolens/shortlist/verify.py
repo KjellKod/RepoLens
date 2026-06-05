@@ -7,16 +7,17 @@ fetched body exactly contains the claimed SPDX id or supported expression via
 stage's verification primitives (one home per concern) rather than reimplementing them.
 
 The evidence host is validated against :data:`API_ALLOWED_HOSTS` — the frozen API allowlist,
-**not** forked. ``API_ALLOWED_HOSTS`` does not include ``github.com`` /
-``raw.githubusercontent.com``, so any raw blob/file evidence URL that P4 may have written is
-intentionally treated as off-allowlist and fails closed (``VerifyOutcome.verified is False``
-→ human queue), consistent with AC 15. A private-IP resolution behind an allowlisted host is
-likewise blocked by ``validate_url_for_fetch``.
+**not** forked. ``API_ALLOWED_HOSTS`` includes public metadata hosts and the raw GitHub
+host used by CocoaPods trunk redirects, but agent proposals may cite raw GitHub only for
+CocoaPods Specs podspec JSON evidence. Repository browsing hosts such as ``github.com``
+remain off-allowlist. A private-IP resolution behind an allowlisted host is likewise
+blocked by ``validate_url_for_fetch``.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from urllib.parse import urlparse
 
 from repolens.policy.config import load_default_policy
 from repolens.resolve.adapters import API_ALLOWED_HOSTS
@@ -77,6 +78,8 @@ def verify_agent_resolution(
         evidence_url=resolution.evidence_url,
         evidence_anchor=resolution.evidence_anchor,
     )
+    if not _proposal_evidence_url_allowed(candidate.evidence_url):
+        return VerifyOutcome(verified=False, reason="verify:fetch_blocked_or_failed")
     options = _evidence_options()
     try:
         validate_url_for_fetch(candidate.evidence_url, options, resolver=resolver)
@@ -96,6 +99,13 @@ def verify_agent_resolution(
         evidence_url=result.url,
         evidence_anchor=candidate.evidence_anchor,
     )
+
+
+def _proposal_evidence_url_allowed(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.hostname != "raw.githubusercontent.com":
+        return True
+    return parsed.path.startswith("/CocoaPods/Specs/") and parsed.path.endswith(".podspec.json")
 
 
 __all__ = ["VerifyOutcome", "verify_agent_resolution"]

@@ -278,9 +278,7 @@ def test_apply_decisions_defaults_decided_by_to_logged_in_user(
         _tick(render_shortlist_markdown(items), "acme-lib|MIT", "x")
     )
 
-    updated = apply_decisions(
-        items, decisions, identity=None, now="2026-06-02T00:00:00Z"
-    )
+    updated = apply_decisions(items, decisions, identity=None, now="2026-06-02T00:00:00Z")
 
     approved = next(item for item in updated if item["component_ref"] == "acme-lib|MIT")
     assert approved["status"] == "approved"

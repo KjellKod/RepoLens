@@ -6,6 +6,7 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 from repolens.data.limits import SCHEMA_VERSION
 from repolens.data.models import ResolvedItem
@@ -28,6 +29,7 @@ from repolens.resolve.mobile import (
     detect_mobile,
     enrich_mobile_native,
 )
+from repolens.resolve.mobile_metadata import resolve_mobile_metadata
 from repolens.resolve.models import (
     ApiCandidate,
     FetchFunction,
@@ -51,6 +53,10 @@ DEFAULT_TAGS = {
     "origin": "third-party-oss",
     "scope": "runtime",
     "distribution": "server",
+}
+_GITHUB_API_HEADERS = {
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
 }
 DECLARED_UNPINNED_STATUS = "declared-unpinned"
 CI_ONLY_TAGS = {
@@ -90,7 +96,11 @@ class _ResolutionOutcome:
 class _ResolveCache:
     stats: ResolveCacheStats
     declared: dict[str, str | None]
-    api: dict[tuple[str, str, str, str | None, str | None, bool, bool], _ResolutionOutcome | None]
+    api: dict[
+        tuple[str, str, str, str | None, str | None, bool, bool]
+        | tuple[str, str, str, str | None, str | None, bool, bool, tuple[str, ...]],
+        _ResolutionOutcome | None,
+    ]
 
 
 def run_resolve(
@@ -276,6 +286,17 @@ def _resolve_package(
     if declared is not None:
         return _record(package, spdx_id=declared, source_layer="syft", anchor=declared)
     cataloging_only = is_cataloging_only_package(package)
+    if cataloging_only:
+        metadata_item = _resolve_mobile_metadata_package(
+            package,
+            source_root=source_root,
+            fetcher=fetcher,
+            evidence_resolver=evidence_resolver,
+            limits=limits,
+            cache=cache,
+        )
+        if metadata_item is not None:
+            return metadata_item
     if (
         cataloging_only
         and enable_mobile_native
@@ -448,6 +469,50 @@ def _resolve_api_package(
     )
 
 
+def _resolve_mobile_metadata_package(
+    package: PackageFact,
+    *,
+    source_root: Path | None,
+    fetcher: FetchFunction,
+    evidence_resolver: Resolver | None,
+    limits: SecurityLimits,
+    cache: _ResolveCache,
+) -> ResolvedItem | None:
+    cache_key = _mobile_metadata_cache_key(package)
+    if cache_key in cache.api:
+        cache.stats.api_hits += 1
+        return _record_from_outcome(package, cache.api[cache_key])
+
+    candidate = resolve_mobile_metadata(
+        package,
+        source_root=source_root,
+        fetcher=fetcher,
+        limits=limits,
+    )
+    if candidate is None:
+        cache.api[cache_key] = None
+        return None
+    verified = _verify_api_candidate(candidate, fetcher=fetcher, resolver=evidence_resolver)
+    if verified is None:
+        return _record_cached_api(
+            cache,
+            cache_key,
+            _ResolutionOutcome(None, "api", "unresolved:evidence_mismatch"),
+            package,
+        )
+    return _record_cached_api(
+        cache,
+        cache_key,
+        _ResolutionOutcome(
+            spdx_id=verified.spdx_id,
+            source_layer="api",
+            url=verified.evidence_url,
+            anchor=verified.evidence_anchor,
+        ),
+        package,
+    )
+
+
 def _resolve_mobile_package(
     package: PackageFact,
     *,
@@ -506,9 +571,19 @@ def _api_cache_key(
     )
 
 
+def _mobile_metadata_cache_key(
+    package: PackageFact,
+) -> tuple[str, str, str, str | None, str | None, bool, bool, tuple[str, ...]]:
+    return (
+        *_api_cache_key(package, detect_conflicts=False, lower_unresolved=True),
+        package.locations,
+    )
+
+
 def _record_cached_api(
     cache: _ResolveCache,
-    cache_key: tuple[str, str, str, str | None, str | None, bool, bool],
+    cache_key: tuple[str, str, str, str | None, str | None, bool, bool]
+    | tuple[str, str, str, str | None, str | None, bool, bool, tuple[str, ...]],
     outcome: _ResolutionOutcome,
     package: PackageFact,
 ) -> ResolvedItem:
@@ -545,7 +620,7 @@ def _verify_api_candidate(
     if spdx_id is None or not candidate.evidence_anchor:
         return None
 
-    options = HttpFetchOptions(allowed_hosts=API_ALLOWED_HOSTS, headers={})
+    options = _api_evidence_fetch_options(candidate.evidence_url)
     try:
         validate_url_for_fetch(candidate.evidence_url, options, resolver=resolver)
         result = fetcher(candidate.evidence_url, options)
@@ -559,6 +634,11 @@ def _verify_api_candidate(
         evidence_url=result.url,
         evidence_anchor=candidate.evidence_anchor,
     )
+
+
+def _api_evidence_fetch_options(url: str) -> HttpFetchOptions:
+    headers = _GITHUB_API_HEADERS if urlparse(url).hostname == "api.github.com" else {}
+    return HttpFetchOptions(allowed_hosts=API_ALLOWED_HOSTS, headers=headers)
 
 
 def _api_candidate_license_id(raw_license: str, policy: Policy) -> str | None:

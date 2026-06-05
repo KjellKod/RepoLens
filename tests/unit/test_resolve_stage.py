@@ -12,6 +12,11 @@ from repolens.resolve.stage import ResolveCacheStats, run_resolve
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import FetchResult, HttpFetchOptions
 
+GITHUB_API_HEADERS = {
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": "2022-11-28",
+}
+
 RESOLVER_COVERAGE_FIXTURE = (
     Path(__file__).resolve().parents[1] / "fixtures" / "resolve" / "resolver_coverage"
 )
@@ -813,7 +818,7 @@ def test_unversioned_pypi_package_resolves_from_package_metadata(
     ]
 
 
-def test_swiftpm_purl_is_cataloging_only_without_supported_api(
+def test_swiftpm_purl_resolves_from_package_resolved_metadata(
     tmp_path: Path,
     repo_ref: str,
 ) -> None:
@@ -826,17 +831,134 @@ def test_swiftpm_purl_is_cataloging_only_without_supported_api(
             "type": "swift",
             "purl": "pkg:swift/sentinel-swift-runtime@1.0.0",
             "licenses": [],
+            "locations": ["Package.resolved"],
         },
     )
-    adapter = CandidateAdapter(ApiCandidate("MIT", "https://api.deps.dev/example", "MIT"))
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "Package.resolved").write_text(
+        json.dumps(
+            {
+                "pins": [
+                    {
+                        "identity": "sentinel-swift-runtime",
+                        "kind": "remoteSourceControl",
+                        "location": "https://github.com/example/sentinel-swift-runtime.git",
+                        "state": {"version": "1.0.0", "revision": "abc123"},
+                    }
+                ],
+                "version": 3,
+            }
+        ),
+        encoding="utf-8",
+    )
+    seen: list[str] = []
 
-    run_resolve(tmp_path, repo_ref, adapters=[adapter])
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        assert options.allowed_hosts == API_ALLOWED_HOSTS
+        assert options.headers == GITHUB_API_HEADERS
+        seen.append(url)
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=b'{"license":{"spdx_id":"MIT"}}',
+        )
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[FailingAdapter()],
+        source_root=source_root,
+        fetcher=fetcher,
+        evidence_resolver=public_resolver,
+    )
 
     record = read_single_resolved(tmp_path, repo_ref)
-    assert adapter.calls == 0
-    assert record["spdx_id"] is None
+    assert seen == [
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123",
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123",
+    ]
+    assert record["spdx_id"] == "MIT"
     assert record["evidence"]["source_layer"] == "api"
-    assert record["evidence"]["anchor"] == "unresolved:no_supported_catalog_license_api"
+    assert record["evidence"]["url"] == (
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123"
+    )
+    assert record["evidence"]["anchor"] == "MIT"
+
+
+def test_duplicate_swiftpm_metadata_reuses_api_cache_but_rebuilds_records(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        [
+            {
+                "name": "sentinel-swift-runtime",
+                "version": "1.0.0",
+                "type": "swift",
+                "purl": "pkg:swift/sentinel-swift-runtime@1.0.0",
+                "licenses": [],
+                "locations": ["Package.resolved"],
+            },
+            {
+                "name": "sentinel-swift-runtime",
+                "version": "1.0.0",
+                "type": "swift",
+                "purl": "pkg:swift/sentinel-swift-runtime@1.0.0",
+                "licenses": [],
+                "locations": ["Package.resolved"],
+            },
+        ],
+    )
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+    (source_root / "Package.resolved").write_text(
+        json.dumps(
+            {
+                "pins": [
+                    {
+                        "identity": "sentinel-swift-runtime",
+                        "kind": "remoteSourceControl",
+                        "location": "https://github.com/example/sentinel-swift-runtime.git",
+                        "state": {"version": "1.0.0", "revision": "abc123"},
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    fetch_calls: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        fetch_calls.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"license":{"spdx_id":"MIT"}}')
+
+    stats = ResolveCacheStats()
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[FailingAdapter()],
+        source_root=source_root,
+        fetcher=fetcher,
+        evidence_resolver=public_resolver,
+        cache_stats=stats,
+    )
+
+    records = list(iter_resolved(tmp_path / "work" / repo_ref / "resolved.ndjson"))
+    assert fetch_calls == [
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123",
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123",
+    ]
+    assert stats.api_hits == 1
+    assert [record["spdx_id"] for record in records] == ["MIT", "MIT"]
+    assert [record["evidence"]["url"] for record in records] == [
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123",
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123",
+    ]
 
 
 def test_swiftpm_purl_with_mobile_native_opt_in_uses_mobile_enricher(
@@ -893,7 +1015,7 @@ def test_swiftpm_purl_with_mobile_native_opt_in_uses_mobile_enricher(
     assert record["evidence"]["anchor"] == "license:mit"
 
 
-def test_cocoapods_purl_is_cataloging_only_without_supported_api(
+def test_cocoapods_purl_resolves_from_exact_trunk_metadata(
     tmp_path: Path,
     repo_ref: str,
 ) -> None:
@@ -908,11 +1030,55 @@ def test_cocoapods_purl_is_cataloging_only_without_supported_api(
             "licenses": [],
         },
     )
+    seen: list[str] = []
 
-    run_resolve(tmp_path, repo_ref, adapters=[])
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        assert options.allowed_hosts == API_ALLOWED_HOSTS
+        seen.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"license":"Apache-2.0"}')
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[FailingAdapter()],
+        fetcher=fetcher,
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert seen == [
+        "https://trunk.cocoapods.org/api/v1/pods/SentinelPodRuntime/specs/2.0.0",
+        "https://trunk.cocoapods.org/api/v1/pods/SentinelPodRuntime/specs/2.0.0",
+    ]
+    assert record["spdx_id"] == "Apache-2.0"
+    assert record["evidence"]["source_layer"] == "api"
+    assert record["evidence"]["anchor"] == "Apache-2.0"
+
+
+def test_mobile_metadata_miss_without_native_stays_no_supported_catalog_api(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-swift-runtime",
+            "version": "1.0.0",
+            "type": "swift",
+            "purl": "pkg:swift/sentinel-swift-runtime@1.0.0",
+            "licenses": [],
+        },
+    )
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        raise AssertionError(f"unexpected fetch: {url} {options}")
+
+    run_resolve(tmp_path, repo_ref, adapters=[FailingAdapter()], fetcher=fetcher)
 
     record = read_single_resolved(tmp_path, repo_ref)
     assert record["spdx_id"] is None
+    assert record["evidence"]["source_layer"] == "api"
     assert record["evidence"]["anchor"] == "unresolved:no_supported_catalog_license_api"
 
 

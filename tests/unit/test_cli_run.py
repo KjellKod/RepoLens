@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
@@ -800,6 +801,59 @@ def test_shortlist_open_message_mentions_scancode_retry_when_needed(
     )
     assert f"repolens flag --work-root {tmp_path}" in result.message
     assert "preserves matching approved/rejected shortlist decisions" in result.message
+
+
+def test_shortlist_open_message_explains_non_retry_unresolved_buckets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "shortlist.json").write_text(
+        json.dumps(
+            {
+                "open_count": 2,
+                "items": [
+                    {
+                        "status": "open",
+                        "evidence": {"anchor": "unresolved:scancode_no_target"},
+                    },
+                    {
+                        "status": "open",
+                        "evidence": {"anchor": "unresolved:no_supported_catalog_license_api"},
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_shortlist(_work_root: Path, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            shortlist_json_path=tmp_path / "shortlist.json",
+            shortlist_md_path=tmp_path / "shortlist.md",
+            open_count=2,
+            item_count=2,
+            contexts_path=None,
+        )
+
+    monkeypatch.setattr("repolens.shortlist.run_shortlist", fake_shortlist)
+
+    result = cli._shortlist_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            identity=None,
+            emit_contexts=None,
+            proposals=None,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.FINDINGS_OPEN
+    assert "Open UNKNOWN bucket summary" in result.message
+    assert "unresolved:scancode_no_target" in result.message
+    assert (
+        "Bootstrapping ScanCode or --retry-scancode does not change this selector" in result.message
+    )
+    assert "unresolved:no_supported_catalog_license_api" in result.message
+    assert "exact supported public metadata" in result.message
 
 
 def test_resume_with_scan_artifact_does_not_regenerate_candidates(

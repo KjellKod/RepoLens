@@ -118,6 +118,32 @@ def test_p3a_resolve_blocks_allowlisted_host_resolving_private_ip() -> None:
         )
 
 
+def test_mobile_metadata_host_surface_is_exact() -> None:
+    validate_url_for_fetch(
+        "https://trunk.cocoapods.org/api/v1/pods/SentinelPodRuntime/specs/2.0.0",
+        evidence_options(),
+        resolver=public_resolver,
+    )
+    validate_url_for_fetch(
+        "https://api.github.com/repos/apple/swift-collections/license?ref=abc123",
+        evidence_options(),
+        resolver=public_resolver,
+    )
+    validate_url_for_fetch(
+        "https://raw.githubusercontent.com/CocoaPods/Specs/abc123/"
+        "Specs/a/7/6/Analytics/4.1.8/Analytics.podspec.json",
+        evidence_options(),
+        resolver=public_resolver,
+    )
+
+    for url in (
+        "https://cocoapods.org/pods/SentinelPodRuntime",
+        "https://github.com/apple/swift-collections",
+    ):
+        with pytest.raises(FetchSecurityError, match="host is not allowlisted"):
+            validate_url_for_fetch(url, evidence_options(), resolver=public_resolver)
+
+
 def test_p3a_resolve_does_not_fetch_unversioned_package() -> None:
     package = PackageFact(
         "acme-lib",

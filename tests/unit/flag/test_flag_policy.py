@@ -183,7 +183,13 @@ def test_flag_rerun_carries_forward_ingested_human_decisions(tmp_path, make_reco
     assert rerun["items"][0]["decided_at"] == "2026-06-05T12:00:00Z"
 
 
-def test_flag_rerun_ingests_pending_shortlist_markdown_ticks(tmp_path, make_record) -> None:
+def test_flag_rerun_ingests_pending_shortlist_markdown_ticks(
+    tmp_path, make_record, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        "repolens.shortlist.decisions.getpass.getuser",
+        lambda: "reviewer-local",
+    )
     store.write_resolved(
         tmp_path,
         "acme-alpha",
@@ -212,7 +218,7 @@ def test_flag_rerun_ingests_pending_shortlist_markdown_ticks(tmp_path, make_reco
     assert result.preserved_decision_count == 1
     assert rerun["open_count"] == 0
     assert rerun["items"][0]["status"] == "approved"
-    assert rerun["items"][0]["decided_by"] is None
+    assert rerun["items"][0]["decided_by"] == "reviewer-local"
     assert rerun["items"][0]["decided_at"]
     rendered = (tmp_path / "shortlist.md").read_text(encoding="utf-8")
     assert "- [x] `acme-unknown|UNKNOWN`" in rendered

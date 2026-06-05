@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from repolens.policy import load_default_policy
-from repolens.resolve.adapters import API_ALLOWED_HOSTS, build_default_adapters
+from repolens.resolve.adapters import (
+    API_ALLOWED_HOSTS,
+    build_default_adapters,
+    target_license_candidates,
+)
 from repolens.resolve.license_expression import license_resolution_id
 from repolens.resolve.models import PackageFact
 from repolens.resolve.purl import package_identity, parse_purl
@@ -146,6 +150,36 @@ def test_python_adapter_resolves_zpl_from_pypi_metadata() -> None:
     assert candidate is not None
     assert candidate.spdx_id == "ZPL-2.1"
     assert candidate.evidence_anchor == "ZPL-2.1"
+
+
+def test_adapter_reads_structured_github_license_spdx_id() -> None:
+    assert target_license_candidates(b'{"license":{"spdx_id":"Apache-2.0"}}') == ("Apache-2.0",)
+
+
+def test_python_adapter_reads_exact_license_expression_field() -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=b'{"info":{"license_expression":"MIT OR Apache-2.0"}}',
+        )
+
+    candidate = build_default_adapters(fetcher)[1].resolve(
+        PackageFact(
+            name="sentinel-runtime",
+            version="1.0.0",
+            package_type="python",
+            repo="acme-alpha",
+            purl="pkg:pypi/sentinel-runtime@1.0.0",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is not None
+    assert candidate.spdx_id == "MIT OR Apache-2.0"
+    assert candidate.evidence_anchor == "MIT OR Apache-2.0"
 
 
 def test_adapter_carries_known_with_exception_candidate() -> None:
@@ -363,6 +397,132 @@ def test_unversioned_pypi_package_uses_package_metadata_endpoint() -> None:
     assert candidate is not None
     assert candidate.spdx_id == "MIT"
     assert seen == ["https://pypi.org/pypi/sentinel-runtime/json"]
+
+
+def test_rubygems_exact_version_adapter_reads_non_empty_licenses() -> None:
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        assert options.allowed_hosts == API_ALLOWED_HOSTS
+        seen.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"licenses":["MIT"]}')
+
+    candidate = build_default_adapters(fetcher)[1].resolve(
+        PackageFact(
+            name="babosa",
+            version="1.0.4",
+            package_type="gem",
+            repo="acme-alpha",
+            purl="pkg:gem/babosa@1.0.4",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is not None
+    assert candidate.spdx_id == "MIT"
+    assert seen == ["https://rubygems.org/api/v2/rubygems/babosa/versions/1.0.4.json"]
+
+
+def test_rubygems_empty_license_array_remains_unresolved() -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(url=url, status=200, headers=(), body=b'{"licenses":[]}')
+
+    candidate = build_default_adapters(fetcher)[1].resolve(
+        PackageFact(
+            name="babosa",
+            version="1.0.4",
+            package_type="gem",
+            repo="acme-alpha",
+            purl="pkg:gem/babosa@1.0.4",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is None
+
+
+@pytest.mark.parametrize(
+    ("package", "expected_url", "body", "expected_spdx"),
+    [
+        (
+            PackageFact("click", "8.1.8", "python", "acme-alpha", "pkg:pypi/click@8.1.8", None),
+            "https://api.clearlydefined.io/definitions/pypi/pypi/-/click/8.1.8",
+            b'{"licensed":{"declared":"BSD-2-Clause AND BSD-3-Clause"}}',
+            "BSD-2-Clause AND BSD-3-Clause",
+        ),
+        (
+            PackageFact("babosa", "1.0.4", "gem", "acme-alpha", "pkg:gem/babosa@1.0.4", None),
+            "https://api.clearlydefined.io/definitions/gem/rubygems/-/babosa/1.0.4",
+            b'{"licensed":{"declared":"MIT"}}',
+            "MIT",
+        ),
+    ],
+)
+def test_clearlydefined_adapter_uses_exact_ecosystem_coordinates(
+    package: PackageFact,
+    expected_url: str,
+    body: bytes,
+    expected_spdx: str,
+) -> None:
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        assert options.allowed_hosts == API_ALLOWED_HOSTS
+        seen.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=body)
+
+    candidate = build_default_adapters(fetcher)[2].resolve(package)
+
+    assert candidate is not None
+    assert candidate.spdx_id == expected_spdx
+    assert candidate.evidence_url == expected_url
+    assert seen == [expected_url]
+
+
+def test_npm_caniuse_lite_cc_by_4_resolves_as_review_candidate() -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(url=url, status=200, headers=(), body=b'{"license":"CC-BY-4.0"}')
+
+    candidate = build_default_adapters(fetcher)[0].resolve(
+        PackageFact(
+            name="caniuse-lite",
+            version="1.0.30001712",
+            package_type="npm",
+            repo="acme-alpha",
+            purl="pkg:npm/caniuse-lite@1.0.30001712",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is not None
+    assert candidate.spdx_id == "CC-BY-4.0"
+
+
+@pytest.mark.parametrize("license_text", ["BSD", "BSD License", "Public Domain"])
+def test_ambiguous_public_metadata_labels_remain_unresolved(license_text: str) -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=f'{{"info":{{"license":"{license_text}"}}}}'.encode(),
+        )
+
+    candidate = build_default_adapters(fetcher)[1].resolve(
+        PackageFact(
+            name="click",
+            version="8.1.8",
+            package_type="python",
+            repo="acme-alpha",
+            purl="pkg:pypi/click@8.1.8",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is None
 
 
 @pytest.mark.parametrize(

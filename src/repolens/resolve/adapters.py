@@ -25,6 +25,9 @@ API_ALLOWED_HOSTS = frozenset(
         "api.github.com",
         "api.clearlydefined.io",
         "api.ecosyste.ms",
+        "rubygems.org",
+        "trunk.cocoapods.org",
+        "raw.githubusercontent.com",
     }
 )
 
@@ -80,12 +83,13 @@ class ClearlyDefinedAdapter:
 
     def resolve(self, package: PackageFact) -> ApiCandidate | None:
         ecosystem, package_name = package_identity(package.package_type, package.name, package.purl)
-        source = _clearly_defined_source(ecosystem)
-        if source is None:
+        coordinates = _clearly_defined_coordinates(ecosystem)
+        if coordinates is None:
             return None
+        source, provider = coordinates
         url = (
             "https://api.clearlydefined.io/definitions/"
-            f"{source}/{quote(ecosystem, safe='')}/-/{quote(package_name, safe='')}/"
+            f"{source}/{quote(provider, safe='')}/-/{quote(package_name, safe='')}/"
             f"{quote(package.version, safe='')}"
         )
         return _candidate_from_url(self.fetcher, url)
@@ -126,6 +130,13 @@ def _native_registry_url(ecosystem: str, package_name: str, version: str) -> str
         name = quote(package_name, safe="")
         package_version = quote(version, safe="")
         return f"https://proxy.golang.org/{name}/@v/{package_version}.info"
+    if ecosystem in {"gem", "ruby", "rubygems"}:
+        if version == _UNKNOWN_VERSION:
+            return None
+        return (
+            f"https://rubygems.org/api/v2/rubygems/{quote(package_name, safe='')}"
+            f"/versions/{quote(version, safe='')}.json"
+        )
     if ecosystem == "maven":
         return (
             "https://repo.maven.apache.org/maven2/"
@@ -134,11 +145,19 @@ def _native_registry_url(ecosystem: str, package_name: str, version: str) -> str
     return None
 
 
-def _clearly_defined_source(ecosystem: str) -> str | None:
-    if ecosystem in {"npm", "pypi", "maven", "cargo"}:
-        return "registry"
+def _clearly_defined_coordinates(ecosystem: str) -> tuple[str, str] | None:
+    if ecosystem == "npm":
+        return ("npm", "npm")
+    if ecosystem in {"pypi", "python"}:
+        return ("pypi", "pypi")
+    if ecosystem in {"gem", "ruby", "rubygems"}:
+        return ("gem", "rubygems")
+    if ecosystem in {"cargo", "rust"}:
+        return ("crate", "cratesio")
+    if ecosystem == "maven":
+        return ("registry", "maven")
     if ecosystem in {"golang", "gomod", "go-module"}:
-        return "git"
+        return ("git", ecosystem)
     return None
 
 
@@ -192,9 +211,11 @@ def target_license_candidates(body: bytes) -> tuple[str, ...]:
 
 _TARGET_LICENSE_PATHS = (
     ("license",),
+    ("license", "spdx_id"),
     ("licenses",),
     ("normalized_licenses",),
     ("info", "license"),
+    ("info", "license_expression"),
     ("info", "licenses"),
     ("version", "license"),
     ("version", "licenses"),

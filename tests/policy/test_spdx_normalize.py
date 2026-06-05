@@ -11,6 +11,7 @@ def test_normalize_canonical_and_alias_ids() -> None:
     mit = normalize_license("MIT", policy)
     apache_alias = normalize_license("apache 2.0", policy)
     psf_alias = normalize_license("PSFL", policy)
+    unlicence_alias = normalize_license("Unlicence", policy)
 
     assert mit.spdx_id == "MIT"
     assert mit.reason == "canonical_id"
@@ -18,6 +19,8 @@ def test_normalize_canonical_and_alias_ids() -> None:
     assert apache_alias.reason == "alias_hit"
     assert psf_alias.spdx_id == "PSF-2.0"
     assert psf_alias.reason == "alias_hit"
+    assert unlicence_alias.spdx_id == "Unlicense"
+    assert unlicence_alias.reason == "alias_hit"
 
 
 def test_deprecated_id_is_not_treated_as_normalized_spdx() -> None:
@@ -66,6 +69,31 @@ def test_unicode_3_is_review_with_caveat() -> None:
     assert decision.action == Action.FLAG
     assert "freeform_unknown" not in decision.reasons
     assert any("legal review" in caveat for caveat in decision.caveats)
+
+
+def test_cc_by_4_is_review_with_caveat() -> None:
+    policy = load_default_policy()
+    decision = classify_license_input("CC-BY-4.0", policy=policy)
+
+    assert decision.tier == PolicyTier.REVIEW
+    assert decision.effective_tier == PolicyTier.REVIEW
+    assert decision.action == Action.FLAG
+    assert "freeform_unknown" not in decision.reasons
+    assert any("attribution obligations" in caveat for caveat in decision.caveats)
+
+
+def test_ambiguous_bsd_and_public_domain_labels_stay_unknown() -> None:
+    policy = load_default_policy()
+    for value in (
+        "BSD",
+        "BSD License",
+        "License :: OSI Approved :: BSD License",
+        "Public Domain",
+    ):
+        decision = classify_license_input(value, policy=policy)
+        assert decision.tier == PolicyTier.UNKNOWN
+        assert decision.effective_tier == PolicyTier.BLOCK
+        assert decision.action == Action.FLAG_HARD
 
 
 def test_unsupported_unicode_spdx_like_string_remains_unknown() -> None:
