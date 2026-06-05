@@ -314,6 +314,240 @@ def test_run_resolve_stage_writes_scancode_record_from_stored_snapshot(
     assert records[0]["evidence"]["source_layer"] == "scancode"
 
 
+def test_run_resolve_stage_prints_scancode_retry_notice(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    sbom: dict[str, object],
+    resolved_record: dict[str, object],
+) -> None:
+    repo_ref = "sentinel-alpha"
+    store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
+
+    def fake_resolve(work_root: Path, current_repo_ref: str) -> Path:
+        store.write_resolved(
+            work_root,
+            current_repo_ref,
+            [
+                {
+                    **resolved_record,
+                    "repo": current_repo_ref,
+                    "evidence": {
+                        "source_layer": "scancode",
+                        "anchor": "unresolved:scancode_tool_unavailable",
+                    },
+                }
+            ],
+        )
+        return store.repo_dir(work_root, current_repo_ref) / "resolved.ndjson"
+
+    stderr = io.StringIO()
+    monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    resolved = cli._run_resolve_stage(
+        SimpleNamespace(work_root=tmp_path, quiet=False),
+        cli.RunSummary(),
+    )
+
+    assert resolved == {repo_ref}
+    output = stderr.getvalue()
+    assert "== Resolve Follow-Up ==" in output
+    assert "unresolved:scancode_tool_unavailable" in output
+    assert f"repolens resolve --work-root {tmp_path} --retry-scancode" in output
+    assert f"repolens flag --work-root {tmp_path}" in output
+
+
+def test_resolve_stage_prints_scancode_retry_guidance_when_needed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    sbom: dict[str, object],
+    resolved_record: dict[str, object],
+) -> None:
+    repo_ref = "sentinel-alpha"
+    store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
+
+    def fake_resolve(work_root: Path, current_repo_ref: str, **_kwargs: object) -> Path:
+        store.write_resolved(
+            work_root,
+            current_repo_ref,
+            [
+                {
+                    **resolved_record,
+                    "repo": current_repo_ref,
+                    "evidence": {
+                        "source_layer": "scancode",
+                        "anchor": "unresolved:scancode_tool_unavailable",
+                    },
+                }
+            ],
+        )
+        return store.repo_dir(work_root, current_repo_ref) / "resolved.ndjson"
+
+    monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
+
+    result = cli._resolve_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            repo_ref=None,
+            source_root=None,
+            enable_mobile_native=False,
+            detect_conflicts=False,
+            retry_scancode=False,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.SUCCESS
+    assert "ScanCode was unavailable during resolve" in result.message
+    assert "unresolved:scancode_tool_unavailable" in result.message
+    assert f"repolens resolve --work-root {tmp_path} --retry-scancode" in result.message
+    assert f"repolens flag --work-root {tmp_path}" in result.message
+
+
+def test_resolve_retry_scancode_only_reruns_matching_repos(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    sbom: dict[str, object],
+    resolved_record: dict[str, object],
+) -> None:
+    for repo_ref in ("sentinel-alpha", "sentinel-beta"):
+        store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
+
+    retry_record = {
+        **resolved_record,
+        "repo": "sentinel-alpha",
+        "name": "retry-lib",
+        "evidence": {
+            "source_layer": "scancode",
+            "anchor": "unresolved:scancode_tool_unavailable",
+        },
+    }
+    settled_record = {**resolved_record, "repo": "sentinel-beta", "name": "settled-lib"}
+    store.write_resolved(tmp_path, "sentinel-alpha", [retry_record])
+    store.write_resolved(tmp_path, "sentinel-beta", [settled_record])
+
+    calls: list[str] = []
+
+    def fake_resolve(work_root: Path, repo_ref: str, **_kwargs: object) -> Path:
+        calls.append(repo_ref)
+        store.write_resolved(work_root, repo_ref, [{**resolved_record, "repo": repo_ref}])
+        return store.repo_dir(work_root, repo_ref) / "resolved.ndjson"
+
+    monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
+
+    result = cli._resolve_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            repo_ref=None,
+            source_root=None,
+            enable_mobile_native=False,
+            detect_conflicts=False,
+            retry_scancode=True,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.SUCCESS
+    assert calls == ["sentinel-alpha"]
+    assert "retried ScanCode; wrote resolved.ndjson" in result.message
+    assert "repolens flag --work-root" in result.message
+
+
+def test_resolve_retry_scancode_noops_when_no_prior_tool_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    sbom: dict[str, object],
+    resolved_record: dict[str, object],
+) -> None:
+    store.write_sbom(tmp_path, "sentinel-alpha", {**sbom, "repo": "sentinel-alpha"})
+    store.write_resolved(tmp_path, "sentinel-alpha", [resolved_record])
+
+    def fail_resolve(*_args: object, **_kwargs: object) -> Path:
+        raise AssertionError("retry must not resolve repos without scancode-tool failures")
+
+    monkeypatch.setattr("repolens.resolve.run_resolve", fail_resolve)
+
+    result = cli._resolve_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            repo_ref=None,
+            source_root=None,
+            enable_mobile_native=False,
+            detect_conflicts=False,
+            retry_scancode=True,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.SUCCESS
+    assert "No repos need ScanCode retry" in result.message
+    assert "repolens flag --work-root" in result.message
+
+
+def test_shortlist_open_message_explains_ai_proposal_workflow(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    shortlist_md = tmp_path / "shortlist.md"
+    shortlist_json = tmp_path / "shortlist.json"
+
+    def fake_shortlist(_work_root: Path, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            shortlist_json_path=shortlist_json,
+            shortlist_md_path=shortlist_md,
+            open_count=3,
+            item_count=5,
+            contexts_path=None,
+        )
+
+    monkeypatch.setattr("repolens.shortlist.run_shortlist", fake_shortlist)
+
+    result = cli._shortlist_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            identity=None,
+            emit_contexts=None,
+            proposals=None,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.FINDINGS_OPEN
+    assert "--emit-contexts" in result.message
+    assert "$repolens review every row" in result.message
+    assert "--proposals" in result.message
+    assert "shortlist.review.md" in result.message
+    assert "[x]" in result.message
+    assert "[r]" in result.message
+
+
+def test_shortlist_open_after_context_emit_points_to_skill_next(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    contexts_path = tmp_path / "shortlist.contexts.json"
+
+    def fake_shortlist(_work_root: Path, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            shortlist_json_path=tmp_path / "shortlist.json",
+            shortlist_md_path=tmp_path / "shortlist.md",
+            open_count=3,
+            item_count=5,
+            contexts_path=contexts_path,
+        )
+
+    monkeypatch.setattr("repolens.shortlist.run_shortlist", fake_shortlist)
+
+    result = cli._shortlist_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            identity=None,
+            emit_contexts=contexts_path,
+            proposals=None,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.FINDINGS_OPEN
+    assert "contexts are ready" in result.message
+    assert "$repolens review every row" in result.message
+    assert str(contexts_path) in result.message
+    assert f"--proposals {tmp_path / 'shortlist.proposals.json'}" in result.message
+
+
 def test_resume_with_scan_artifact_does_not_regenerate_candidates(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -30,6 +30,8 @@ def test_config_init_help_explains_pattern_input(capsys: pytest.CaptureFixture[s
     assert "owner/repo=production" in out
     assert "obsolete-*=OBSOLETE" in out
     assert "do not add shell quotes" in out
+    assert "Category prompts only label" in out
+    assert "exclude patterns" in out
     assert "repo-a,repo-b and then provide one reason" in out
     assert "invalid entries are explained and re-prompted" in out
 
@@ -60,7 +62,7 @@ def test_config_validate_summarizes_exact_file(
 
     out = capsys.readouterr().out
     assert f"Config valid: {path}" in out
-    assert "explicit=1, patterns=1, topics=1, dead=1" in out
+    assert "explicit=1, patterns=1, topics=1, exclude_patterns=0, dead=1" in out
     assert "exclude_paths=1, clone_timeout_seconds=45, syft.catalogers=default" in out
     assert "include=2, header=absent" in out
 
@@ -92,6 +94,7 @@ def test_config_init_writes_selected_fields_and_next_commands(
                 "sentinel-owner/sentinel-alpha=runtime",
                 "tool-*=tools",
                 "mobile=apps",
+                "internal-*=internal-only",
                 "sentinel-retired=retired",
                 "fixtures/, vendor/",
                 "45",
@@ -118,6 +121,7 @@ def test_config_init_writes_selected_fields_and_next_commands(
                 "dead": {"sentinel-retired": "retired"},
                 "default_category": "runtime",
                 "explicit": {"sentinel-owner/sentinel-alpha": "runtime"},
+                "exclude_patterns": [{"glob": "internal-*", "reason": "internal-only"}],
                 "patterns": [{"category": "tools", "glob": "tool-*"}],
                 "topics": {"mobile": "apps"},
             }
@@ -161,6 +165,8 @@ def test_config_init_reprompts_invalid_pattern_input(
                 "",
                 "",
                 "",
+                "",
+                "",
             ]
         )
         + "\n"
@@ -180,6 +186,46 @@ def test_config_init_reprompts_invalid_pattern_input(
     assert "Do not add quotes in the prompt" in out
 
 
+def test_config_init_reprompts_invalid_exclude_pattern_input(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = tmp_path / ".repolens.local.json"
+    answers = (
+        "\n".join(
+            [
+                "",
+                "",
+                "",
+                "",
+                "",
+                "internal-*",
+                "internal-*=internal-only",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+        + "\n"
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO(answers))
+
+    assert cli.main(["config", "init", "--out", str(path)]) == 0
+
+    values = json.loads(path.read_text(encoding="utf-8"))
+    assert values["discover"]["taxonomy"]["exclude_patterns"] == [
+        {"glob": "internal-*", "reason": "internal-only"}
+    ]
+    out = capsys.readouterr().out
+    assert "Invalid input: exclude pattern entries must use key=value" in out
+    assert "Use glob=reason pairs such as obsolete-*=retired" in out
+    assert "Matching repos are hard-excluded and not scanned" in out
+
+
 def test_config_init_reprompts_invalid_clone_timeout(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -189,6 +235,7 @@ def test_config_init_reprompts_invalid_clone_timeout(
     answers = (
         "\n".join(
             [
+                "",
                 "",
                 "",
                 "",
@@ -225,6 +272,7 @@ def test_config_init_accepts_dead_repo_list_then_prompts_for_reason(
     answers = (
         "\n".join(
             [
+                "",
                 "",
                 "",
                 "",
@@ -274,6 +322,7 @@ def test_config_init_defaults_report_legal_text(
                 "",
                 "",
                 "",
+                "",
                 "y",
                 "Sentinel",
                 "",
@@ -307,6 +356,7 @@ def test_config_init_expands_tilde_in_prompted_output_path(
         "\n".join(
             [
                 "~/.repolens.local.json",
+                "",
                 "",
                 "",
                 "",

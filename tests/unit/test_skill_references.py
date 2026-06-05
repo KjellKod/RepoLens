@@ -26,6 +26,7 @@ def test_repolens_skill_referenced_files_exist(repo_root: Path) -> None:
     }
 
     assert ".skills/repolens/reference/proposal-schema.md" in references
+    assert ".skills/repolens/reference/evidence-lookup.md" in references
     assert ".skills/repolens/reference/triage-cheatsheet.md" in references
     assert "src/repolens/data/schemas/shortlist_proposals.schema.json" in references
     for reference in references:

@@ -36,6 +36,9 @@ Rules:
 
 - `component_ref` must match an emitted context item exactly.
 - `spdx_id`, `evidence_url`, and `evidence_anchor` must be supported by the cited evidence.
-- Do not invent URLs. Abstain when evidence is absent or uncertain.
+- Do not invent unsupported URLs. You may construct deterministic package metadata URLs
+  from exact package/version facts only when they use RepoLens-verifiable hosts and you
+  fetched/inspected the response before proposing. Abstain when evidence is absent or
+  uncertain.
 - `disposition`, `confidence`, `rationale`, and `sanity_check` are AI-suggested metadata
   only. RepoLens ignores them for approval and verifies the URL/anchor itself.

@@ -38,6 +38,7 @@ def taxonomy_config() -> Config:
                     "explicit": {"sentinel-owner/sentinel-explicit": "explicit-bucket"},
                     "patterns": [{"glob": "tool-*", "category": "pattern-bucket"}],
                     "topics": {"runtime": "topic-bucket"},
+                    "exclude_patterns": [{"glob": "internal-*", "reason": "internal-only repo"}],
                     "dead": {"sentinel-dead": "retired by local approval"},
                 }
             }
@@ -77,6 +78,15 @@ def test_categories_do_not_hard_exclude() -> None:
     assert categorized.hard_excluded is False
 
 
+def test_exclude_patterns_hard_exclude_with_visible_reason() -> None:
+    taxonomy = taxonomy_from_config(taxonomy_config())
+
+    categorized = categorize_repository(repo("internal-api"), taxonomy)
+
+    assert categorized.category == "default-bucket"
+    assert categorized.hard_exclusion_reason == "internal-only repo"
+
+
 def test_archived_and_dead_repos_get_visible_hard_exclusion_reasons() -> None:
     taxonomy = taxonomy_from_config(taxonomy_config())
 
@@ -91,4 +101,14 @@ def test_invalid_taxonomy_config_rejected() -> None:
     config = Config(values={"discover": {"taxonomy": {"patterns": "bad"}}}, sources=())
 
     with pytest.raises(InputError, match="patterns"):
+        taxonomy_from_config(config)
+
+
+def test_invalid_exclude_pattern_config_rejected() -> None:
+    config = Config(
+        values={"discover": {"taxonomy": {"exclude_patterns": [{"glob": "internal-*"}]}}},
+        sources=(),
+    )
+
+    with pytest.raises(InputError, match="exclude_patterns"):
         taxonomy_from_config(config)

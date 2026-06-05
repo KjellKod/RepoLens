@@ -155,11 +155,13 @@ _STAGE_HELP = {
             "available scanned SBOMs when no checked SBOM is present; --repo-ref "
             "narrows resolve to one repo artifact directory; "
             "--source-root may point at a read-only checkout for mobile markers and "
-            "package-local ScanCode fallback.",
+            "package-local ScanCode fallback; --retry-scancode reruns only repos whose "
+            "prior resolved.ndjson contains unresolved:scancode_tool_unavailable.",
             "repolens resolve --work-root <WORK>",
             "<WORK>/work/<repo_ref>/resolved.ndjson (license + evidence + tags per "
             "dependency; unresolved records stay schema-valid).",
-            "`repolens flag --work-root <WORK>`.",
+            "`repolens flag --work-root <WORK>`. After fixing ScanCode, use "
+            "`repolens resolve --work-root <WORK> --retry-scancode`, then rerun flag.",
         ),
     ),
     "flag": StageHelp(
@@ -186,7 +188,9 @@ _STAGE_HELP = {
             "shortlist.contexts.json when requested; shortlist.json + grouped shortlist.md "
             "rewritten with verified candidates and recorded human approvals; exits 1 "
             "while any item is still open.",
-            "once nothing is open, `repolens report`.",
+            "for UNKNOWNs/open items, emit contexts, ask `$repolens` to write proposals, "
+            "ingest them with `--proposals`, then approve/reject remaining rows. Once "
+            "nothing is open, `repolens report`.",
         ),
     ),
     "report": StageHelp(
@@ -408,8 +412,9 @@ def _configure_config_parser(subparser: argparse.ArgumentParser) -> None:
             "\n"
             "Prompt entries use key=value, for example owner/repo=production or\n"
             "obsolete-*=OBSOLETE. At the interactive prompt, do not add shell quotes\n"
-            "around glob patterns; type obsolete-*=OBSOLETE. For dead repos, you can\n"
-            "enter repo-a,repo-b and then provide one reason for all listed repos.\n"
+            "around glob patterns; type obsolete-*=OBSOLETE. Category prompts only label\n"
+            "repos; use exclude patterns or dead repos to skip scanning. For dead repos,\n"
+            "you can enter repo-a,repo-b and then provide one reason for all listed repos.\n"
             "\n"
             "Optional advanced prompts can be left blank. For example, leave Syft\n"
             "catalogers blank to use all catalogers, and leave main report categories\n"
@@ -651,6 +656,15 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         help=(
             "Cross-check all API adapters and write CONFLICT when verified sources disagree "
             "(slower; default stops at the first verified API source)."
+        ),
+    )
+    subparser.add_argument(
+        "--retry-scancode",
+        action="store_true",
+        help=(
+            "Rerun only repos whose existing resolved.ndjson contains "
+            "unresolved:scancode_tool_unavailable; use after fixing the pinned ScanCode tool, "
+            "then rerun flag."
         ),
     )
     subparser.set_defaults(handler=_resolve_stage)
@@ -904,7 +918,8 @@ def _prompt_taxonomy(*, input_stream: TextIO, output_stream: TextIO) -> dict[str
     taxonomy: dict[str, object] = {}
     print(
         "\nCategories are labels for grouping repositories and report routing; they do not "
-        "exclude repos.",
+        "exclude repos, skip scanning, or remove anything from discovery. Use the exclude "
+        "pattern and dead repo prompts below for hard exclusions.",
         file=output_stream,
     )
     default_category = _prompt(
@@ -967,6 +982,27 @@ def _prompt_taxonomy(*, input_stream: TextIO, output_stream: TextIO) -> dict[str
     )
     if topics:
         taxonomy["topics"] = topics
+
+    print(
+        "\nExclude patterns are repo-name glob rules for hard exclusions. Use these when "
+        "a whole class of repos should not be scanned, and include a visible reason. "
+        "For example: obsolete-*=retired or internal-*=internal-only. Do not add shell "
+        "quotes around the glob. These apply during discover; an existing "
+        "repos.candidate.md is not rewritten until you rerun discover with --force.",
+        file=output_stream,
+    )
+    exclude_patterns = _prompt_parsed(
+        "Exclude repo patterns (examples obsolete-*=retired, internal-*=internal-only)",
+        parser=_parse_exclude_patterns,
+        retry_hint=(
+            "Use glob=reason pairs such as obsolete-*=retired or internal-*=internal-only. "
+            "Matching repos are hard-excluded and not scanned. Press Enter to skip."
+        ),
+        input_stream=input_stream,
+        output_stream=output_stream,
+    )
+    if exclude_patterns:
+        taxonomy["exclude_patterns"] = exclude_patterns
 
     print(
         "\nDead repos are exact repos to hard-exclude with a visible reason; use this only "
@@ -1186,6 +1222,13 @@ def _parse_patterns(value: str) -> list[dict[str, str]]:
     ]
 
 
+def _parse_exclude_patterns(value: str) -> list[dict[str, str]]:
+    return [
+        {"glob": glob, "reason": reason}
+        for glob, reason in _parse_mapping(value, label="exclude pattern").items()
+    ]
+
+
 def _parse_optional_positive_timeout(value: str) -> int | float | None:
     if not value:
         return None
@@ -1389,6 +1432,7 @@ def _run_resolve_stage(args: argparse.Namespace, summary: RunSummary) -> set[str
         resolved_refs.add(repo_ref)
         summary.repo_refs.add(repo_ref)
         _run_banner(args, "resolve", f"{repo_ref} done")
+    _run_scancode_retry_notice(args, work_root, tuple(sorted(resolved_refs, key=str.casefold)))
     return resolved_refs
 
 
@@ -1470,6 +1514,18 @@ def _run_banner(args: argparse.Namespace, stage: str, detail: str) -> None:
         print(f"\n== {stage.title()} ==", file=sys.stderr)
         args._last_banner_stage = stage
     print(f"Status: {detail}", file=sys.stderr)
+
+
+def _run_scancode_retry_notice(
+    args: argparse.Namespace, work_root: Path, repo_refs: tuple[str, ...]
+) -> None:
+    if args.quiet:
+        return
+    advisory = _scancode_retry_advisory(work_root, repo_refs, after_retry=False)
+    if advisory is None:
+        return
+    print("\n== Resolve Follow-Up ==", file=sys.stderr)
+    print(advisory, file=sys.stderr)
 
 
 def _run_pause(message: str, *, interactive: bool) -> None:
@@ -2289,6 +2345,19 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
         raise InputError(
             "resolve --source-root requires --repo-ref when multiple scanned repos exist"
         )
+    retry_scancode = bool(getattr(args, "retry_scancode", False))
+    if retry_scancode:
+        repo_refs = _repo_refs_needing_scancode_retry(args.work_root, repo_refs)
+        if not repo_refs:
+            flag_command = f"repolens flag --work-root {shlex.quote(str(args.work_root))}"
+            return CommandResult(
+                CommandStatus.SUCCESS,
+                (
+                    "No repos need ScanCode retry: no existing resolved.ndjson contains "
+                    "unresolved:scancode_tool_unavailable.\n"
+                    f"Next CLI stage: {flag_command}"
+                ),
+            )
     paths = []
     total = len(repo_refs)
     progress = _ResolveProgressPrinter(stream=sys.stderr)
@@ -2329,11 +2398,19 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
     progress.finish(total)
     flag_command = f"repolens flag --work-root {shlex.quote(str(args.work_root))}"
     if len(paths) == 1:
-        write_summary = f"wrote {paths[0].name}"
+        write_summary = f"{'retried ScanCode; ' if retry_scancode else ''}wrote {paths[0].name}"
     else:
         preview = ", ".join(repo_refs[:5])
         suffix = "" if len(repo_refs) <= 5 else ", ..."
-        write_summary = f"resolved {len(repo_refs)} repos: {preview}{suffix}"
+        action = "retried ScanCode for" if retry_scancode else "resolved"
+        write_summary = f"{action} {len(repo_refs)} repos: {preview}{suffix}"
+    retry_advisory = _scancode_retry_advisory(
+        args.work_root,
+        repo_refs,
+        after_retry=retry_scancode,
+    )
+    if retry_advisory is not None:
+        return CommandResult(CommandStatus.SUCCESS, f"{write_summary}\n{retry_advisory}")
     return CommandResult(
         CommandStatus.SUCCESS,
         f"{write_summary}\nNext CLI stage: {flag_command}",
@@ -2478,6 +2555,68 @@ def _resolve_repo_refs(work_root: Path, repo_ref: str | None) -> tuple[str, ...]
     return repo_refs
 
 
+_SCANCODE_TOOL_UNAVAILABLE_ANCHOR = "unresolved:scancode_tool_unavailable"
+
+
+def _repo_refs_needing_scancode_retry(
+    work_root: Path, repo_refs: tuple[str, ...]
+) -> tuple[str, ...]:
+    from repolens.data import store
+
+    retry_refs: list[str] = []
+    for repo_ref in repo_refs:
+        path = store.repo_dir(work_root, repo_ref) / "resolved.ndjson"
+        if not path.is_file():
+            continue
+        for record in store.iter_resolved(path):
+            evidence = record.get("evidence")
+            if (
+                isinstance(evidence, dict)
+                and evidence.get("anchor") == _SCANCODE_TOOL_UNAVAILABLE_ANCHOR
+            ):
+                retry_refs.append(repo_ref)
+                break
+    return tuple(retry_refs)
+
+
+def _scancode_retry_advisory(
+    work_root: Path,
+    repo_refs: tuple[str, ...],
+    *,
+    after_retry: bool,
+) -> str | None:
+    retry_refs = _repo_refs_needing_scancode_retry(work_root, repo_refs)
+    if not retry_refs:
+        return None
+    retry_command = (
+        f"repolens resolve --work-root {shlex.quote(str(work_root))} --retry-scancode"
+    )
+    flag_command = f"repolens flag --work-root {shlex.quote(str(work_root))}"
+    preview = ", ".join(retry_refs[:5])
+    suffix = "" if len(retry_refs) <= 5 else ", ..."
+    intro = (
+        "ScanCode is still unavailable"
+        if after_retry
+        else "ScanCode was unavailable during resolve"
+    )
+    return "\n".join(
+        (
+            "ScanCode follow-up:",
+            (
+                f"  {intro}: {len(retry_refs)} repo(s) still contain "
+                f"{_SCANCODE_TOOL_UNAVAILABLE_ANCHOR}."
+            ),
+            f"  Affected repos: {preview}{suffix}",
+            "",
+            "After fixing or bootstrapping the pinned ScanCode tool, run:",
+            f"  {retry_command}",
+            "",
+            "Then rebuild the shortlist inputs:",
+            f"  {flag_command}",
+        )
+    )
+
+
 def _warn_ignored_discover_approval_error(error: InputError) -> None:
     print(
         f"Warning: resolve could not use checked discover approvals ({error}); "
@@ -2554,17 +2693,94 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     if args.proposals is not None:
         summary = f"{summary}; ingested proposals {args.proposals}"
     if result.open_count > 0:
-        rerun_command = f"repolens shortlist --work-root {shlex.quote(str(args.work_root))}"
         return CommandResult(
             CommandStatus.FINDINGS_OPEN,
-            (
-                f"{summary}\n"
-                f"Manual step: resolve open items in grouped {result.shortlist_md_path}, then "
-                f"rerun `{rerun_command}`."
-            ),
+            f"{summary}\n{_shortlist_open_guidance(args, result.shortlist_md_path, contexts_path)}",
         )
     report_command = f"repolens report --work-root {shlex.quote(str(args.work_root))}"
     return CommandResult(CommandStatus.SUCCESS, f"{summary}\nNext CLI stage: {report_command}")
+
+
+def _shortlist_open_guidance(
+    args: argparse.Namespace,
+    shortlist_md_path: Path,
+    contexts_path: Path | None,
+) -> str:
+    work_root = Path(args.work_root)
+    work_root_arg = shlex.quote(str(work_root))
+    contexts = contexts_path or work_root / "shortlist.contexts.json"
+    proposals = work_root / "shortlist.proposals.json"
+    review_notes = work_root / "shortlist.review.md"
+    emit_command = (
+        f"repolens shortlist --work-root {work_root_arg} "
+        f"--emit-contexts {shlex.quote(str(contexts))}"
+    )
+    ingest_command = (
+        f"repolens shortlist --work-root {work_root_arg} "
+        f"--proposals {shlex.quote(str(proposals))}"
+    )
+    rerun_command = f"repolens shortlist --work-root {work_root_arg}"
+
+    if args.proposals is not None:
+        return "\n".join(
+            (
+                "Manual step: proposals were ingested, but some items remain open.",
+                "",
+                "Human review:",
+                f"  Open: {shortlist_md_path}",
+                "  Mark remaining rows or groups with [x] to accept or [r] to reject.",
+                "",
+                "Then rerun:",
+                f"  {rerun_command}",
+            )
+        )
+    if contexts_path is not None:
+        return "\n".join(
+            (
+                "Manual step: contexts are ready for AI-assisted shortlist review.",
+                "",
+                "Ask Codex/Claude:",
+                "  $repolens review every row in:",
+                f"    {contexts}",
+                "  Write:",
+                f"    proposals: {proposals}",
+                f"    review notes: {review_notes}",
+                "",
+                "Then ingest verified proposals:",
+                f"  {ingest_command}",
+                "",
+                "Human review:",
+                f"  Open: {shortlist_md_path}",
+                "  Approve/reject remaining items, then rerun:",
+                f"  {rerun_command}",
+            )
+        )
+    return "\n".join(
+        (
+            "Manual step: resolve open shortlist items before report.",
+            "",
+            "AI-assisted pass for UNKNOWNs/stale evidence:",
+            "  Emit contexts:",
+            f"    {emit_command}",
+            "",
+            "  Ask Codex/Claude:",
+            "    $repolens review every row in:",
+            f"      {contexts}",
+            "    Write:",
+            f"      proposals: {proposals}",
+            f"      review notes: {review_notes}",
+            "",
+            "  Ingest verified proposals:",
+            f"    {ingest_command}",
+            "",
+            "Human review:",
+            f"  Open: {shortlist_md_path}",
+            "  Mark remaining rows or groups with [x] to accept or [r] to reject.",
+            "",
+            "Then rerun:",
+            f"  {rerun_command}",
+        )
+    )
 
 
 def _report(args: argparse.Namespace) -> CommandResult:

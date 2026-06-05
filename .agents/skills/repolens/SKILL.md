@@ -1,6 +1,6 @@
 ---
 name: repolens
-description: Use when the user invokes $repolens or asks to run a RepoLens disclosure / resolve flagged licenses.
+description: Use when the user invokes $repolens or asks to run a RepoLens disclosure, review shortlist items, look up verifiable license evidence, or resolve flagged licenses through proposal artifacts.
 ---
 
 Read and follow `../../../.skills/repolens/SKILL.md`. Treat that file as the source of

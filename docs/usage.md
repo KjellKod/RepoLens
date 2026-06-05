@@ -213,8 +213,10 @@ through local config today. The private name-hygiene denylist is also local and
 untracked, but it uses the dedicated `.name-hygiene.local.json` file shown below.
 
 `discover.taxonomy` is the optional set of rules that assigns each discovered repository
-to a category. Categories are labels for review/reporting; they do not remove a repo from
-the workflow.
+to a category and can hard-exclude repositories that should never be scanned. Category
+rules are labels for review/reporting only; they do not remove a repo from the workflow.
+Use `exclude_patterns` for repo-name glob exclusions, or `dead` for exact retired/dead
+repos.
 
 Supported taxonomy keys:
 
@@ -222,12 +224,14 @@ Supported taxonomy keys:
 |-----|---------|
 | `default_category` | Category used when no other rule matches. If omitted, this is `uncategorized`. |
 | `explicit` | Exact repo-name matches. Keys can be `owner/repo` or just `repo`; values are categories. |
-| `patterns` | Repo-name glob rules, checked after `explicit`. Each rule has `glob` and `category`. |
+| `patterns` | Repo-name glob rules, checked after `explicit`. Each rule has `glob` and `category`. These only assign categories; they do not exclude or skip scan. |
 | `topics` | GitHub repository topic matches. Topics are the tags shown on a GitHub repo page and returned by `gh repo view --json repositoryTopics`. |
+| `exclude_patterns` | Repo-name glob rules that hard-exclude matching repos with a visible `reason`. Use when a whole class of repos should not be scanned, such as generated or internal-only repos. These apply when `discover` writes the candidate file. |
 | `dead` | Exact repo-name matches that should be hard-excluded with the configured reason. Use only for retired/dead repos. |
 
 Matching order for categories is `explicit`, then `patterns`, then `topics`, then
-`default_category`. The authoritative parser is
+`default_category`. Hard exclusions are then applied from GitHub archived status, exact
+`dead` matches, and `exclude_patterns`. The authoritative parser is
 [`src/repolens/discovery/taxonomy.py`](../src/repolens/discovery/taxonomy.py).
 
 Example `.repolens.local.json`:
@@ -249,6 +253,12 @@ Example `.repolens.local.json`:
       "topics": {
         "mobile": "mobile-bucket"
       },
+      "exclude_patterns": [
+        {
+          "glob": "internal-*",
+          "reason": "internal-only repo"
+        }
+      ],
       "dead": {
         "sentinel-retired": "retired by local approval"
       }
@@ -408,9 +418,13 @@ repolens scan      --work-root work  # first use verifies Syft cache, then write
 repolens resolve --work-root work    # license resolution for scanned repo SBOMs
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
 repolens shortlist --work-root work [--identity <REVIEWER>]
-                                      # settle flagged items + human approval
+                                      # settle checked decisions; if open items remain,
+                                      # the console prints the AI proposal workflow below
 repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
                                       # emit model-free external proposal contexts
+# ask Codex/Claude:
+# $repolens review every row in work/shortlist.contexts.json and write
+# work/shortlist.proposals.json plus work/shortlist.review.md
 repolens shortlist --work-root work --proposals work/shortlist.proposals.json
                                       # ingest external proposals after local verification
 repolens report --work-root <WORK>
@@ -444,9 +458,14 @@ Useful flags:
 | `--force` | Overwrite an existing `repos.candidate.md` approval file. |
 
 Taxonomy is optional and lives only in untracked local config. Unmatched repositories use
-`uncategorized` unless you set `default_category`. Categories classify only; they never
-exclude a repository from later scanning. Only GitHub-archived repositories or entries in
-the local `dead` map are hard-excluded, and the reason is written visibly.
+`uncategorized` unless you set `default_category`. `explicit`, `patterns`, and `topics`
+classify only; they never exclude a repository from later scanning. Use
+`exclude_patterns` for repo-name glob hard exclusions such as `internal-*`, and use
+`dead` for exact retired/dead repos. GitHub-archived repositories are also hard-excluded.
+Every hard exclusion writes a visible reason.
+These config rules apply when `discover` writes `discovered.json` and
+`repos.candidate.md`; if that approval file already exists, rerun discover with `--force`
+to regenerate it, or manually untick rows you do not want scanned.
 
 Discovery artifacts use deterministic review order: candidates first, then hard
 exclusions. Within each group, repositories are sorted by category, then repo name, then
@@ -489,6 +508,9 @@ command using the same `--work-root`.
       "topics": {
         "mobile": "mobile-bucket"
       },
+      "exclude_patterns": [
+        {"glob": "internal-*", "reason": "internal-only repo"}
+      ],
       "dead": {
         "sentinel-retired": "retired by local approval"
       }
@@ -635,6 +657,18 @@ scans and paths outside the source root. If the canonical hash-pinned/bootstrap-
 ScanCode executable is unavailable, affected packages stay unresolved instead of failing
 the run.
 
+After fixing or bootstrapping ScanCode, retry only the checked repos whose existing
+`resolved.ndjson` contains `unresolved:scancode_tool_unavailable`:
+
+```bash
+repolens resolve --work-root <WORK> --retry-scancode
+repolens flag --work-root <WORK>
+```
+
+This reuses the same repo list and existing SBOM/source snapshot artifacts, rewrites
+`resolved.ndjson` only for affected repos, and leaves normal `run` resume behavior
+unchanged. Add `--repo-ref <REPO_REF>` to narrow the retry to one repo.
+
 Native mobile enrichment is opt-in and remains off by default even when mobile markers
 are present:
 
@@ -705,6 +739,11 @@ the items a human approved or rejected:
    `component_ref`, `abstain: true`, and `reason`. RepoLens validates the artifact shape
    with `src/repolens/data/schemas/shortlist_proposals.schema.json` before parsing
    proposals fail-closed.
+   The bundled `$repolens` skill is the intended assistant workflow here: ask it to review
+   every row in `work/shortlist.contexts.json`, look up public package metadata on
+   RepoLens-verifiable hosts, and write both `work/shortlist.proposals.json` and
+   `work/shortlist.review.md`. The review notes explain whether each row was proposed,
+   confirmed as needing human/legal judgment, or left abstained.
 4. **Verify, don't trust.** Every cited URL is re-fetched through the SSRF-guarded,
    allowlisted HTTP client and checked for an exact SPDX anchor. Bad, malicious,
    off-allowlist, mismatched, low-confidence, or abstained proposals leave the item open.
@@ -721,6 +760,21 @@ The grouped Markdown tiers are:
 
 `shortlist` exits `0` only when no item remains open and `1` (findings open) otherwise, so
 it gates the downstream report.
+
+When `shortlist` exits with open items, the console prints this same workflow:
+
+```bash
+repolens shortlist --work-root <WORK> --emit-contexts <WORK>/shortlist.contexts.json
+# ask Codex/Claude:
+# $repolens review every row in <WORK>/shortlist.contexts.json and write
+# <WORK>/shortlist.proposals.json plus <WORK>/shortlist.review.md
+repolens shortlist --work-root <WORK> --proposals <WORK>/shortlist.proposals.json
+```
+
+Use this when the open rows include `UNKNOWN`, abstained, low-confidence, or stale evidence
+items that public package metadata might clarify. After proposal ingestion, review
+`shortlist.md` and mark remaining groups or rows with `[x]` to accept or `[r]` to reject,
+then rerun `repolens shortlist --work-root <WORK>`.
 
 ## `report` — gated main disclosure + appendices
 

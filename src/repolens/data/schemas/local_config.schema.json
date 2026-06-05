@@ -41,6 +41,24 @@
             "topics": {
               "$ref": "#/$defs/stringMap"
             },
+            "exclude_patterns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["glob", "reason"],
+                "properties": {
+                  "glob": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "reason": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
             "dead": {
               "$ref": "#/$defs/stringMap"
             }

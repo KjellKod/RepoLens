@@ -1,19 +1,21 @@
 ---
 name: repolens
-description: Run RepoLens end to end and produce external AI proposal artifacts while keeping RepoLens model-free, verify-first, and human-approved.
+description: Run RepoLens end to end and review open license shortlist items by looking up verifiable evidence, producing external proposal artifacts, and keeping RepoLens model-free, verify-first, and human-approved.
 ---
 
 # RepoLens Runbook
 
 Use this skill when a RepoLens run has open shortlist items or when an operator asks for
 AI-assisted license shortlist triage. RepoLens itself must never invoke a model. The AI
-role is proposal-only: read emitted context artifacts, write proposal artifacts, and let
-RepoLens re-fetch and verify every cited URL before a human approves anything.
+role is proposal-only: read emitted context artifacts, look up public registry evidence,
+write proposal and review-note artifacts, and let RepoLens re-fetch and verify every cited
+URL before a human approves anything.
 
 ## Non-negotiables
 
 - RepoLens does not call a model, shell out to a model, or auto-approve proposals.
-- Never invent evidence URLs. Use only URLs present in the context/triage data or abstain.
+- Never invent unsupported evidence. You may construct deterministic package metadata URLs
+  only for RepoLens-verifiable hosts, then fetch/inspect them before proposing a change.
 - Abstain when unsure, when evidence is missing, or when the context is contradictory.
 - Genuine shipped copyleft or source-available BLOCK risk is never the AI's to clear.
 - Proposal `disposition`, `confidence`, `rationale`, and `sanity_check` are metadata only.
@@ -56,11 +58,21 @@ repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
 6. External AI proposal pass:
 
 Read `work/shortlist.contexts.json`. For each row, inspect only `component_ref`,
-`wrapped_context`, and read-only `triage`. Write `work/shortlist.proposals.json` as a JSON
-array. From the RepoLens repository root, load the human-facing proposal reference at
-`.skills/repolens/reference/proposal-schema.md` and the machine-readable schema at
-`src/repolens/data/schemas/shortlist_proposals.schema.json` before writing proposals. Also
-load `.skills/repolens/reference/triage-cheatsheet.md` when judging distribution/scope risk.
+`wrapped_context`, and read-only `triage`. Review every row, not only the easy ones. For
+each item, either propose a verified correction, confirm the existing finding needs human
+judgment, or abstain because evidence is missing/contradictory.
+
+Before writing proposals, load these references from the RepoLens repository root:
+
+- `.skills/repolens/reference/evidence-lookup.md` for the per-item lookup workflow and
+  allowed evidence hosts.
+- `.skills/repolens/reference/proposal-schema.md` and
+  `src/repolens/data/schemas/shortlist_proposals.schema.json` for the output contract.
+- `.skills/repolens/reference/triage-cheatsheet.md` when judging distribution/scope risk.
+
+Write `work/shortlist.proposals.json` as a JSON array with one entry per context row. Also
+write `work/shortlist.review.md` with a compact human-readable note for each row:
+`proposed`, `confirmed-needs-review`, or `abstained`, the evidence checked, and the reason.
 
 Run a BLOCK sanity pass before writing the file:
 
@@ -70,6 +82,9 @@ Run a BLOCK sanity pass before writing the file:
 - Any proposal with missing evidence, a fabricated URL, or a mismatched anchor must
   abstain.
 - Conflicts and low confidence stay for human judgment.
+- Private commercial licenses, private contract proof, or local business knowledge cannot
+  be encoded as verified public evidence. Note those cases in `shortlist.review.md` and
+  leave the proposal abstained.
 
 7. Ingest proposals through RepoLens verification:
 

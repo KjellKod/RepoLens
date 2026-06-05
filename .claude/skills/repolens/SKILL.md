@@ -1,6 +1,6 @@
 ---
 name: repolens
-description: Use the RepoLens model-free external proposal workflow for grouped shortlist resolution.
+description: Use the RepoLens model-free external proposal workflow to review shortlist items, look up verifiable license evidence, and resolve grouped shortlist findings.
 ---
 
 Read and follow `../../../.skills/repolens/SKILL.md`. Treat that file as the source of

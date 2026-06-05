@@ -118,11 +118,17 @@ def human_schema_text() -> str:
             "    Impact: exact repo or owner/repo category matches.",
             "  discover.taxonomy.patterns: array<object>, optional, default=[]",
             "    Impact: glob rules checked after explicit matches; each item requires "
-            "glob and category.",
+            "glob and category. These only label repos; they do not exclude or skip scan.",
             "  discover.taxonomy.patterns[].glob: string, required when item is present",
             "  discover.taxonomy.patterns[].category: string, required when item is present",
             "  discover.taxonomy.topics: object<string,string>, optional, default={}",
             "    Impact: GitHub repository topic/tag category matches checked after patterns.",
+            "  discover.taxonomy.exclude_patterns: array<object>, optional, default=[]",
+            "    Impact: repo-name glob hard exclusions checked after category labels. "
+            "Each item requires glob and reason; matching repos are omitted from "
+            "future discover candidate files and are not scanned.",
+            "  discover.taxonomy.exclude_patterns[].glob: string, required when item is present",
+            "  discover.taxonomy.exclude_patterns[].reason: string, required when item is present",
             "  discover.taxonomy.dead: object<string,string>, optional, default={}",
             "    Impact: exact repos hard-excluded with a visible reason; use only for "
             "retired/dead repos.",
@@ -173,6 +179,7 @@ def config_value_summary_lines(values: dict[str, Any]) -> list[str]:
     explicit = _mapping(taxonomy.get("explicit"))
     patterns = _list(taxonomy.get("patterns"))
     topics = _mapping(taxonomy.get("topics"))
+    exclude_patterns = _list(taxonomy.get("exclude_patterns"))
     dead = _mapping(taxonomy.get("dead"))
 
     exclude_paths = scan.get("exclude_paths")
@@ -184,7 +191,7 @@ def config_value_summary_lines(values: dict[str, Any]) -> list[str]:
         (
             "discover.taxonomy: "
             f"default={default_category}, explicit={len(explicit)}, patterns={len(patterns)}, "
-            f"topics={len(topics)}, dead={len(dead)}"
+            f"topics={len(topics)}, exclude_patterns={len(exclude_patterns)}, dead={len(dead)}"
         ),
         (
             "scan: "

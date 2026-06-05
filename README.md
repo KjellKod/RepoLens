@@ -115,6 +115,13 @@ repolens shortlist --work-root work
 repolens report  --work-root work
 ```
 
+Local runtime config is JSON-only and untracked. Use `repolens config init` to create a
+guided `.repolens.local.json`, `repolens config schema` to see supported keys, and
+`repolens config validate ./.repolens.local.json` to check a hand-written file. Category
+patterns only label repositories; use `discover.taxonomy.exclude_patterns` or exact
+`dead` repos when a repository should be hard-excluded before scan. These rules apply
+when `discover` writes the candidate file.
+
 ## Resolving flagged licenses — with AI help, under your approval
 
 After `flag`, RepoLens tells you exactly what needs a human:
@@ -174,17 +181,24 @@ repolens run --work-root work --owner <OWNER>
 repolens discover --owner <OWNER> --work-root work
 repolens scan --work-root work
 repolens resolve --work-root work
+# after fixing ScanCode availability, retry only repos that previously hit it:
+# repolens resolve --work-root work --retry-scancode
 repolens flag --work-root work
 repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
-#   ↳ let the AI (or a teammate) answer → work/shortlist.proposals.json
+#   ↳ run the bundled repolens skill to review every row, look up verifiable
+#      evidence, and write work/shortlist.proposals.json + work/shortlist.review.md
 repolens shortlist --work-root work --proposals work/shortlist.proposals.json
+#   ↳ review grouped work/shortlist.md, mark remaining rows/groups [x] or [r],
+#      then rerun repolens shortlist --work-root work until open_count is zero
 repolens report --work-root work
 ```
 
 The AI step is the same seam in both modes — and it's optional. RepoLens itself never
 calls a model; it only emits the questions and verifies the answers. Drive it with the
-bundled **`repolens` skill** (works in both Claude and Codex) or resolve everything by
-hand.
+bundled **`repolens` skill** (works in both Claude and Codex), for example:
+`$repolens review every row in work/shortlist.contexts.json and write proposals plus review notes`.
+The skill may look up public package metadata on RepoLens-verifiable hosts, but RepoLens
+still re-fetches every cited URL and leaves final approval in `shortlist.md`.
 
 ## What the disclosure looks like
 

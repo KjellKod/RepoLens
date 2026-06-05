@@ -181,6 +181,9 @@ class ConfigTests(unittest.TestCase):
                                 "explicit": {"sentinel-owner/sentinel-alpha": "runtime"},
                                 "patterns": [{"glob": "tool-*", "category": "tools"}],
                                 "topics": {"mobile": "apps"},
+                                "exclude_patterns": [
+                                    {"glob": "internal-*", "reason": "internal-only"}
+                                ],
                                 "dead": {"sentinel-retired": "retired"},
                             }
                         },
@@ -201,7 +204,7 @@ class ConfigTests(unittest.TestCase):
             message = validate_config_file_message(path)
 
         self.assertIn("Config valid:", message)
-        self.assertIn("explicit=1, patterns=1, topics=1, dead=1", message)
+        self.assertIn("explicit=1, patterns=1, topics=1, exclude_patterns=1, dead=1", message)
         self.assertIn("exclude_paths=1, clone_timeout_seconds=45, syft.catalogers=1", message)
         self.assertIn("include=2, header=present", message)
 
@@ -209,12 +212,14 @@ class ConfigTests(unittest.TestCase):
         schema = human_schema_text()
         self.assertIn("RepoLens local config schema", schema)
         self.assertIn("scan.clone_timeout_seconds", schema)
+        self.assertIn("discover.taxonomy.exclude_patterns", schema)
         self.assertIn("TOML, YAML, and YML are not runtime-config formats", schema)
 
         config = Config(values={}, sources=())
         self.assertIn("active: none (using defaults)", config_discovery_lines(config))
         self.assertIn(
-            "discover.taxonomy: default=uncategorized, explicit=0, patterns=0, topics=0, dead=0",
+            "discover.taxonomy: default=uncategorized, explicit=0, patterns=0, "
+            "topics=0, exclude_patterns=0, dead=0",
             config_value_summary_lines({}),
         )
 

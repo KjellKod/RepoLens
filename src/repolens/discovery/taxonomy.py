@@ -21,11 +21,18 @@ class PatternRule:
 
 
 @dataclass(frozen=True)
+class ExclusionPatternRule:
+    glob: str
+    reason: str
+
+
+@dataclass(frozen=True)
 class Taxonomy:
     default_category: str
     explicit: Mapping[str, str]
     patterns: tuple[PatternRule, ...]
     topics: Mapping[str, str]
+    exclude_patterns: tuple[ExclusionPatternRule, ...]
     dead: Mapping[str, str]
 
 
@@ -54,6 +61,7 @@ def taxonomy_from_config(config: Config) -> Taxonomy:
                 raw_taxonomy.get("topics"), "discover.taxonomy.topics"
             ).items()
         },
+        exclude_patterns=_exclude_patterns(raw_taxonomy.get("exclude_patterns")),
         dead=_string_mapping(raw_taxonomy.get("dead"), "discover.taxonomy.dead"),
     )
 
@@ -103,6 +111,9 @@ def _hard_exclusion_reason(repo: GhRepository, taxonomy: Taxonomy) -> str | None
         reason = taxonomy.dead.get(key)
         if reason:
             return reason
+    for rule in taxonomy.exclude_patterns:
+        if fnmatchcase(repo.name, rule.glob) or fnmatchcase(repo.name_with_owner, rule.glob):
+            return rule.reason
     return None
 
 
@@ -121,6 +132,26 @@ def _patterns(value: object) -> tuple[PatternRule, ...]:
             item.get("category"), f"discover.taxonomy.patterns[{index}].category"
         )
         rules.append(PatternRule(glob=glob, category=category))
+    return tuple(rules)
+
+
+def _exclude_patterns(value: object) -> tuple[ExclusionPatternRule, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise InputError("config discover.taxonomy.exclude_patterns must be an array")
+
+    rules: list[ExclusionPatternRule] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, Mapping):
+            raise InputError(
+                f"config discover.taxonomy.exclude_patterns[{index}] must be an object"
+            )
+        glob = _required_text(item.get("glob"), f"discover.taxonomy.exclude_patterns[{index}].glob")
+        reason = _required_text(
+            item.get("reason"), f"discover.taxonomy.exclude_patterns[{index}].reason"
+        )
+        rules.append(ExclusionPatternRule(glob=glob, reason=reason))
     return tuple(rules)
 
 
