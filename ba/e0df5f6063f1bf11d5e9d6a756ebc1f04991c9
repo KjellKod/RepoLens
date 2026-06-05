@@ -1,0 +1,63 @@
+tests/e2e/test_cli.py
+  s_853eb455586efb::t_2584dd79417dc5 247,335
+src/repolens/resolve/scancode.py
+  s_853eb455586efb::t_5afb776d7adec1 16,18-19,56,58,66-69,73,87-88,91-92,97,99-116,122
+  s_853eb455586efb::t_0c4369bf212c61 78-81,83-86,117-120
+tests/unit/flag/test_flag_policy.py
+  s_853eb455586efb::t_ab7d73a77b39ed 217-243
+tests/unit/test_cli_run.py
+  s_853eb455586efb::t_8999eb77014407 12
+  s_853eb455586efb::t_d7b0ac1a6e3ded 437,487,505-542
+tests/unit/test_resolve_scancode.py
+  s_853eb455586efb::t_fcb465029e7981 12,14-15,34,107,118-135,151,155,214,237
+src/repolens/policy/data/license-policy.default.json
+  s_853eb455586efb::t_da72540b1a119b 21,81-83
+src/repolens/cli.py
+  s_853eb455586efb::t_b4e9b05ee228ea 2732-2735,2943-2945
+  s_853eb455586efb::t_fcb465029e7981 848-851,900-901
+  s_853eb455586efb::t_7ad2224ee72a97 1361,1371
+  s_853eb455586efb::t_cc787a4efc7b6c 310,312-315,317,319-323,326-331,843-847,852-867,869-899,902-904
+  s_853eb455586efb::t_8905a797e29c6f 2460,2520-2529
+  s_853eb455586efb::t_de0f1461d1df01 122
+  s_853eb455586efb::t_f5461088c48ca6 173,255-260
+  s_853eb455586efb::t_907dd26ddcd4eb 123
+  s_853eb455586efb::t_4631d5c70a2ac7 118-119,125
+tests/bootstrap/test_scancode.py
+  s_853eb455586efb::t_2bf7991cb2ef65 5,14,17,19,91,94-105,107-108
+  s_853eb455586efb::t_fcb465029e7981 43,92-93,106,109
+tests/unit/test_resolve_adapters.py
+  s_853eb455586efb::t_b8dc01071c3589 86-92,130-148
+src/repolens/bootstrap/scancode.py
+  s_853eb455586efb::t_51ce713f0a864e 15-16,28,122-166,183-232
+src/repolens/bootstrap/scancode.requirements.txt
+  s_853eb455586efb::t_fcb465029e7981 18
+docs/usage.md
+  s_853eb455586efb::t_f5461088c48ca6 430
+  s_853eb455586efb::t_d2e84e730c2a53 15-16
+  s_853eb455586efb::t_08f70b529c5a22 115-123,133-137,670-671,674-680,810
+src/repolens/bootstrap/pins.toml
+  s_853eb455586efb::t_fcb465029e7981 54
+ideas/human-license-overrides.md
+  s_853eb455586efb::t_6eb19c82d2ff08 1-151
+README.md
+  s_853eb455586efb::t_08f70b529c5a22 36-38,107,190
+  s_853eb455586efb::t_f5461088c48ca6 114,186
+src/repolens/flag/stage.py
+  s_853eb455586efb::t_8a79c35365dbb0 26,79-80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "bae0df5f6063f1bf11d5e9d6a756ebc1f04991c9",
+  "prompts": {},
+  "sessions": {
+    "s_853eb455586efb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e94a7-867e-7881-aa54-d0c218023533",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
