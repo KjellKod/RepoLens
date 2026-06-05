@@ -129,7 +129,7 @@ def _render_group(group: ShortlistGroup) -> list[str]:
 
 def _render_item(item: Mapping[str, Any], *, indent: str = "") -> str:
     component_ref = str(item["component_ref"])
-    label = render_code_span(component_ref)
+    label = _component_label(component_ref, item)
     note = item.get("note") or str(item["reason"])
     evidence = item["evidence"] if isinstance(item.get("evidence"), Mapping) else {}
     key = f"{REF_PREFIX}{encode_component_ref(component_ref)}{REF_SUFFIX}"
@@ -137,6 +137,16 @@ def _render_item(item: Mapping[str, Any], *, indent: str = "") -> str:
     checkbox = _checkbox_for_status(status)
     decided = _decided_suffix(item)
     return f"{indent}- {checkbox} {label} — {note} — {_evidence_cell(evidence)}{decided} {key}"
+
+
+def _component_label(component_ref: str, item: Mapping[str, Any]) -> str:
+    candidate = item.get("candidate_spdx")
+    if not isinstance(candidate, str) or not candidate.strip():
+        return render_code_span(component_ref)
+    _name, separator, current_spdx = component_ref.rpartition("|")
+    if not separator or current_spdx == candidate:
+        return render_code_span(component_ref)
+    return f"{render_code_span(component_ref)} -> {render_code_span(candidate)}"
 
 
 def _checkbox_for_status(status: str) -> str:
