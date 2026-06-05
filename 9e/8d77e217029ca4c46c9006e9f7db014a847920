@@ -1,0 +1,23 @@
+tests/unit/flag/test_flag_policy.py
+  s_92f20be60ed08d::t_f8689487e0bbc2 186-192,221
+tests/policy/test_canaries_policy.py
+  s_92f20be60ed08d::t_bc32cd43306b39 31
+tests/canaries/security/canary_matrix.json
+  s_92f20be60ed08d::t_08b41e44a20ff7 3,244-248
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "9e8d77e217029ca4c46c9006e9f7db014a847920",
+  "prompts": {},
+  "sessions": {
+    "s_92f20be60ed08d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e97fd-658f-7643-8cfe-9584edca894e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
