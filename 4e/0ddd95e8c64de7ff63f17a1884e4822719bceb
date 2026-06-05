@@ -1,0 +1,36 @@
+scripts/m1_fixture_e2e.py
+  s_21e46d14508219::t_f91a4f9adf9a40 347-350,396-412
+tests/unit/test_report_main.py
+  s_21e46d14508219::t_c4cf870354aede 5,53-83
+src/repolens/report/main.py
+  s_21e46d14508219::t_fb7e4cb4b87381 19-23,106,182,185-196,204-209,261
+tests/integration/test_m1_fixture_e2e.py
+  s_21e46d14508219::t_c1a8c349f38821 60-61,63
+  s_21e46d14508219::t_42e2623e42d2e7 56-59,62,64-65
+tests/unit/test_dependency_boundaries.py
+  s_21e46d14508219::t_6550f070ff1c7c 5,8-9,278-300
+  s_21e46d14508219::t_2cdec2952fa888 165-182
+  s_21e46d14508219::t_b9fe8b24f29e6d 137-164
+  s_21e46d14508219::t_db89380abe7715 1-4,6-7,10-136,183-277,301-336
+src/repolens/report/dependency_boundaries.py
+  s_21e46d14508219::t_2cdec2952fa888 10,219
+  s_21e46d14508219::t_618717be894d99 1-9,11-23,44-218,220-439,457-582,584,590-701
+  s_21e46d14508219::t_d189331b449a77 440-456
+  s_21e46d14508219::t_b9fe8b24f29e6d 24-43,583,585-589
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "4e0ddd95e8c64de7ff63f17a1884e4822719bceb",
+  "prompts": {},
+  "sessions": {
+    "s_21e46d14508219": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e996b-612b-7611-8823-a66ce43de96f",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
