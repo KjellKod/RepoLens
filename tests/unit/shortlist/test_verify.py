@@ -147,6 +147,99 @@ def test_compound_expression_claim_verifies_against_exact_anchor() -> None:
     assert outcome.evidence_anchor == expression
 
 
+def test_github_license_api_ref_verifies() -> None:
+    url = "https://api.github.com/repos/sentinel/acme-lib/license?ref=1.2.3"
+    resolution = Resolution("MIT", url, "MIT")
+    outcome = verify_agent_resolution(
+        resolution,
+        fetcher=_fetcher_returning(b'{"license":{"spdx_id":"MIT"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.reason == "verify:exact_anchor"
+
+
+def test_github_default_branch_rejected_for_versioned_package() -> None:
+    resolution = Resolution("MIT", "https://api.github.com/repos/sentinel/acme-lib/license", "MIT")
+    outcome = verify_agent_resolution(
+        resolution,
+        expected_ref="1.2.3",
+        fetcher=_fetcher_returning(b'{"license":{"spdx_id":"MIT"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:missing_ref"
+
+
+def test_github_license_api_main_ref_rejected_for_versioned_package() -> None:
+    resolution = Resolution(
+        "MIT",
+        "https://api.github.com/repos/sentinel/acme-lib/license?ref=main",
+        "MIT",
+    )
+    outcome = verify_agent_resolution(
+        resolution,
+        expected_ref="1.2.3",
+        fetcher=_fetcher_returning(b'{"license":{"spdx_id":"MIT"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:default_branch_rejected"
+
+
+def test_github_license_api_wrong_tag_rejected_for_versioned_package() -> None:
+    resolution = Resolution(
+        "MIT",
+        "https://api.github.com/repos/sentinel/acme-lib/license?ref=2.0.0",
+        "MIT",
+    )
+    outcome = verify_agent_resolution(
+        resolution,
+        expected_ref="1.2.3",
+        fetcher=_fetcher_returning(b'{"license":{"spdx_id":"MIT"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:ref_mismatch"
+
+
+def test_github_license_api_sha_ref_allowed_for_versioned_package() -> None:
+    resolution = Resolution(
+        "MIT",
+        "https://api.github.com/repos/sentinel/acme-lib/license?ref=" + ("a" * 40),
+        "MIT",
+    )
+    outcome = verify_agent_resolution(
+        resolution,
+        expected_ref="1.2.3",
+        fetcher=_fetcher_returning(b'{"license":{"spdx_id":"MIT"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.reason == "verify:exact_anchor"
+
+
+def test_cocoapods_podspec_license_verifies() -> None:
+    resolution = Resolution(
+        "MIT",
+        "https://trunk.cocoapods.org/api/v1/pods/acme-lib/specs/1.2.3",
+        "MIT",
+    )
+    outcome = verify_agent_resolution(
+        resolution,
+        fetcher=_fetcher_returning(b'{"license":{"type":"MIT"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.reason == "verify:exact_anchor"
+
+
 def test_partial_claim_against_compound_expression_fails_anchor_match() -> None:
     resolution = Resolution("ZPL-2.1", _DEPS_DEV_URL, "ZPL-2.1")
     outcome = verify_agent_resolution(

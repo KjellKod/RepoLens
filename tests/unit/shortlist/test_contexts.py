@@ -64,6 +64,27 @@ def _write_inventory(work_root: Path) -> None:
             ],
         },
     )
+    store.write_resolved(
+        work_root,
+        "acme-alpha",
+        [
+            {
+                "schema_version": "1.0",
+                "name": "acme-lib",
+                "version": "1.2.3",
+                "repo": "acme-alpha",
+                "purl": "pkg:pypi/acme-lib@1.2.3",
+                "spdx_id": "MIT",
+                "evidence": {"source_layer": "api", "url": _DEPS_DEV_URL, "anchor": "MIT"},
+                "tags": {
+                    "origin": "third-party-oss",
+                    "scope": "runtime",
+                    "distribution": "server",
+                },
+                "modified": "unknown",
+            }
+        ],
+    )
 
 
 def test_emit_contexts_matches_agent_request_wrapped_context(tmp_path: Path) -> None:
@@ -99,6 +120,10 @@ def test_emit_contexts_matches_agent_request_wrapped_context(tmp_path: Path) -> 
         "evidence_anchor": "MIT",
         "found_in": ["acme-alpha"],
     }
+    assert payload[0]["package"] == "acme-lib"
+    assert payload[0]["version"] == "1.2.3"
+    assert payload[0]["ecosystem"] == "pypi"
+    assert payload[0]["purl"] == "pkg:pypi/acme-lib@1.2.3"
 
 
 def test_emit_contexts_omits_tokens_paths_and_callables(tmp_path: Path) -> None:

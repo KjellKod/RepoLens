@@ -217,7 +217,8 @@ Discovery is deterministic and does not merge neighbors:
    was active.
 
 TOML, YAML, and YML are not RepoLens local runtime config formats. Pipeline artifact JSON
-schemas and `shortlist.proposals.json` remain unchanged.
+schemas are separate from local runtime config; `shortlist.proposals.json` and
+`shortlist.evidence.json` are product artifacts, not config files.
 
 Owner and repo selection stay runtime inputs (`--owner`, `--repos`, and scan `--repos`);
 do not store them in local config. Discover taxonomy, scan options, and report options
@@ -339,8 +340,9 @@ What happens:
 4. `resolve` runs for every successfully scanned repo; you do not call `--repo-ref` manually.
 5. `flag` writes `inventory.json`, `shortlist.json`, and `shortlist.md`.
 6. If the shortlist has open items, `run` writes `work/shortlist.contexts.json`, tells you
-   to use the `.skills/repolens` runbook for any external AI proposal pass, ingests
-   `work/shortlist.proposals.json` if present, and renders grouped `work/shortlist.md`.
+   how to run deterministic `shortlist research` or an external assistant pass, ingests
+   existing `work/shortlist.proposals.json` and `work/shortlist.evidence.json` if present,
+   and renders grouped `work/shortlist.md`.
 7. Mark available group checkboxes or item rows in `work/shortlist.md` with `[x]` approve
    or `[r]` reject, then press Enter. Item ticks override group ticks. `run` repeats until
    `open_count == 0`.
@@ -366,9 +368,9 @@ repolens run --work-root work --owner <OWNER> --yes
 
 `--yes` never approves the shortlist and never runs an AI proposal pass. In
 non-interactive mode, open shortlist items produce a deterministic non-zero exit, emit
-`work/shortlist.contexts.json`, ingest an existing `work/shortlist.proposals.json` if one
-is already present, print copy-pasteable artifact instructions once, and write no report
-until a human clears `shortlist.md`.
+`work/shortlist.contexts.json`, ingest existing `work/shortlist.proposals.json` and
+`work/shortlist.evidence.json` if already present, print copy-pasteable artifact
+instructions once, and write no report until a human clears `shortlist.md`.
 
 The final `run` summary separates resume skips from real failures and names the exact
 report directory. Review `report.main.md` and `report.main.csv` (and `report.main.docx`
@@ -435,11 +437,16 @@ repolens shortlist --work-root work   # settle checked decisions; decided_by def
                                       # to the logged-in OS user; --identity overrides it
 repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
                                       # emit model-free external proposal contexts
-# ask Codex/Claude:
-# $repolens review every row in work/shortlist.contexts.json and write
-# work/shortlist.proposals.json plus work/shortlist.review.md
-repolens shortlist --work-root work --proposals work/shortlist.proposals.json
-                                      # ingest external proposals after local verification
+repolens shortlist research --work-root work \
+  --contexts work/shortlist.contexts.json \
+  --proposals work/shortlist.proposals.json \
+  --evidence work/shortlist.evidence.json \
+  --review work/shortlist.review.md
+                                      # deterministic model-free research
+repolens shortlist --work-root work \
+  --proposals work/shortlist.proposals.json \
+  --evidence work/shortlist.evidence.json
+                                      # ingest verified proposals and browser evidence
 repolens report --work-root <WORK>
                                       # assemble gated main, docx, and appendix reports
 ```
@@ -787,21 +794,30 @@ different evidence.
    (role-play, output-override, container-escape, imperative, directional Unicode). Use
    `--emit-contexts` to write these request-shaped contexts to a JSON artifact. RepoLens
    does not call a model.
-3. **External proposal artifact.** Create proposals outside RepoLens, then pass them back
-   with `--proposals work/shortlist.proposals.json`. A proposal has
+3. **Research artifacts.** Run deterministic model-free research or create artifacts
+   outside RepoLens, then pass them back with
+   `--proposals work/shortlist.proposals.json --evidence work/shortlist.evidence.json`.
+   A proposal has
    `component_ref`, `spdx_id`, `evidence_url`, `evidence_anchor`, `disposition`,
    `confidence`, `rationale`, and `sanity_check`; an abstention uses
    `component_ref`, `abstain: true`, and `reason`. RepoLens validates the artifact shape
    with `src/repolens/data/schemas/shortlist_proposals.schema.json` before parsing
    proposals fail-closed.
+   Evidence rows are validated with
+   `src/repolens/data/schemas/shortlist_evidence.schema.json`, keyed by stable context
+   identity, and outcome-specific: pending verifier support requires direct HTTP(S)
+   browser evidence with short labels, no-public-evidence requires lookup attempts,
+   conflicts require all disagreeing URLs, and legal/vendor review requires a clear note.
    The bundled `$repolens` skill is the intended assistant workflow here: ask it to review
    every row in `work/shortlist.contexts.json`, look up public package metadata on
-   RepoLens-verifiable hosts, and write both `work/shortlist.proposals.json` and
-   `work/shortlist.review.md`. The review notes explain whether each row was proposed,
-   confirmed as needing human/legal judgment, or left abstained.
-4. **Verify, don't trust.** Every cited URL is re-fetched through the SSRF-guarded,
-   allowlisted HTTP client and checked for an exact SPDX anchor. Bad, malicious,
-   off-allowlist, mismatched, low-confidence, or abstained proposals leave the item open.
+   RepoLens-verifiable hosts or browser evidence, and write `work/shortlist.proposals.json`,
+   `work/shortlist.evidence.json`, and `work/shortlist.review.md`. The review notes
+   include one row per context row, outcome counts, links or lookup trails, and conflict
+   or legal/vendor wording.
+4. **Verify, don't trust.** Supported proposal citations are re-fetched through the
+   SSRF-guarded, allowlisted HTTP client and checked for an exact SPDX anchor. Bad,
+   malicious, off-allowlist, mismatched, low-confidence, or abstained proposals leave the
+   item open. Machine-verification failure does not erase researched browser evidence.
    `disposition`, `confidence`, `rationale`, and `sanity_check` are metadata only.
 
 The grouped Markdown tiers are:
@@ -820,10 +836,14 @@ When `shortlist` exits with open items, the console prints this same workflow:
 
 ```bash
 repolens shortlist --work-root <WORK> --emit-contexts <WORK>/shortlist.contexts.json
-# ask Codex/Claude:
-# $repolens review every row in <WORK>/shortlist.contexts.json and write
-# <WORK>/shortlist.proposals.json plus <WORK>/shortlist.review.md
-repolens shortlist --work-root <WORK> --proposals <WORK>/shortlist.proposals.json
+repolens shortlist research --work-root <WORK> \
+  --contexts <WORK>/shortlist.contexts.json \
+  --proposals <WORK>/shortlist.proposals.json \
+  --evidence <WORK>/shortlist.evidence.json \
+  --review <WORK>/shortlist.review.md
+repolens shortlist --work-root <WORK> \
+  --proposals <WORK>/shortlist.proposals.json \
+  --evidence <WORK>/shortlist.evidence.json
 ```
 
 If any open rows came from `unresolved:scancode_tool_unavailable`, the console also prints

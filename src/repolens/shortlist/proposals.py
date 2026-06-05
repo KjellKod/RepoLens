@@ -16,6 +16,7 @@ from repolens.data.limits import max_bytes_for
 from repolens.resolve.models import FetchFunction
 from repolens.security.http_client import Resolver, fetch_url
 from repolens.shortlist.agent import MAX_FETCHES_PER_ITEM, Resolution
+from repolens.shortlist.contexts import ShortlistMetadata, package_for_item
 from repolens.shortlist.verify import verify_agent_resolution
 
 
@@ -78,6 +79,7 @@ def apply_proposals(
     items: Sequence[Mapping[str, Any]],
     proposals_path: Path,
     *,
+    metadata: ShortlistMetadata | None = None,
     fetcher: FetchFunction = fetch_url,
     evidence_resolver: Resolver | None = None,
 ) -> list[dict[str, Any]]:
@@ -96,6 +98,7 @@ def apply_proposals(
             _apply_item_proposals(
                 record,
                 proposals.get(str(record.get("component_ref")), ()),
+                metadata=metadata,
                 fetcher=fetcher,
                 evidence_resolver=evidence_resolver,
             )
@@ -107,6 +110,7 @@ def _apply_item_proposals(
     record: dict[str, Any],
     proposals: Sequence[ProposalRecord],
     *,
+    metadata: ShortlistMetadata | None,
     fetcher: FetchFunction,
     evidence_resolver: Resolver | None,
 ) -> None:
@@ -131,6 +135,7 @@ def _apply_item_proposals(
                 evidence_url=proposal.evidence_url,
                 evidence_anchor=proposal.evidence_anchor,
             ),
+            expected_ref=_expected_ref_for_item(record, metadata),
             fetcher=fetcher,
             resolver=evidence_resolver,
         )
@@ -154,6 +159,21 @@ def _apply_item_proposals(
     if proposals:
         record.setdefault("verify_reason", "verify_failed:no_verified_proposal")
         record.setdefault("note", "verify_failed:no_verified_proposal")
+
+
+def _expected_ref_for_item(
+    record: Mapping[str, Any],
+    metadata: ShortlistMetadata | None,
+) -> str | None:
+    if metadata is not None:
+        package_metadata = package_for_item(record, metadata)
+        if package_metadata.version is not None:
+            return package_metadata.version
+    version = record.get("version")
+    if version is None:
+        return None
+    text = str(version).strip()
+    return text or None
 
 
 def _group_by_ref(records: Sequence[ProposalRecord]) -> dict[str, tuple[ProposalRecord, ...]]:

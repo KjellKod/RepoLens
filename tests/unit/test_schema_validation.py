@@ -16,6 +16,7 @@ from repolens.data.validation import validate_artifact
         ("inventory", "inventory"),
         ("shortlist", "shortlist"),
         ("shortlist_proposals", "shortlist_proposals"),
+        ("shortlist_evidence", "shortlist_evidence"),
     ],
 )
 def test_valid_fixture_passes(
@@ -100,3 +101,31 @@ def test_shortlist_proposals_reject_unknown_fields(
 
     with pytest.raises(SchemaValidationError, match="unexpected"):
         validate_artifact(shortlist_proposals, "shortlist_proposals")
+
+
+def test_shortlist_accepts_research_evidence_field(shortlist: dict[str, object]) -> None:
+    items = shortlist["items"]
+    assert isinstance(items, list)
+    item = items[0]
+    assert isinstance(item, dict)
+    item["research_evidence"] = {
+        "component_ref": item["component_ref"],
+        "context_fingerprint": "abc123def456",
+        "package": "acme-lib",
+        "version": None,
+        "ecosystem": None,
+        "found_in": ["sentinel-alpha"],
+        "outcome": "pending_verifier_support",
+        "machine_verification": "pending_verifier_support",
+        "lookups_attempted": ["PyPI metadata"],
+        "likely_spdx": "MIT",
+        "browser_evidence": [
+            {
+                "label": "PyPI metadata",
+                "url": "https://pypi.org/pypi/acme-lib/1.2.3/json",
+                "source_type": "pypi",
+            }
+        ],
+    }
+
+    validate_artifact(shortlist, "shortlist")

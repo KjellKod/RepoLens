@@ -170,6 +170,14 @@ def is_low_confidence(item: Mapping[str, Any]) -> bool:
         return True
     if note.startswith(("verify_failed", "proposal:invalid", "agent:abstained")):
         return True
+    research = item.get("research_evidence")
+    if isinstance(research, Mapping):
+        outcome = str(research.get("outcome") or "")
+        machine_verification = str(research.get("machine_verification") or "")
+        if outcome in {"conflict", "no_public_evidence"}:
+            return True
+        if machine_verification in {"conflict", "no_public_evidence"}:
+            return True
     suggestion = item.get("ai_suggestion")
     if isinstance(suggestion, Mapping):
         if suggestion.get("abstain"):

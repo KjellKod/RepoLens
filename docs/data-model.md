@@ -11,6 +11,7 @@ work/<repo>/resolved.ndjson
 inventory.json
 shortlist.json
 shortlist.proposals.json  # optional external input, validated before ingestion
+shortlist.evidence.json    # optional researched evidence, validated before ingestion
 ```
 
 `<repo>` is an opaque runtime input. Tests and fixtures use invented `acme-*` names
@@ -29,6 +30,10 @@ Packaged schemas live in `src/repolens/data/schemas/`:
   approval and `shortlist.md` rendering.
 - `shortlist_proposals.schema.json` validates the external proposal artifact container,
   known fields, and field types before RepoLens parses each proposal fail-closed.
+- `shortlist_evidence.schema.json` validates researched browser evidence separately from
+  machine-verified proposals. Evidence rows are keyed by stable context identity and
+  outcome-specific validation rejects placeholder links, search-result URLs, and generic
+  no-evidence records without lookup trails.
 
 `shortlist.json` is still canonical. The grouped Markdown view is derived from item data
 plus `inventory.json`; group checkboxes write back to the same item records. Optional
@@ -37,6 +42,9 @@ shortlist fields support the grouped AI-assisted review loop:
 - `ai_suggestion` stores external AI proposal metadata only. It is never proof and never
   approval.
 - `verify_reason` records the local re-fetch/verification outcome for proposal citations.
+- `research_evidence` stores deterministic research outcomes, direct browser evidence
+  links, lookup trails, and machine-verification status. It never changes `status`; human
+  approval still happens through `shortlist.md`.
 - `decided_via` records whether a human decision came from an item checkbox or group
   checkbox.
 - `decision_provenance` records the group key plus covered `component_refs` and `found_in`
@@ -73,6 +81,7 @@ Default artifact caps are:
 | `resolved` | 16 MiB |
 | `inventory` | 16 MiB |
 | `shortlist` | 4 MiB |
+| `shortlist_evidence` | 4 MiB |
 
 JSON depth defaults to 64. `resolved.ndjson` additionally caps lines at 1 MiB and
 records at 1,000,000. These constants are in `repolens.data.limits` and can be

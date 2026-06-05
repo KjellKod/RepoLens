@@ -147,14 +147,19 @@ def _render_item(
     label = _component_label(component_ref, item)
     note = item.get("note") or str(item["reason"])
     evidence = item["evidence"] if isinstance(item.get("evidence"), Mapping) else {}
-    found_in = _item_found_in_cell(item, metadata)
+    research = (
+        item.get("research_evidence") if isinstance(item.get("research_evidence"), Mapping) else {}
+    )
     key = f"{REF_PREFIX}{encode_component_ref(component_ref)}{REF_SUFFIX}"
     status = str(item.get("status") or "open")
     checkbox = _checkbox_for_status(status)
     decided = _decided_suffix(item)
+    found_in = _found_in_cell(item, metadata)
+    evidence_cell = _combined_evidence_cell(evidence, research)
+    verifier = _machine_verification_cell(research)
     return (
         f"{indent}- {checkbox} {label} — found in {found_in} — {note} — "
-        f"{_evidence_cell(evidence)}{decided} {key}"
+        f"{evidence_cell} — {verifier}{decided} {key}"
     )
 
 
@@ -185,13 +190,6 @@ def _group_checkbox_for_status(items: Sequence[Mapping[str, Any]]) -> str:
     return "[ ]"
 
 
-def _item_found_in_cell(item: Mapping[str, Any], metadata: ShortlistMetadata) -> str:
-    repos = triage_for_item(item, metadata).found_in
-    if not repos:
-        return render_code_span("unknown repo")
-    return render_code_span(", ".join(repos))
-
-
 def _decided_suffix(item: Mapping[str, Any]) -> str:
     decided_by = item.get("decided_by")
     decided_at = item.get("decided_at")
@@ -213,6 +211,92 @@ def _evidence_cell(evidence: Mapping[str, Any]) -> str:
     if anchor:
         return render_code_span(anchor)
     return _NO_EVIDENCE_URL
+
+
+def _combined_evidence_cell(
+    evidence: Mapping[str, Any],
+    research: Mapping[str, Any],
+) -> str:
+    researched = _research_evidence_links(research)
+    if researched:
+        return researched
+    lookup_trail = _lookup_trail(research)
+    if lookup_trail:
+        return lookup_trail
+    return _evidence_cell(evidence)
+
+
+def _research_evidence_links(research: Mapping[str, Any]) -> str | None:
+    links: list[str] = []
+    browser_evidence = research.get("browser_evidence")
+    if isinstance(browser_evidence, list):
+        for entry in browser_evidence:
+            if not isinstance(entry, Mapping):
+                continue
+            label = _non_empty(entry.get("label"))
+            url = _non_empty(entry.get("url"))
+            if label is not None and url is not None:
+                links.append(markdown_link(label, url))
+    conflicts = research.get("conflicts")
+    if isinstance(conflicts, list):
+        for entry in conflicts:
+            if not isinstance(entry, Mapping):
+                continue
+            label = _non_empty(entry.get("label"))
+            url = _non_empty(entry.get("url"))
+            spdx_id = _non_empty(entry.get("spdx_id"))
+            if label is not None and url is not None and spdx_id is not None:
+                links.append(f"{markdown_link(label, url)} {render_code_span(spdx_id)}")
+    if not links:
+        return None
+    return ", ".join(links)
+
+
+def _lookup_trail(research: Mapping[str, Any]) -> str | None:
+    lookups = research.get("lookups_attempted")
+    if not isinstance(lookups, list):
+        return None
+    labels = [_non_empty(value) for value in lookups]
+    text = ", ".join(render_code_span(value) for value in labels if value is not None)
+    if not text:
+        return None
+    return f"looked up: {text}"
+
+
+def _machine_verification_cell(research: Mapping[str, Any]) -> str:
+    if not research:
+        return "machine verification: not researched"
+    parts = [f"machine verification: {render_code_span(research.get('machine_verification'))}"]
+    likely_spdx = _non_empty(research.get("likely_spdx"))
+    if likely_spdx is not None:
+        parts.append(f"likely SPDX: {render_code_span(likely_spdx)}")
+    outcome = _non_empty(research.get("outcome"))
+    if outcome is not None:
+        parts.append(f"outcome: {render_code_span(outcome)}")
+    return "; ".join(parts)
+
+
+def _found_in_cell(item: Mapping[str, Any], metadata: ShortlistMetadata) -> str:
+    research = (
+        item.get("research_evidence") if isinstance(item.get("research_evidence"), Mapping) else {}
+    )
+    research_found_in = research.get("found_in")
+    found_in = (
+        tuple(str(value) for value in research_found_in if str(value).strip())
+        if isinstance(research_found_in, list)
+        else triage_for_item(item, metadata).found_in
+    )
+    if not found_in:
+        return render_code_span("unknown repo")
+    display = (*found_in[:5], "...") if len(found_in) > 5 else found_in
+    return ", ".join(render_code_span(value) for value in display)
+
+
+def _non_empty(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 __all__ = [

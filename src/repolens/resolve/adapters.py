@@ -220,6 +220,7 @@ _TARGET_LICENSE_PATHS = (
     ("version", "license"),
     ("version", "licenses"),
     ("crate", "license"),
+    ("license", "spdx_id"),
     ("licensed", "declared"),
     ("licensed", "facets", "core", "attribution", "parties", "0", "license"),
 )
