@@ -30,15 +30,24 @@ def test_m1_fixture_e2e_harness_writes_valid_deduped_report(
     assert result.returncode == 0, result.stderr
     summary = json.loads(result.stdout)
 
-    assert summary["approved_repos"] == 7
-    assert summary["sbom_artifacts"] == 10
-    assert summary["resolved_rows"] == 10
-    assert summary["report_rows"] == 3
+    assert summary["approved_repos"] == 8
+    assert summary["sbom_artifacts"] == 12
+    assert summary["raw_synthetic_sbom_artifacts"] == 13
+    assert summary["resolved_rows"] == 12
+    assert summary["report_rows"] == 4
     assert summary["appendix_rows"] == 6
-    assert summary["report_union_rows"] == 9
-    assert summary["report_rows_with_license"] == 3
-    assert summary["report_rows_with_source_url"] == 3
+    assert summary["report_union_rows"] == 10
+    assert summary["report_rows_with_license"] == 4
+    assert summary["report_rows_with_source_url"] == 4
     assert summary["deduped_shared_component_rows"] == 1
+    assert summary["monorepo_sbom_artifacts"] == 2
+    assert summary["monorepo_raw_artifacts"] == 3
+    assert summary["monorepo_occurrence_count"] == 2
+    assert summary["monorepo_locations"] == [
+        "apps/api/package-lock.json",
+        "apps/web/package-lock.json",
+    ]
+    assert summary["monorepo_shared_component_report_rows"] == 1
     assert summary["report_md_exists"] is True
     assert summary["report_csv_exists"] is True
     assert summary["report_docx_exists"] is True

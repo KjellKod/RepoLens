@@ -676,17 +676,13 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         "--repo-ref",
         action="append",
         metavar="REPO_NAME",
-        help=(
-            "Resolve a selected repo; repeat for several repos."
-        ),
+        help=("Resolve a selected repo; repeat for several repos."),
     )
     subparser.add_argument(
         "--source-root",
         type=Path,
         metavar="PATH",
-        help=(
-            "Read-only source checkout for mobile markers and scoped ScanCode."
-        ),
+        help=("Read-only source checkout for mobile markers and scoped ScanCode."),
     )
     subparser.add_argument(
         "--enable-mobile-native",
@@ -696,16 +692,12 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--detect-conflicts",
         action="store_true",
-        help=(
-            "Cross-check all API adapters and write CONFLICT on disagreement."
-        ),
+        help=("Cross-check all API adapters and write CONFLICT on disagreement."),
     )
     subparser.add_argument(
         "--retry-scancode",
         action="store_true",
-        help=(
-            "Retry only repos with prior unresolved:scancode_tool_unavailable."
-        ),
+        help=("Retry only repos with prior unresolved:scancode_tool_unavailable."),
     )
     subparser.set_defaults(handler=_resolve_stage)
 
@@ -845,12 +837,10 @@ def _bootstrap_command(args: argparse.Namespace) -> CommandResult:
     if work_root is not None:
         scancode_path = _bootstrap_scancode_for_work_root(Path(work_root))
         lines.append(
-            "ScanCode fallback ready for "
-            f"{_resolved_path(Path(work_root))}: {scancode_path}"
+            f"ScanCode fallback ready for {_resolved_path(Path(work_root))}: {scancode_path}"
         )
         lines.append(
-            "Next: repolens resolve --work-root "
-            f"{shlex.quote(str(work_root))} --retry-scancode"
+            f"Next: repolens resolve --work-root {shlex.quote(str(work_root))} --retry-scancode"
         )
     return CommandResult(CommandStatus.SUCCESS, "\n".join(lines))
 
@@ -1512,6 +1502,7 @@ def _run_scan_stage(args: argparse.Namespace) -> ScanReport | None:
 
 def _run_resolve_stage(args: argparse.Namespace, summary: RunSummary) -> set[str]:
     from repolens.resolve import run_resolve
+    from repolens.resolve.stage import ResolveCacheStats
 
     work_root = Path(args.work_root)
     resolved_refs = set(_resolved_repo_refs(work_root))
@@ -1522,7 +1513,8 @@ def _run_resolve_stage(args: argparse.Namespace, summary: RunSummary) -> set[str
             continue
         try:
             _run_banner(args, "resolve", f"{repo_ref} starting")
-            run_resolve(work_root, repo_ref)
+            cache_stats = ResolveCacheStats()
+            run_resolve(work_root, repo_ref, cache_stats=cache_stats)
         except Exception as exc:
             summary.failures.append(
                 RunFailure("resolve", repo_ref, _sanitize(str(exc), redact_paths=True))
@@ -1530,7 +1522,10 @@ def _run_resolve_stage(args: argparse.Namespace, summary: RunSummary) -> set[str
             continue
         resolved_refs.add(repo_ref)
         summary.repo_refs.add(repo_ref)
-        _run_banner(args, "resolve", f"{repo_ref} done")
+        detail = f"{repo_ref} done"
+        if cache_stats.cache_hits:
+            detail = f"{detail}; reused {cache_stats.cache_hits} cached resolution(s)"
+        _run_banner(args, "resolve", detail)
     _run_scancode_retry_notice(args, work_root, tuple(sorted(resolved_refs, key=str.casefold)))
     return resolved_refs
 
@@ -2267,8 +2262,11 @@ def _scan_outcome_line(event: ScanProgressEvent) -> str:
     if status == "scanned":
         deps_count = event.deps_count
         deps_count = 0 if deps_count is None else deps_count
+        deps_label = f"{deps_count} deps"
+        if event.raw_deps_count is not None and event.raw_deps_count > deps_count:
+            deps_label = f"{deps_label} (deduped from {event.raw_deps_count} raw)"
         elapsed = _format_seconds(event.elapsed_seconds)
-        return f"{prefix} ✓ {deps_count} deps ({elapsed})"
+        return f"{prefix} ✓ {deps_label} ({elapsed})"
     if status == "skipped":
         return f"{prefix} ↻ skipped (cached)"
     reason = _sanitize(str(event.error or "unknown error"), redact_paths=True)
@@ -2438,12 +2436,11 @@ def _syft_declined_message(pin: SyftPinSummary, *, interactive: bool) -> str:
 
 def _resolve_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.resolve import run_resolve
+    from repolens.resolve.stage import ResolveCacheStats
 
     repo_refs = _resolve_repo_refs(args.work_root, args.repo_ref)
     if args.source_root is not None and len(repo_refs) > 1:
-        raise InputError(
-            "resolve --source-root supports exactly one repo; pass one --repo-ref"
-        )
+        raise InputError("resolve --source-root supports exactly one repo; pass one --repo-ref")
     retry_scancode = bool(getattr(args, "retry_scancode", False))
     if retry_scancode:
         repo_refs = _repo_refs_needing_scancode_retry(args.work_root, repo_refs)
@@ -2461,9 +2458,11 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
     paths = []
     total = len(repo_refs)
     progress = _ResolveProgressPrinter(stream=sys.stderr)
+    total_cache_hits = 0
     for index, repo_ref in enumerate(repo_refs, start=1):
         repo_started_at = time.monotonic()
         progress.start_repo(index, total, repo_ref)
+        cache_stats = ResolveCacheStats()
 
         def package_progress(
             package_index: int,
@@ -2492,10 +2491,19 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
             enable_mobile_native=args.enable_mobile_native,
             detect_conflicts=args.detect_conflicts,
             progress=package_progress,
+            cache_stats=cache_stats,
         )
-        progress.repo_done(index, total, repo_ref, path.name, time.monotonic() - repo_started_at)
+        total_cache_hits += cache_stats.cache_hits
+        progress.repo_done(
+            index,
+            total,
+            repo_ref,
+            path.name,
+            time.monotonic() - repo_started_at,
+            cache_hits=cache_stats.cache_hits,
+        )
         paths.append(path)
-    progress.finish(total)
+    progress.finish(total, cache_hits=total_cache_hits)
     flag_command = f"repolens flag --work-root {shlex.quote(str(args.work_root))}"
     if len(paths) == 1:
         write_summary = f"{'retried ScanCode; ' if retry_scancode else ''}wrote {paths[0].name}"
@@ -2510,11 +2518,23 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
         after_retry=retry_scancode,
     )
     if retry_advisory is not None:
-        return CommandResult(CommandStatus.SUCCESS, f"{write_summary}\n{retry_advisory}")
+        return CommandResult(
+            CommandStatus.SUCCESS,
+            f"{write_summary}{_resolve_cache_summary(total_cache_hits)}\n{retry_advisory}",
+        )
     return CommandResult(
         CommandStatus.SUCCESS,
-        f"{write_summary}\nNext CLI stage: {flag_command}",
+        (
+            f"{write_summary}{_resolve_cache_summary(total_cache_hits)}\n"
+            f"Next CLI stage: {flag_command}"
+        ),
     )
+
+
+def _resolve_cache_summary(cache_hits: int) -> str:
+    if cache_hits <= 0:
+        return ""
+    return f"; reused {cache_hits} cached resolution(s)"
 
 
 def _ensure_scancode_ready_for_retry(work_root: Path) -> None:
@@ -2581,17 +2601,21 @@ class _ResolveProgressPrinter:
         repo_ref: str,
         path_name: str,
         elapsed_seconds: float,
+        *,
+        cache_hits: int = 0,
     ) -> None:
         elapsed = _format_seconds(elapsed_seconds)
+        reused = f"; reused {cache_hits} cached resolution(s)" if cache_hits else ""
         self._write_progress_line(
-            f"[{index}/{total}] {repo_ref} ✓ wrote {path_name} ({elapsed})",
+            f"[{index}/{total}] {repo_ref} ✓ wrote {path_name} ({elapsed}){reused}",
             newline=True,
         )
 
-    def finish(self, repo_count: int) -> None:
+    def finish(self, repo_count: int, *, cache_hits: int = 0) -> None:
         elapsed = _format_seconds(time.monotonic() - self._started_at)
+        reused = f"; reused {cache_hits} cached resolution(s)" if cache_hits else ""
         self._write_progress_line(
-            f"Done: {repo_count} repos resolved in {elapsed}.",
+            f"Done: {repo_count} repos resolved in {elapsed}{reused}.",
             newline=True,
         )
 
@@ -2709,9 +2733,7 @@ def _scancode_retry_advisory(
     retry_refs = _repo_refs_needing_scancode_retry(work_root, repo_refs)
     if not retry_refs:
         return None
-    retry_command = (
-        f"repolens resolve --work-root {shlex.quote(str(work_root))} --retry-scancode"
-    )
+    retry_command = f"repolens resolve --work-root {shlex.quote(str(work_root))} --retry-scancode"
     flag_command = f"repolens flag --work-root {shlex.quote(str(work_root))}"
     preview = ", ".join(retry_refs[:5])
     suffix = "" if len(retry_refs) <= 5 else ", ..."
@@ -2842,8 +2864,7 @@ def _shortlist_open_guidance(
         f"--emit-contexts {shlex.quote(str(contexts))}"
     )
     ingest_command = (
-        f"repolens shortlist --work-root {work_root_arg} "
-        f"--proposals {shlex.quote(str(proposals))}"
+        f"repolens shortlist --work-root {work_root_arg} --proposals {shlex.quote(str(proposals))}"
     )
     rerun_command = f"repolens shortlist --work-root {work_root_arg}"
     scancode_retry_hint = _shortlist_scancode_retry_hint(work_root)
@@ -2945,10 +2966,7 @@ def _shortlist_scancode_retry_hint(work_root: Path) -> str:
             "  Then retry all affected repos:",
             f"    repolens resolve --work-root {work_root_arg} --retry-scancode",
             "  Or retry only selected repos; repeat --repo-ref for several:",
-            (
-                f"    repolens resolve --work-root {work_root_arg} "
-                f"--retry-scancode {selected_args}"
-            ),
+            (f"    repolens resolve --work-root {work_root_arg} --retry-scancode {selected_args}"),
             f"    repolens flag --work-root {work_root_arg}",
             (
                 "  `flag` preserves matching approved/rejected shortlist decisions and "

@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from repolens.data import store
-from repolens.scan.runner import RepoSpec, ScanBatchError, scan_repos
+from repolens.scan.runner import RepoSpec, ScanBatchError, ScanProgressEvent, scan_repos
 
 CLONE_URL = "https://example.invalid/acme-alpha"
 
@@ -101,6 +101,206 @@ def test_maps_syft_output_to_valid_sbom(tmp_path: Path) -> None:
     assert artifact["type"] == "python"
     assert artifact["licenses"] == ["MIT"]
     assert artifact["locations"] == ["requirements.txt"]
+
+
+def test_duplicate_npm_lockfile_artifacts_collapse_with_merged_locations(
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "left-pad",
+                "version": "1.3.0",
+                "type": "npm",
+                "purl": "pkg:npm/left-pad@1.3.0",
+                "licenses": [{"spdxExpression": "MIT"}],
+                "locations": [{"path": "apps/api/package-lock.json"}],
+            },
+            {
+                "name": "left-pad",
+                "version": "1.3.0",
+                "type": "npm",
+                "purl": "pkg:npm/left-pad@1.3.0",
+                "licenses": [{"spdxExpression": "MIT"}],
+                "locations": [{"path": "apps/web/package-lock.json"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert len(artifacts) == 1
+    assert artifacts[0]["name"] == "left-pad"
+    assert artifacts[0]["locations"] == [
+        "apps/api/package-lock.json",
+        "apps/web/package-lock.json",
+    ]
+    assert artifacts[0]["repolens_occurrence_count"] == 2
+
+
+def test_duplicate_package_with_different_declared_licenses_does_not_collapse(
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "left-pad",
+                "version": "1.3.0",
+                "type": "npm",
+                "purl": "pkg:npm/left-pad@1.3.0",
+                "licenses": [{"spdxExpression": "MIT"}],
+                "locations": [{"path": "apps/api/package-lock.json"}],
+            },
+            {
+                "name": "left-pad",
+                "version": "1.3.0",
+                "type": "npm",
+                "purl": "pkg:npm/left-pad@1.3.0",
+                "licenses": [{"spdxExpression": "Apache-2.0"}],
+                "locations": [{"path": "apps/web/package-lock.json"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert len(artifacts) == 2
+    assert {tuple(artifact["licenses"]) for artifact in artifacts} == {("MIT",), ("Apache-2.0",)}
+    assert all("repolens_occurrence_count" not in artifact for artifact in artifacts)
+
+
+def test_package_local_manifest_looking_locations_do_not_collapse(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "fixture-lib",
+                "version": "1.0.0",
+                "type": "npm",
+                "purl": "pkg:npm/fixture-lib@1.0.0",
+                "locations": [{"path": "vendor/fixture-lib/package.json"}],
+            },
+            {
+                "name": "fixture-lib",
+                "version": "1.0.0",
+                "type": "npm",
+                "purl": "pkg:npm/fixture-lib@1.0.0",
+                "locations": [{"path": "node_modules/fixture-lib/package.json"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert len(artifacts) == 2
+    assert all("repolens_occurrence_count" not in artifact for artifact in artifacts)
+
+
+def test_packages_monorepo_lockfile_artifacts_do_collapse(tmp_path: Path) -> None:
+    work_root = tmp_path / "work-root"
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "shared-lib",
+                "version": "2.0.0",
+                "type": "npm",
+                "purl": "pkg:npm/shared-lib@2.0.0",
+                "locations": [{"path": "packages/api/package-lock.json"}],
+            },
+            {
+                "name": "shared-lib",
+                "version": "2.0.0",
+                "type": "npm",
+                "purl": "pkg:npm/shared-lib@2.0.0",
+                "locations": [{"path": "packages/web/package-lock.json"}],
+            },
+        ],
+    }
+
+    scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+    )
+
+    artifacts = store.read_sbom(work_root, "acme-alpha")["artifacts"]
+    assert len(artifacts) == 1
+    assert artifacts[0]["locations"] == [
+        "packages/api/package-lock.json",
+        "packages/web/package-lock.json",
+    ]
+    assert artifacts[0]["repolens_occurrence_count"] == 2
+
+
+def test_scan_progress_reports_raw_and_persisted_counts_after_dedupe(
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work-root"
+    events: list[ScanProgressEvent] = []
+    document = {
+        **_syft_document(),
+        "artifacts": [
+            {
+                "name": "left-pad",
+                "version": "1.3.0",
+                "type": "npm",
+                "purl": "pkg:npm/left-pad@1.3.0",
+                "locations": [{"path": "apps/api/package-lock.json"}],
+            },
+            {
+                "name": "left-pad",
+                "version": "1.3.0",
+                "type": "npm",
+                "purl": "pkg:npm/left-pad@1.3.0",
+                "locations": [{"path": "apps/web/package-lock.json"}],
+            },
+        ],
+    }
+
+    report = scan_repos(
+        work_root,
+        [RepoSpec("acme-alpha", CLONE_URL)],
+        syft_path=tmp_path / "tools" / "syft",
+        clone=_clone_into,
+        command_runner=_syft_ok(document),
+        progress=events.append,
+    )
+
+    assert report.scanned[0].deps_count == 1
+    assert report.scanned[0].raw_deps_count == 2
+    outcome = events[-1]
+    assert outcome.kind == "outcome"
+    assert outcome.deps_count == 1
+    assert outcome.raw_deps_count == 2
 
 
 def test_scan_writes_first_party_names_from_workspace_manifests(tmp_path: Path) -> None:

@@ -96,6 +96,27 @@ def test_resolve_cli_detect_conflicts_flag_reaches_resolve_stage(
     assert captured == {"detect_conflicts": True}
 
 
+def test_resolve_cli_reports_cache_reuse(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_run_resolve(*args: object, **kwargs: object) -> Path:
+        del args
+        kwargs["cache_stats"].api_hits = 3
+        return tmp_path / "work" / "acme-alpha" / "resolved.ndjson"
+
+    monkeypatch.setattr(cli, "_resolve_repo_refs", lambda work_root, repo_ref: ("acme-alpha",))
+    monkeypatch.setattr("repolens.resolve.run_resolve", fake_run_resolve)
+
+    code = cli.main(["resolve", "--work-root", str(tmp_path)])
+
+    assert code == 0
+    captured = capsys.readouterr()
+    assert "reused 3 cached resolution(s)" in captured.err
+    assert "reused 3 cached resolution(s)" in captured.out
+
+
 def test_resolve_cli_without_repo_ref_resolves_all_scanned_repos(tmp_path: Path) -> None:
     for repo_ref in ("sentinel-alpha", "sentinel-beta"):
         write_sbom(

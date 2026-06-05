@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -34,6 +35,7 @@ from repolens.resolve.models import (
     ResolveAdapter,
     ScancodeExecutableProvider,
 )
+from repolens.resolve.purl import package_identity
 from repolens.resolve.scancode import CommandRunner, resolve_scancode_path, run_scancode_fallback
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import (
@@ -64,6 +66,33 @@ SourceSnapshotReader = Callable[[str | Path, str], Path | None]
 ResolveProgress = Callable[[int, int, str], None]
 
 
+@dataclass
+class ResolveCacheStats:
+    """Per-run reuse counters for operator visibility."""
+
+    declared_hits: int = 0
+    api_hits: int = 0
+
+    @property
+    def cache_hits(self) -> int:
+        return self.declared_hits + self.api_hits
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolutionOutcome:
+    spdx_id: str | None
+    source_layer: str
+    anchor: str
+    url: str | None = None
+
+
+@dataclass
+class _ResolveCache:
+    stats: ResolveCacheStats
+    declared: dict[str, str | None]
+    api: dict[tuple[str, str, str, str | None, str | None, bool, bool], _ResolutionOutcome | None]
+
+
 def run_resolve(
     work_root: str | Path,
     repo_ref: str,
@@ -90,6 +119,7 @@ def run_resolve(
     first_party_reader: FirstPartyReader | None = None,
     source_snapshot_reader: SourceSnapshotReader | None = None,
     limits: SecurityLimits = DEFAULT_LIMITS,
+    cache_stats: ResolveCacheStats | None = None,
 ) -> Path:
     """Resolve a Syft SBOM into frozen-schema ``resolved.ndjson`` records."""
 
@@ -111,6 +141,11 @@ def run_resolve(
     packages = _package_facts(sbom, repo_ref)
     records: list[dict[str, object]] = []
     total = len(packages)
+    cache = _ResolveCache(
+        stats=cache_stats or ResolveCacheStats(),
+        declared={},
+        api={},
+    )
     for index, package in enumerate(packages, start=1):
         record = _resolved_dict(
             _resolve_package(
@@ -128,6 +163,7 @@ def run_resolve(
                 scancode_runner=scancode_runner,
                 scancode_executable_provider=scancode_executable_provider,
                 limits=limits,
+                cache=cache,
             )
         )
         tags = record["tags"]
@@ -234,8 +270,9 @@ def _resolve_package(
     scancode_runner: CommandRunner | None,
     scancode_executable_provider: ScancodeExecutableProvider | None,
     limits: SecurityLimits,
+    cache: _ResolveCache,
 ) -> ResolvedItem:
-    declared = _resolve_declared(package)
+    declared = _resolve_declared(package, cache=cache)
     if declared is not None:
         return _record(package, spdx_id=declared, source_layer="syft", anchor=declared)
     cataloging_only = is_cataloging_only_package(package)
@@ -288,6 +325,7 @@ def _resolve_package(
         evidence_resolver=evidence_resolver,
         detect_conflicts=detect_conflicts,
         lower_unresolved=source_root is None,
+        cache=cache,
     )
     if api_item is not None:
         return api_item
@@ -338,9 +376,19 @@ def _resolve_api_package(
     evidence_resolver: Resolver | None,
     detect_conflicts: bool,
     lower_unresolved: bool,
+    cache: _ResolveCache,
 ) -> ResolvedItem | None:
     if not should_attempt_api_resolution(package):
         return None
+
+    cache_key = _api_cache_key(
+        package,
+        detect_conflicts=detect_conflicts,
+        lower_unresolved=lower_unresolved,
+    )
+    if cache_key in cache.api:
+        cache.stats.api_hits += 1
+        return _record_from_outcome(package, cache.api[cache_key])
 
     unresolved_anchor = "unresolved:no_candidate"
     verified_candidates: list[ApiCandidate] = []
@@ -351,35 +399,52 @@ def _resolve_api_package(
         verified = _verify_api_candidate(candidate, fetcher=fetcher, resolver=evidence_resolver)
         if verified is not None:
             if not detect_conflicts:
-                return _record(
+                return _record_cached_api(
+                    cache,
+                    cache_key,
+                    _ResolutionOutcome(
+                        spdx_id=verified.spdx_id,
+                        source_layer="api",
+                        url=verified.evidence_url,
+                        anchor=verified.evidence_anchor,
+                    ),
                     package,
-                    spdx_id=verified.spdx_id,
-                    source_layer="api",
-                    url=verified.evidence_url,
-                    anchor=verified.evidence_anchor,
                 )
             verified_candidates.append(verified)
         unresolved_anchor = "unresolved:evidence_mismatch"
 
     if not verified_candidates:
         if lower_unresolved:
-            return _record(package, spdx_id=None, source_layer="api", anchor=unresolved_anchor)
+            return _record_cached_api(
+                cache,
+                cache_key,
+                _ResolutionOutcome(None, "api", unresolved_anchor),
+                package,
+            )
+        cache.api[cache_key] = None
         return None
     license_keys = {
         license_resolution_key(candidate.spdx_id, load_default_policy())
         for candidate in verified_candidates
     }
     if len(license_keys) > 1:
-        return _record(
-            package, spdx_id="CONFLICT", source_layer="api", anchor="conflict:api_disagreement"
+        return _record_cached_api(
+            cache,
+            cache_key,
+            _ResolutionOutcome("CONFLICT", "api", "conflict:api_disagreement"),
+            package,
         )
     verified = verified_candidates[0]
-    return _record(
+    return _record_cached_api(
+        cache,
+        cache_key,
+        _ResolutionOutcome(
+            spdx_id=verified.spdx_id,
+            source_layer="api",
+            url=verified.evidence_url,
+            anchor=verified.evidence_anchor,
+        ),
         package,
-        spdx_id=verified.spdx_id,
-        source_layer="api",
-        url=verified.evidence_url,
-        anchor=verified.evidence_anchor,
     )
 
 
@@ -411,11 +476,62 @@ def _resolve_mobile_package(
     )
 
 
-def _resolve_declared(package: PackageFact) -> str | None:
+def _resolve_declared(package: PackageFact, *, cache: _ResolveCache) -> str | None:
     if package.declared_license_raw is None:
         return None
+    key = package.declared_license_raw.strip()
+    if key in cache.declared:
+        cache.stats.declared_hits += 1
+        return cache.declared[key]
     normalized = normalize_license(package.declared_license_raw, load_default_policy())
+    cache.declared[key] = normalized.spdx_id
     return normalized.spdx_id
+
+
+def _api_cache_key(
+    package: PackageFact,
+    *,
+    detect_conflicts: bool,
+    lower_unresolved: bool,
+) -> tuple[str, str, str, str | None, str | None, bool, bool]:
+    ecosystem, identity = package_identity(package.package_type, package.name, package.purl)
+    return (
+        ecosystem.lower(),
+        identity.lower(),
+        package.version,
+        package.purl,
+        package.declared_license_raw,
+        detect_conflicts,
+        lower_unresolved,
+    )
+
+
+def _record_cached_api(
+    cache: _ResolveCache,
+    cache_key: tuple[str, str, str, str | None, str | None, bool, bool],
+    outcome: _ResolutionOutcome,
+    package: PackageFact,
+) -> ResolvedItem:
+    cache.api[cache_key] = outcome
+    record = _record_from_outcome(package, outcome)
+    if record is None:
+        raise AssertionError("API outcome must be record-producing")
+    return record
+
+
+def _record_from_outcome(
+    package: PackageFact,
+    outcome: _ResolutionOutcome | None,
+) -> ResolvedItem | None:
+    if outcome is None:
+        return None
+    return _record(
+        package,
+        spdx_id=outcome.spdx_id,
+        source_layer=outcome.source_layer,
+        url=outcome.url,
+        anchor=outcome.anchor,
+    )
 
 
 def _verify_api_candidate(

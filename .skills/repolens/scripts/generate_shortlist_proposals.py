@@ -215,8 +215,7 @@ def _review_context_row(
     checked_text = _evidence_text(candidate.evidence_url, candidate.evidence_anchor)
     if not verified.verified:
         reason = (
-            f"Candidate {candidate.spdx_id} did not pass RepoLens verifier "
-            f"({verified.reason})."
+            f"Candidate {candidate.spdx_id} did not pass RepoLens verifier ({verified.reason})."
         )
         return _abstain(component_ref, reason), ReviewRow(
             component_ref,

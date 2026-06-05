@@ -217,7 +217,9 @@ def _component_from_manifest(
         ecosystem=component_ecosystem,
         license=str(raw["declared_license"]),
         purl=_purl(component_ecosystem, name, version),
-        location=f"{repo_id}/{_manifest_name(ecosystem, component_ecosystem)}",
+        location=str(
+            raw.get("location") or f"{repo_id}/{_manifest_name(ecosystem, component_ecosystem)}"
+        ),
     )
 
 
@@ -314,12 +316,22 @@ def _validate_and_summarize(work_root: Path, csv_path: Path) -> dict[str, object
 
     repo_dirs = sorted((work_root / "work").iterdir())
     sbom_rows = 0
+    raw_sbom_rows = 0
     resolved_rows = 0
+    monorepo_sbom: dict[str, object] | None = None
     for repo_dir in repo_dirs:
         repo_ref = repo_dir.name
         sbom = store.read_sbom(work_root, repo_ref)
         validate_artifact(sbom, "sbom")
-        sbom_rows += len(sbom["artifacts"])
+        artifacts = sbom["artifacts"]
+        sbom_rows += len(artifacts)
+        raw_sbom_rows += sum(
+            artifact.get("repolens_occurrence_count", 1)
+            for artifact in artifacts
+            if isinstance(artifact, dict)
+        )
+        if repo_ref == "acme_node_monorepo":
+            monorepo_sbom = sbom
         resolved = list(store.iter_resolved(repo_dir / "resolved.ndjson"))
         resolved_rows += len(resolved)
 
@@ -331,10 +343,25 @@ def _validate_and_summarize(work_root: Path, csv_path: Path) -> dict[str, object
         with appendix_path.open(encoding="utf-8", newline="") as handle:
             appendix_rows.extend(csv.DictReader(handle))
 
+    monorepo_artifacts = (
+        monorepo_sbom["artifacts"]
+        if isinstance(monorepo_sbom, dict) and isinstance(monorepo_sbom.get("artifacts"), list)
+        else []
+    )
+    monorepo_shared = next(
+        (
+            artifact
+            for artifact in monorepo_artifacts
+            if isinstance(artifact, dict) and artifact.get("name") == "acme-monorepo-shared"
+        ),
+        {},
+    )
+
     return {
         "approved_repos": discovered["candidate_count"],
         "discovered_schema_valid": True,
         "sbom_artifacts": sbom_rows,
+        "raw_synthetic_sbom_artifacts": raw_sbom_rows,
         "resolved_rows": resolved_rows,
         "report_rows": len(report_rows),
         "appendix_rows": len(appendix_rows),
@@ -343,6 +370,17 @@ def _validate_and_summarize(work_root: Path, csv_path: Path) -> dict[str, object
         "report_rows_with_source_url": sum(1 for row in report_rows if row["source_url"]),
         "deduped_shared_component_rows": sum(
             1 for row in report_rows if row["name"] == SHARED_COMPONENT["name"]
+        ),
+        "monorepo_sbom_artifacts": len(monorepo_artifacts),
+        "monorepo_raw_artifacts": sum(
+            artifact.get("repolens_occurrence_count", 1)
+            for artifact in monorepo_artifacts
+            if isinstance(artifact, dict)
+        ),
+        "monorepo_occurrence_count": monorepo_shared.get("repolens_occurrence_count"),
+        "monorepo_locations": monorepo_shared.get("locations"),
+        "monorepo_shared_component_report_rows": sum(
+            1 for row in report_rows if row["name"] == "acme-monorepo-shared"
         ),
         "report_md_exists": (work_root / "reports" / "report.main.md").exists(),
         "report_csv_exists": csv_path.exists(),

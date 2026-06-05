@@ -30,6 +30,27 @@
       ]
     },
     {
+      "id": "acme_node_monorepo",
+      "path": "acme_node_monorepo",
+      "ecosystem": "node",
+      "expected_components": [
+        {
+          "name": "acme-monorepo-shared",
+          "version": "7.8.9",
+          "declared_license": "MIT",
+          "scope": "runtime",
+          "location": "apps/api/package-lock.json"
+        },
+        {
+          "name": "acme-monorepo-shared",
+          "version": "7.8.9",
+          "declared_license": "MIT",
+          "scope": "runtime",
+          "location": "apps/web/package-lock.json"
+        }
+      ]
+    },
+    {
       "id": "acme_go_worker",
       "path": "acme_go_worker",
       "ecosystem": "go",

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from repolens.cli import CommandStatus, _scan_command_result
+from repolens.cli import CommandStatus, _scan_command_result, _scan_outcome_line
 from repolens.githost import GH_NOT_INSTALLED_MESSAGE
-from repolens.scan.runner import RepoScanOutcome, ScanReport
+from repolens.scan.runner import RepoScanOutcome, ScanProgressEvent, ScanReport
 
 
 def _report(*outcomes: RepoScanOutcome) -> ScanReport:
@@ -24,6 +24,40 @@ def test_clean_run_exits_success_with_resolve_next_step(capsys) -> None:
     assert result.status is CommandStatus.SUCCESS
     assert result.message == "Next CLI stage: repolens resolve --work-root work"
     assert capsys.readouterr().err == ""
+
+
+def test_scan_outcome_line_reports_dedupe_raw_count() -> None:
+    line = _scan_outcome_line(
+        ScanProgressEvent(
+            "outcome",
+            1,
+            1,
+            "sentinel",
+            status="scanned",
+            deps_count=1,
+            raw_deps_count=3,
+            elapsed_seconds=0.2,
+        )
+    )
+
+    assert "1 deps (deduped from 3 raw)" in line
+
+
+def test_scan_outcome_line_omits_dedupe_when_counts_match() -> None:
+    line = _scan_outcome_line(
+        ScanProgressEvent(
+            "outcome",
+            1,
+            1,
+            "sentinel",
+            status="scanned",
+            deps_count=3,
+            raw_deps_count=3,
+            elapsed_seconds=0.2,
+        )
+    )
+
+    assert "deduped from" not in line
 
 
 def test_cached_run_exits_success_with_resolve_next_step(capsys) -> None:
