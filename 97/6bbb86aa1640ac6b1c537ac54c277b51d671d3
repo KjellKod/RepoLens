@@ -1,0 +1,39 @@
+src/repolens/shortlist/decisions.py
+  s_b94247f2be259a::t_331e6995a7e908 17,119-121,125,139,158-161,166-173
+  s_b94247f2be259a::t_1fde80af7973f8 162-165
+tests/unit/shortlist/test_proposals.py
+  s_b94247f2be259a::t_865dca2eba1bad 101-130
+docs/usage.md
+  s_b94247f2be259a::t_f35cb41e743cf8 434-435,780-784
+  s_b94247f2be259a::t_ae1e8a4a0481c3 769
+src/repolens/shortlist/verify.py
+  s_b94247f2be259a::t_865dca2eba1bad 5,24,57,60-63,68-70,76,89,95
+.skills/repolens/SKILL.md
+  s_b94247f2be259a::t_9ae678607db780 119-120
+  s_b94247f2be259a::t_037da4397297d6 123
+tests/unit/shortlist/test_decisions.py
+  s_b94247f2be259a::t_78e3d0cf1c8fec 216-218
+  s_b94247f2be259a::t_e16f2b5941e1bd 219-233
+  s_b94247f2be259a::t_865dca2eba1bad 162-184
+  s_b94247f2be259a::t_da5abb72283d2b 3-4
+tests/unit/shortlist/test_verify.py
+  s_b94247f2be259a::t_865dca2eba1bad 101-112,115-116,118-120,124
+src/repolens/cli.py
+  s_b94247f2be259a::t_e88d5f23455953 728-729
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "976bbb86aa1640ac6b1c537ac54c277b51d671d3",
+  "prompts": {},
+  "sessions": {
+    "s_b94247f2be259a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e97f6-7d4e-79c2-a672-264cae3a1fbe",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
