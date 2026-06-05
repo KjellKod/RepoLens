@@ -1,0 +1,69 @@
+src/repolens/shortlist/research.py
+  s_6815ab4205a20f::t_6b949ac6b48ab5 155-156
+  s_6815ab4205a20f::t_f2a34e2c370ce7 560-562
+  s_6815ab4205a20f::t_05d556bb025715 807,817-829
+  s_6815ab4205a20f::t_86a8ed6eebc8d9 582-586
+  s_6815ab4205a20f::t_b8f705af78beaa 19,27,40,44-50,75-76,81,299-347,377-378,408-497,501-559,563-581,587-662,667-671,692-693,708-775,785-786,796,800
+  s_6815ab4205a20f::t_8b3f70fbe0536e 223,229-234,243-244
+  s_6815ab4205a20f::t_84d25a5bb157bf 677-680,698-707
+  s_6815ab4205a20f::t_68e621fdc2df47 5,498-500,663-666
+tests/unit/shortlist/test_render_evidence.py
+  s_6815ab4205a20f::t_fe1ef16819cc1f 127-171
+tests/unit/shortlist/test_decisions.py
+  s_6815ab4205a20f::t_73949035e757f9 92-135,443-462,472-490,493-510
+  s_6815ab4205a20f::t_f0de0df2b2f79d 5,463-471,491-492
+src/repolens/data/schemas/shortlist.schema.json
+  s_6815ab4205a20f::t_a0751b0f35cfd5 161,192-220
+  s_6815ab4205a20f::t_86a8ed6eebc8d9 25
+  s_6815ab4205a20f::t_d6068502ba0f90 84-110
+src/repolens/shortlist/proposals.py
+  s_6815ab4205a20f::t_a4f08224243ddd 352,358-362,371-373
+  s_6815ab4205a20f::t_2f7ef7b67ab19f 12,18,37-38,69
+  s_6815ab4205a20f::t_86a8ed6eebc8d9 339,343,345-346,348-351,353-357,364,369-370,374-385
+  s_6815ab4205a20f::t_887d909b697e2f 54-59,70
+  s_6815ab4205a20f::t_9bbbe2154d32b6 214-222,270-338,340-342,344,347,363,365-368,386-402
+  s_6815ab4205a20f::t_81e53f4e379689 455-456,473-474,498,514,542-543
+  s_6815ab4205a20f::t_68e621fdc2df47 499-501,515-517
+src/repolens/data/schemas/shortlist_proposals.schema.json
+  s_6815ab4205a20f::t_3d0f541b73a47f 17-43
+tests/unit/shortlist/test_evidence.py
+  s_6815ab4205a20f::t_7c7499212ff07d 183-200,234-254,348-359
+tests/unit/shortlist/test_proposals.py
+  s_6815ab4205a20f::t_887d909b697e2f 252,279
+  s_6815ab4205a20f::t_f0de0df2b2f79d 97-121,487-523
+  s_6815ab4205a20f::t_68e621fdc2df47 378
+  s_6815ab4205a20f::t_fc0cdb629d1a06 376-377,379,381-385,387-393,396-400
+  s_6815ab4205a20f::t_853281be5c2171 386
+  s_6815ab4205a20f::t_ec774d270661b2 72-96,380,394-395,401-448
+  s_6815ab4205a20f::t_84de89d5af25e4 449-486
+src/repolens/shortlist/render.py
+  s_6815ab4205a20f::t_c22c76e4e59b74 160-161,164,171-178,288-312
+src/repolens/shortlist/decisions.py
+  s_6815ab4205a20f::t_86a8ed6eebc8d9 137-142,194-200
+  s_6815ab4205a20f::t_06d519b0e62d52 148-149,166-193
+src/repolens/data/schemas/shortlist_evidence.schema.json
+  s_6815ab4205a20f::t_a0751b0f35cfd5 49,80-108
+tests/unit/shortlist/test_research.py
+  s_6815ab4205a20f::t_a5c0c5298daa6d 223-256
+  s_6815ab4205a20f::t_f0de0df2b2f79d 257-291
+  s_6815ab4205a20f::t_a9b796b0aee2c1 34-42,114-222,292-302
+src/repolens/shortlist/evidence.py
+  s_6815ab4205a20f::t_68e621fdc2df47 357-368
+  s_6815ab4205a20f::t_dac890c48ce30d 32-33,79-113,147,151,169-170,177-178,296,300,330-332,369-371,399-443,506
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "2b166ced80efd640c9e5f56f4692e60141ee3189",
+  "prompts": {},
+  "sessions": {
+    "s_6815ab4205a20f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e999a-68de-70d0-821c-dccca878412e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
