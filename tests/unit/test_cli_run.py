@@ -9,6 +9,7 @@ import pytest
 
 from repolens import cli
 from repolens.data import store
+from repolens.exit_codes import InputError
 from repolens.scan.runner import RepoScanOutcome, ScanReport
 
 
@@ -433,6 +434,7 @@ def test_resolve_retry_scancode_only_reruns_matching_repos(
         return store.repo_dir(work_root, repo_ref) / "resolved.ndjson"
 
     monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
+    monkeypatch.setattr(cli, "_ensure_scancode_ready_for_retry", lambda _work_root: None)
 
     result = cli._resolve_stage(
         SimpleNamespace(
@@ -482,6 +484,7 @@ def test_resolve_retry_scancode_can_target_several_repo_refs(
         return store.repo_dir(work_root, repo_ref) / "resolved.ndjson"
 
     monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
+    monkeypatch.setattr(cli, "_ensure_scancode_ready_for_retry", lambda _work_root: None)
 
     result = cli._resolve_stage(
         SimpleNamespace(
@@ -497,6 +500,46 @@ def test_resolve_retry_scancode_can_target_several_repo_refs(
     assert result.status == cli.CommandStatus.SUCCESS
     assert calls == ["sentinel-alpha", "sentinel-gamma"]
     assert "retried ScanCode for 2 repos: sentinel-alpha, sentinel-gamma" in result.message
+
+
+def test_resolve_retry_scancode_fails_fast_when_scancode_not_bootstrapped(
+    tmp_path: Path,
+    sbom: dict[str, object],
+    resolved_record: dict[str, object],
+) -> None:
+    repo_ref = "sentinel-alpha"
+    store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
+    store.write_resolved(
+        tmp_path,
+        repo_ref,
+        [
+            {
+                **resolved_record,
+                "repo": repo_ref,
+                "evidence": {
+                    "source_layer": "scancode",
+                    "anchor": "unresolved:scancode_tool_unavailable",
+                },
+            }
+        ],
+    )
+
+    with pytest.raises(InputError) as excinfo:
+        cli._resolve_stage(
+            SimpleNamespace(
+                work_root=tmp_path,
+                repo_ref=None,
+                source_root=None,
+                enable_mobile_native=False,
+                detect_conflicts=False,
+                retry_scancode=True,
+            )
+        )
+
+    message = str(excinfo.value)
+    assert "ScanCode is not ready for retry" in message
+    assert "tool_versions.json not found" in message
+    assert f"repolens bootstrap --work-root {tmp_path}" in message
 
 
 def test_resolve_parser_accepts_repeated_repo_ref(tmp_path: Path) -> None:

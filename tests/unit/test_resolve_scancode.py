@@ -9,7 +9,10 @@ import pytest
 from repolens.bootstrap.record import VERSIONS_SCHEMA
 from repolens.bootstrap.scancode import (
     SCANCODE_REQUIREMENTS_SOURCE_PREFIX,
+    build_scancode_venv_wrapper,
     build_scancode_wrapper,
+    scancode_venv_digest,
+    scancode_venv_source,
 )
 from repolens.exit_codes import InputError
 from repolens.resolve.models import PackageFact
@@ -28,7 +31,7 @@ def package_with_location(location: str) -> PackageFact:
 def write_scancode_record(
     root: Path,
     *,
-    version: str = "32.3.1",
+    version: str = "32.4.1",
     digest: str = "c" * 64,
     source: str = f"{SCANCODE_REQUIREMENTS_SOURCE_PREFIX}scancode.requirements.txt",
 ) -> None:
@@ -101,13 +104,31 @@ def test_resolve_scancode_path_requires_bootstrap_wrapper_and_record(tmp_path: P
     tools.mkdir()
     digest = "c" * 64
     wrapper = tools / "scancode"
-    wrapper.write_text(build_scancode_wrapper("32.3.1", digest), encoding="utf-8")
+    wrapper.write_text(build_scancode_wrapper("32.4.1", digest), encoding="utf-8")
     wrapper.chmod(0o755)
 
     with pytest.raises(InputError):
         resolve_scancode_path(tmp_path)
 
     write_scancode_record(tmp_path, digest=digest)
+
+    assert resolve_scancode_path(tmp_path) == tools / "scancode"
+
+
+def test_resolve_scancode_path_accepts_work_root_venv_bootstrap(tmp_path: Path) -> None:
+    tools = tmp_path / "tools"
+    venv_bin = tools / "scancode-venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "python").write_text("", encoding="utf-8")
+    digest = scancode_venv_digest("32.4.1")
+    wrapper = tools / "scancode"
+    wrapper.write_text(build_scancode_venv_wrapper("32.4.1", digest), encoding="utf-8")
+    wrapper.chmod(0o755)
+    write_scancode_record(
+        tmp_path,
+        digest=digest,
+        source=scancode_venv_source("32.4.1"),
+    )
 
     assert resolve_scancode_path(tmp_path) == tools / "scancode"
 
@@ -127,11 +148,11 @@ def test_resolve_scancode_path_rejects_unverified_record(tmp_path: Path) -> None
     tools = tmp_path / "tools"
     tools.mkdir()
     digest = "c" * 64
-    (tools / "scancode").write_text(build_scancode_wrapper("32.3.1", digest), encoding="utf-8")
+    (tools / "scancode").write_text(build_scancode_wrapper("32.4.1", digest), encoding="utf-8")
     (tools / "scancode").chmod(0o755)
     write_scancode_record(tmp_path, digest=digest, source="caller-provided")
 
-    with pytest.raises(InputError, match="requirements source"):
+    with pytest.raises(InputError, match="unsupported ScanCode source"):
         resolve_scancode_path(tmp_path)
 
 
@@ -190,7 +211,7 @@ def test_scancode_unlaunchable_executable_fails_closed(tmp_path: Path) -> None:
     tools = tmp_path / "tools"
     tools.mkdir()
     digest = "c" * 64
-    (tools / "scancode").write_text(build_scancode_wrapper("32.3.1", digest), encoding="utf-8")
+    (tools / "scancode").write_text(build_scancode_wrapper("32.4.1", digest), encoding="utf-8")
     write_scancode_record(tmp_path, digest=digest)
     source = tmp_path / "source"
     package_dir = source / "vendor" / "fixture-lib"
@@ -213,7 +234,7 @@ def test_unreadable_scancode_record_fails_closed(
     tools = tmp_path / "tools"
     tools.mkdir()
     digest = "c" * 64
-    (tools / "scancode").write_text(build_scancode_wrapper("32.3.1", digest), encoding="utf-8")
+    (tools / "scancode").write_text(build_scancode_wrapper("32.4.1", digest), encoding="utf-8")
     (tools / "scancode").chmod(0o755)
     write_scancode_record(tmp_path, digest=digest)
     source = tmp_path / "source"

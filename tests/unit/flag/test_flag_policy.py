@@ -214,6 +214,33 @@ def test_flag_rerun_ingests_pending_shortlist_markdown_ticks(tmp_path, make_reco
     assert rerun["items"][0]["status"] == "approved"
     assert rerun["items"][0]["decided_by"] is None
     assert rerun["items"][0]["decided_at"]
+    rendered = (tmp_path / "shortlist.md").read_text(encoding="utf-8")
+    assert "- [x] `acme-unknown|UNKNOWN`" in rendered
+    assert "rpl:ref=" in rendered
+
+
+def test_flag_writes_checkbox_shortlist_view(tmp_path, make_record) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="acme-unknown",
+                spdx_id=None,
+                declared_license_raw=None,
+                url=None,
+                anchor="unresolved:no_candidate",
+            )
+        ],
+    )
+
+    run_flag(tmp_path)
+
+    rendered = (tmp_path / "shortlist.md").read_text(encoding="utf-8")
+    assert "Tick an available group checkbox" in rendered
+    assert "- [ ] `acme-unknown|UNKNOWN`" in rendered
+    assert "rpl:ref=" in rendered
+    assert "- `acme-unknown|UNKNOWN`" not in rendered
 
 
 def test_flag_rerun_does_not_carry_decision_to_changed_component_ref(tmp_path, make_record) -> None:

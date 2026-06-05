@@ -244,6 +244,7 @@ class CliTests(unittest.TestCase):
             "Manual step: open work/repos.candidate.md, untick any repos you want to exclude",
             output,
         )
+        self.assertIn("Next: prepare work-root tools: repolens bootstrap --work-root work", output)
         self.assertIn("Next CLI stage: repolens scan --work-root work", output)
 
     def test_discover_repos_routes_to_fetch_path(self) -> None:
@@ -331,6 +332,7 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(code, 0)
         output = stdout.getvalue()
+        self.assertIn("repolens bootstrap --work-root /tmp/repo1", output)
         self.assertIn("repolens scan --work-root /tmp/repo1", output)
 
     def test_discover_force_routes_to_real_handler(self) -> None:

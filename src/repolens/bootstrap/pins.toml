@@ -51,7 +51,7 @@ sha256 = "13343856b69f70388c4fe0b986a31dde5958e444b41be22d785d3dc5e1a9cc62"
 
 # --- ScanCode: deep license detection. Installed via hash-pinned pip. ---
 [tools.scancode]
-version = "32.3.1"
+version = "32.4.1"
 requirements = "scancode.requirements.txt"  # hash-pinned, consumed with --require-hashes
 
 # --- git / gh: pinned, security-critical CLIs. ---

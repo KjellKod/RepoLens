@@ -12,7 +12,8 @@
   `repolens` command and the importable package the `python -m repolens.*` commands use.
 - `syft` — acquired by `scan` on first use into RepoLens's shared verified cache, or
   pre-seeded with `repolens bootstrap` for offline runs.
-- `scancode` — version-pinned by bootstrap requirements for scoped fallback use.
+- `scancode-toolkit` — prepared with `repolens bootstrap --work-root <WORK>` when
+  scoped fallback retries are needed.
 - For mobile license enrichment (optional, auto-detected): a build toolchain
   (JDK + Gradle for Android, Xcode/SPM or a `GITHUB_TOKEN` for iOS).
 
@@ -111,6 +112,15 @@ repolens bootstrap
 repolens scan --work-root work --offline
 ```
 
+`repolens bootstrap` by itself prepares the shared Syft cache. ScanCode fallback
+is work-root-local because `resolve` validates `<WORK>/tools/scancode` against
+`<WORK>/tool_versions.json` before it can retry package-local scans:
+
+```bash
+repolens bootstrap --work-root <WORK>
+repolens resolve --work-root <WORK> --retry-scancode
+```
+
 Validate the manifest offline, no downloads:
 
 ```
@@ -120,8 +130,11 @@ python3 -m repolens.bootstrap --dry-run
 `repolens bootstrap` and `scan --yes` verify Syft **fail-closed**: they check the
 release artifact's sha256, verify the cosign-signed checksums file, then cross-check that
 the pinned digest matches the signed entry — all **before** the Syft executable is exposed
-from the cache. ScanCode installs via a hash-pinned `--require-hashes` requirements file
-when the full injected-runner library flow (`repolens.bootstrap.run(...)`) is used.
+from the cache. `repolens bootstrap --work-root <WORK>` prepares an isolated
+`<WORK>/tools/scancode-venv`, installs the exact pinned ScanCode version with binary-only
+pip resolution, writes `<WORK>/tools/scancode`, and records the proof in
+`<WORK>/tool_versions.json`. If Python, pip, network access, or wheel compatibility fails,
+the command exits with the pip error and a fix hint instead of writing a trusted proof.
 
 How the verification works (pins, the fail-closed gate order, ScanCode `--require-hashes`,
 `tool_versions.json`) is described in
@@ -414,6 +427,7 @@ shipped-license gaps in `report.main.{md,csv,docx}`.
 
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
+repolens bootstrap --work-root work  # prepare work-root-local ScanCode fallback tools
 repolens scan      --work-root work  # first use verifies Syft cache, then writes SBOMs
 repolens resolve --work-root work    # license resolution for scanned repo SBOMs
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
@@ -653,11 +667,17 @@ than one scanned repo exists, because one source checkout can only describe one
 repository. It lets `resolve` detect mobile markers and derive package-local
 ScanCode targets from SBOM `locations`. ScanCode is invoked only for dependencies
 still unresolved by earlier layers, and target selection rejects broad repository-root
-scans and paths outside the source root. If the canonical hash-pinned/bootstrap-produced
-ScanCode executable is unavailable, affected packages stay unresolved instead of failing
+scans and paths outside the source root. If the bootstrap-produced ScanCode executable is
+unavailable during normal resolve, affected packages stay unresolved instead of failing
 the run.
 
-After fixing or bootstrapping ScanCode, retry only the checked repos whose existing
+Before retrying ScanCode, prepare the work-root-local fallback tool:
+
+```bash
+repolens bootstrap --work-root <WORK>
+```
+
+Then retry only the checked repos whose existing
 `resolved.ndjson` contains `unresolved:scancode_tool_unavailable`:
 
 ```bash
@@ -787,6 +807,7 @@ If any open rows came from `unresolved:scancode_tool_unavailable`, the console a
 the deterministic retry path first:
 
 ```bash
+repolens bootstrap --work-root <WORK>
 repolens resolve --work-root <WORK> --retry-scancode
 repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME>
 repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>

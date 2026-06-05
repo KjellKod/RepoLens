@@ -83,6 +83,13 @@ def test_license_resolution_id_accepts_apache_with_llvm_exception() -> None:
     assert license_resolution_id(expression, load_default_policy()) == expression
 
 
+def test_license_resolution_id_accepts_zope_public_license() -> None:
+    policy = load_default_policy()
+
+    assert license_resolution_id("ZPL-2.1", policy) == "ZPL-2.1"
+    assert license_resolution_id("Zope Public License", policy) == "ZPL-2.1"
+
+
 def test_deep_compound_expression_fails_closed() -> None:
     expression = ("(" * 2_000) + "MIT" + (")" * 2_000)
 
@@ -118,6 +125,27 @@ def test_adapter_rejects_unsupported_with_exception_candidate(expression: str) -
     )
 
     assert candidate is None
+
+
+def test_python_adapter_resolves_zpl_from_pypi_metadata() -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(url=url, status=200, headers=(), body=b'{"info":{"license":"ZPL-2.1"}}')
+
+    candidate = build_default_adapters(fetcher)[1].resolve(
+        PackageFact(
+            name="zope.site",
+            version="6.0",
+            package_type="python",
+            repo="acme-alpha",
+            purl="pkg:pypi/zope.site@6.0",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is not None
+    assert candidate.spdx_id == "ZPL-2.1"
+    assert candidate.evidence_anchor == "ZPL-2.1"
 
 
 def test_adapter_carries_known_with_exception_candidate() -> None:

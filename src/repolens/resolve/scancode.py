@@ -13,7 +13,10 @@ from pathlib import Path
 from repolens.bootstrap.record import VERSIONS_SCHEMA
 from repolens.bootstrap.scancode import (
     SCANCODE_REQUIREMENTS_SOURCE_PREFIX,
+    build_scancode_venv_wrapper,
     build_scancode_wrapper,
+    scancode_venv_digest,
+    scancode_venv_source,
 )
 from repolens.exit_codes import InputError
 from repolens.policy.config import load_default_policy
@@ -50,8 +53,9 @@ def resolve_scancode_path(work_root: str | Path) -> Path:
     root = Path(work_root)
     path = root / "tools" / "scancode"
     versions_path = root / "tool_versions.json"
+    repair_hint = f"run `repolens bootstrap --work-root {root}`."
     if not versions_path.exists():
-        raise InputError("tool_versions.json not found; ScanCode bootstrap record is required.")
+        raise InputError(f"tool_versions.json not found; ScanCode setup is required: {repair_hint}")
     try:
         payload = json.loads(versions_path.read_text(encoding="utf-8"))
     except OSError as exc:
@@ -59,35 +63,63 @@ def resolve_scancode_path(work_root: str | Path) -> Path:
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise InputError("tool_versions.json is not valid JSON.") from exc
     if not isinstance(payload, dict) or payload.get("schema") != VERSIONS_SCHEMA:
-        raise InputError("tool_versions.json does not use the supported tool-versions schema.")
+        raise InputError(
+            "tool_versions.json does not use the supported tool-versions schema; "
+            f"{repair_hint}"
+        )
     tools = payload.get("tools") if isinstance(payload, dict) else None
     scancode = tools.get("scancode") if isinstance(tools, dict) else None
     if not isinstance(scancode, dict):
-        raise InputError("tool_versions.json does not record a pinned ScanCode version.")
+        raise InputError(f"tool_versions.json does not record ScanCode; {repair_hint}")
     version = scancode.get("version")
     digest = scancode.get("digest")
     source = scancode.get("source")
     if not isinstance(version, str) or not version.strip():
-        raise InputError("tool_versions.json does not record a pinned ScanCode version.")
+        raise InputError(
+            "tool_versions.json does not record a pinned ScanCode version; "
+            f"{repair_hint}"
+        )
     if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
-        raise InputError("tool_versions.json does not record a ScanCode requirements digest.")
-    if not isinstance(source, str) or not source.startswith(SCANCODE_REQUIREMENTS_SOURCE_PREFIX):
-        raise InputError("tool_versions.json does not record a ScanCode requirements source.")
+        raise InputError(
+            "tool_versions.json does not record a valid ScanCode digest; "
+            f"{repair_hint}"
+        )
+    if not isinstance(source, str):
+        raise InputError(f"tool_versions.json does not record a ScanCode source; {repair_hint}")
     if not path.is_file():
         raise InputError(
-            "ScanCode wrapper not found under <work-root>/tools/scancode; run the "
-            "bootstrap step first (it installs ScanCode from hash-pinned requirements)."
+            "ScanCode wrapper not found under <work-root>/tools/scancode; "
+            f"{repair_hint}"
         )
     try:
         wrapper = path.read_text(encoding="utf-8")
     except OSError as exc:
-        raise InputError("ScanCode wrapper is not readable.") from exc
+        raise InputError(f"ScanCode wrapper is not readable; {repair_hint}") from exc
     except UnicodeDecodeError as exc:
-        raise InputError("ScanCode wrapper is not valid UTF-8.") from exc
-    if wrapper != build_scancode_wrapper(version, digest):
-        raise InputError("ScanCode wrapper does not match the recorded bootstrap proof.")
+        raise InputError(f"ScanCode wrapper is not valid UTF-8; {repair_hint}") from exc
+    expected_wrapper: str
+    if source.startswith(SCANCODE_REQUIREMENTS_SOURCE_PREFIX):
+        expected_wrapper = build_scancode_wrapper(version, digest)
+    elif source == scancode_venv_source(version):
+        expected_digest = scancode_venv_digest(version)
+        if digest != expected_digest:
+            raise InputError(
+                "tool_versions.json ScanCode digest does not match the exact install spec; "
+                f"{repair_hint}"
+            )
+        expected_wrapper = build_scancode_venv_wrapper(version, digest)
+        venv_python = root / "tools" / "scancode-venv" / "bin" / "python"
+        if not venv_python.is_file():
+            raise InputError(f"ScanCode virtualenv is missing at {venv_python}; {repair_hint}")
+    else:
+        raise InputError(f"tool_versions.json records unsupported ScanCode source; {repair_hint}")
+    if wrapper != expected_wrapper:
+        raise InputError(
+            "ScanCode wrapper does not match the recorded bootstrap proof; "
+            f"{repair_hint}"
+        )
     if not os.access(path, os.X_OK):
-        raise InputError("ScanCode wrapper is not executable.")
+        raise InputError(f"ScanCode wrapper is not executable; {repair_hint}")
     return path
 
 

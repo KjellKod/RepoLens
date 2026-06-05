@@ -115,14 +115,14 @@ def _stage_epilog(before: str, example: str, output: str, next_step: str) -> str
 
 _RESOLVE_EPILOG = """\
 Before:
-  Run scan first. Resolve reads SBOMs from:
-    <WORK>/work/*/sbom.syft.json
+  Run scan first.
+  Syft SBOMs from scan at <WORK>/work/*/sbom.syft.json.
 
 Default:
-  Resolve checked discover repos that have SBOMs.
-  If no checked SBOMs are present, resolve every scanned SBOM under <WORK>/work/.
+  omit to resolve checked discover repos that have SBOMs; use --repo-ref for selected repos.
+  If no checked SBOMs are present, resolve every scan output SBOM under <WORK>/work/.
 
-Examples:
+Example:
   Resolve all selected/scanned repos:
     repolens resolve --work-root <WORK>
 
@@ -170,7 +170,7 @@ _STAGE_HELP = {
             '--repos "sentinel-alpha, sentinel-beta")',
             "discovered.json (full tagged list) + repos.candidate.md (checkbox approval file).",
             "review repos.candidate.md, untick any repos you want to exclude, then run "
-            "`repolens scan --work-root <WORK>`.",
+            "`repolens bootstrap --work-root <WORK>`, then `repolens scan --work-root <WORK>`.",
         ),
     ),
     "scan": StageHelp(
@@ -252,11 +252,12 @@ _EPILOG = (
     "\n"
     "step it yourself:\n"
     "  1. repolens discover --owner <OWNER>                     find + approve the repos\n"
-    "  2. repolens scan --work-root work                        inventory approved dependencies\n"
-    "  3. repolens resolve --work-root work                     resolve scanned repos\n"
-    "  4. repolens flag --work-root work                        flag risk / unknowns\n"
-    "  5. repolens shortlist --work-root work                   settle the flags + approve\n"
-    "  6. repolens report --work-root work                      build the main disclosure\n"
+    "  2. repolens bootstrap --work-root work                   prepare work-root tools\n"
+    "  3. repolens scan --work-root work                        inventory approved dependencies\n"
+    "  4. repolens resolve --work-root work                     resolve scanned repos\n"
+    "  5. repolens flag --work-root work                        flag risk / unknowns\n"
+    "  6. repolens shortlist --work-root work                   settle the flags + approve\n"
+    "  7. repolens report --work-root work                      build the main disclosure\n"
     "\n"
     "global options:\n"
     "  Put global options before the command name, e.g.\n"
@@ -306,15 +307,27 @@ def build_parser() -> argparse.ArgumentParser:
 
     bootstrap_parser = subparsers.add_parser(
         "bootstrap",
-        help="Pre-seed RepoLens's verified shared tool cache for offline scans.",
+        help="Pre-seed RepoLens's verified tools for scans and ScanCode fallback.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        description="Pre-seed RepoLens's verified shared Syft cache for offline scans.",
-        epilog=(
-            "Before: nothing, or an empty shared cache.\n"
-            "Example: repolens bootstrap\n"
-            "Output: ~/.cache/repolens/tools/<version>-<sha256>/syft (or XDG_CACHE_HOME).\n"
-            "Next: `repolens scan --work-root <WORK> --offline`."
+        description=(
+            "Pre-seed RepoLens's verified shared Syft cache and, with --work-root, "
+            "prepare work-root-local ScanCode fallback tools."
         ),
+        epilog=(
+            "Before: nothing, an empty shared cache, or a work root missing ScanCode.\n"
+            "Example: repolens bootstrap\n"
+            "Example: repolens bootstrap --work-root <WORK>\n"
+            "Output: shared Syft cache; with --work-root also writes "
+            "<WORK>/tools/scancode and <WORK>/tool_versions.json.\n"
+            "Next: `repolens scan --work-root <WORK> --offline` or "
+            "`repolens resolve --work-root <WORK> --retry-scancode`."
+        ),
+    )
+    bootstrap_parser.add_argument(
+        "--work-root",
+        type=Path,
+        metavar="PATH",
+        help="Also prepare work-root-local ScanCode fallback tools.",
     )
     bootstrap_parser.set_defaults(handler=_bootstrap_command)
 
@@ -819,7 +832,6 @@ def _stage_stub(args: argparse.Namespace) -> CommandResult:
 
 
 def _bootstrap_command(args: argparse.Namespace) -> CommandResult:
-    del args
     try:
         result = ensure_syft_cached()
     except UsageError as exc:
@@ -828,10 +840,68 @@ def _bootstrap_command(args: argparse.Namespace) -> CommandResult:
         raise InternalError(f"Syft bootstrap integrity failure: {exc}") from exc
 
     status = "acquired and verified" if result.acquired else "already verified"
-    return CommandResult(
-        CommandStatus.SUCCESS,
-        f"Syft {result.pin.version} ({result.pin.short_sha256}...) {status}: {result.path}",
+    lines = [f"Syft {result.pin.version} ({result.pin.short_sha256}...) {status}: {result.path}"]
+    work_root = getattr(args, "work_root", None)
+    if work_root is not None:
+        scancode_path = _bootstrap_scancode_for_work_root(Path(work_root))
+        lines.append(
+            "ScanCode fallback ready for "
+            f"{_resolved_path(Path(work_root))}: {scancode_path}"
+        )
+        lines.append(
+            "Next: repolens resolve --work-root "
+            f"{shlex.quote(str(work_root))} --retry-scancode"
+        )
+    return CommandResult(CommandStatus.SUCCESS, "\n".join(lines))
+
+
+def _bootstrap_scancode_for_work_root(work_root: Path) -> Path:
+    from repolens.bootstrap.errors import BootstrapError
+    from repolens.bootstrap.orchestrate import default_make_executable
+    from repolens.bootstrap.pins import load_pins
+    from repolens.bootstrap.record import write_tool_versions
+    from repolens.bootstrap.scancode import (
+        install_scancode_venv,
+        scancode_venv_digest,
+        scancode_venv_source,
+        write_scancode_venv_wrapper,
     )
+    from repolens.bootstrap.syft import ResolvedTool
+
+    root = Path(work_root)
+    tools_dir = root / "tools"
+    try:
+        pins = load_pins()
+        version = pins.tool("scancode").version
+        install_scancode_venv(tools_dir / "scancode-venv", version=version)
+        digest = scancode_venv_digest(version)
+        wrapper = write_scancode_venv_wrapper(
+            tools_dir / "scancode",
+            version=version,
+            install_digest=digest,
+            make_executable=default_make_executable,
+        )
+        write_tool_versions(
+            pins,
+            [
+                ResolvedTool(
+                    name="scancode",
+                    version=version,
+                    digest=digest,
+                    path=wrapper,
+                    source=scancode_venv_source(version),
+                )
+            ],
+            root / "tool_versions.json",
+        )
+    except (BootstrapError, OSError, RuntimeError, ValueError) as exc:
+        raise InputError(
+            f"ScanCode bootstrap failed for {root}: {exc}\n"
+            "Hint: make sure Python venv/pip can run, network access is available, "
+            "and the pinned ScanCode version has a binary wheel for this Python/platform; "
+            "then rerun `repolens bootstrap --work-root <WORK>`."
+        ) from exc
+    return wrapper
 
 
 def _config_schema_command(args: argparse.Namespace) -> CommandResult:
@@ -1288,6 +1358,7 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
     # Remember the chosen work-root so the next step is copy-pasteable after
     # the candidate checklist has been reviewed.
     work_root = Path(args.work_root)
+    bootstrap_command = f"repolens bootstrap --work-root {shlex.quote(str(work_root))}"
     scan_command = f"repolens scan --work-root {shlex.quote(str(work_root))}"
     return CommandResult(
         CommandStatus.SUCCESS,
@@ -1297,6 +1368,7 @@ def _discover_command(args: argparse.Namespace) -> CommandResult:
             f"Created {result.discovered_path} and {result.candidate_path}.\n"
             f"Manual step: open {result.candidate_path}, untick any repos you want "
             "to exclude, and leave checked repos ready for scan.\n"
+            f"Next: prepare work-root tools: {bootstrap_command}\n"
             f"Next CLI stage: {scan_command}"
         ),
     )
@@ -2385,6 +2457,7 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
                     f"Next CLI stage: {flag_command}"
                 ),
             )
+        _ensure_scancode_ready_for_retry(Path(args.work_root))
     paths = []
     total = len(repo_refs)
     progress = _ResolveProgressPrinter(stream=sys.stderr)
@@ -2442,6 +2515,18 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
         CommandStatus.SUCCESS,
         f"{write_summary}\nNext CLI stage: {flag_command}",
     )
+
+
+def _ensure_scancode_ready_for_retry(work_root: Path) -> None:
+    from repolens.resolve.scancode import resolve_scancode_path
+
+    try:
+        resolve_scancode_path(work_root)
+    except InputError as exc:
+        raise InputError(
+            f"ScanCode is not ready for retry: {exc}\n"
+            f"Fix: repolens bootstrap --work-root {shlex.quote(str(work_root))}"
+        ) from exc
 
 
 class _ResolveProgressPrinter:
@@ -2644,7 +2729,10 @@ def _scancode_retry_advisory(
             ),
             f"  Affected repos: {preview}{suffix}",
             "",
-            "After fixing or bootstrapping the pinned ScanCode tool, run:",
+            "Prepare ScanCode for this work root:",
+            f"  repolens bootstrap --work-root {shlex.quote(str(work_root))}",
+            "",
+            "Then retry ScanCode:",
             f"  {retry_command}",
             "",
             "Then rebuild the shortlist inputs:",
@@ -2852,7 +2940,9 @@ def _shortlist_scancode_retry_hint(work_root: Path) -> str:
                 f"  {len(retry_refs)} repo(s) still contain "
                 f"{_SCANCODE_TOOL_UNAVAILABLE_ANCHOR}: {preview}{suffix}"
             ),
-            "  After fixing or bootstrapping ScanCode, retry all affected repos:",
+            "  Prepare ScanCode for this work root:",
+            f"    repolens bootstrap --work-root {work_root_arg}",
+            "  Then retry all affected repos:",
             f"    repolens resolve --work-root {work_root_arg} --retry-scancode",
             "  Or retry only selected repos; repeat --repo-ref for several:",
             (

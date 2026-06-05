@@ -33,6 +33,9 @@ python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene 
 - `syft` is acquired and integrity-verified into a shared cache by `scan` on first use, or
   pre-seeded with `repolens bootstrap` for offline runs; RepoLens never trusts a tool
   already on the machine.
+- `scancode-toolkit` is prepared only when needed for fallback license detection. Use
+  `repolens bootstrap --work-root <WORK>` to create the work-root-local ScanCode wrapper
+  before `resolve --retry-scancode`.
 
 ## What you get
 
@@ -101,13 +104,14 @@ repolens run --work-root work --owner <OWNER> --yes
 ```
 
 For offline runs, `repolens bootstrap` pre-seeds the verified Syft cache before `run` or
-`scan`.
+`scan`. For ScanCode fallback retries, run `repolens bootstrap --work-root work` first.
 
 To step through manually, or to re-run one stage while debugging, use the stage commands:
 
 ```
 repolens discover --owner <OWNER> --repos "sentinel-alpha, sentinel-beta" --work-root work
 #  edit work/repos.candidate.md — untick anything you don't want scanned
+repolens bootstrap --work-root work
 repolens scan    --work-root work
 repolens resolve --work-root work
 repolens flag    --work-root work
@@ -179,9 +183,11 @@ repolens run --work-root work --owner <OWNER>
 
 ```bash
 repolens discover --owner <OWNER> --work-root work
+repolens bootstrap --work-root work
 repolens scan --work-root work
 repolens resolve --work-root work
 # after fixing ScanCode availability, retry only repos that previously hit it:
+# repolens bootstrap --work-root work
 # repolens resolve --work-root work --retry-scancode
 # or retry selected affected repos:
 # repolens resolve --work-root work --retry-scancode --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>

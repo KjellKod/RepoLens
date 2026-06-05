@@ -15,5 +15,5 @@
 # top-level dist here keeps the validator meaningful (it would reject this file
 # if the hash or '==' were missing) without claiming a fake transitive set.
 
-scancode-toolkit==32.3.1 \
+scancode-toolkit==32.4.1 \
     --hash=sha256:0000000000000000000000000000000000000000000000000000000000000050

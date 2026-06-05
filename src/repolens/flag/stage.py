@@ -18,12 +18,12 @@ from repolens.data import store
 from repolens.data.errors import CorruptArtifactError, LimitExceeded, SchemaValidationError
 from repolens.data.limits import SCHEMA_VERSION
 from repolens.flag.dedup import CollectedRecord, GroupOutcome, build_group_outcomes
-from repolens.flag.render import render_shortlist_markdown
 from repolens.policy import PolicyTier, load_default_policy
 from repolens.security.redaction import redact_tokens
 from repolens.shortlist.contexts import ShortlistMetadata, load_shortlist_metadata
 from repolens.shortlist.decisions import apply_decisions, parse_review_decisions
 from repolens.shortlist.grouping import build_groups, group_membership_by_ref
+from repolens.shortlist.render import render_shortlist_markdown
 
 # Tiers that need a human decision land in the shortlist; ALLOW groups produce no item.
 _FLAG_TIERS = frozenset({PolicyTier.BLOCK, PolicyTier.REVIEW, PolicyTier.UNKNOWN})
@@ -76,7 +76,8 @@ def run_flag(work_root: Path) -> FlagResult:
     inventory_path = store.write_inventory(root, inventory_doc)
     shortlist_json_path = store.write_shortlist(root, shortlist_doc)
 
-    markdown = redact_tokens(render_shortlist_markdown(items))
+    metadata = _load_existing_metadata(root)
+    markdown = redact_tokens(render_shortlist_markdown(items, metadata=metadata))
     shortlist_md_path = root / "shortlist.md"
     store.atomic_write_bytes(shortlist_md_path, markdown.encode("utf-8"))
 
