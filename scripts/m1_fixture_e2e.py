@@ -344,6 +344,10 @@ def _validate_and_summarize(work_root: Path, csv_path: Path) -> dict[str, object
     for appendix_path in appendix_paths:
         with appendix_path.open(encoding="utf-8", newline="") as handle:
             appendix_rows.extend(csv.DictReader(handle))
+    boundary_json_path = work_root / "reports" / "dependency-boundaries.json"
+    boundary_payload: dict[str, object] = {}
+    if boundary_json_path.exists():
+        boundary_payload = json.loads(boundary_json_path.read_text(encoding="utf-8"))
 
     monorepo_artifacts = (
         monorepo_sbom["artifacts"]
@@ -389,6 +393,23 @@ def _validate_and_summarize(work_root: Path, csv_path: Path) -> dict[str, object
         "report_docx_exists": (work_root / "reports" / "report.main.docx").exists(),
         "appendix_csv_exists": bool(appendix_paths),
         "appendix_md_exists": bool(list((work_root / "reports").glob("report.appendix.*.md"))),
+        "dependency_boundaries_json_exists": boundary_json_path.exists(),
+        "dependency_boundaries_csv_exists": (
+            work_root / "reports" / "report.dependency-boundaries.csv"
+        ).exists(),
+        "dependency_boundaries_md_exists": (
+            work_root / "reports" / "report.dependency-boundaries.md"
+        ).exists(),
+        "dependency_boundaries_total_component_rows": boundary_payload.get("total_component_rows"),
+        "dependency_boundaries_attributed_rows": boundary_payload.get(
+            "boundary_attributed_row_count"
+        ),
+        "dependency_boundaries_unique_manifest_paths": boundary_payload.get(
+            "unique_manifest_path_count"
+        ),
+        "dependency_boundaries_top_repeated": (boundary_payload.get("top_repeated_packages") or [])[
+            :1
+        ],
     }
 
 

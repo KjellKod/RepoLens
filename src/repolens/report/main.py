@@ -16,6 +16,11 @@ from repolens.data.limits import max_bytes_for
 from repolens.discovery.taxonomy import DEFAULT_CATEGORY
 from repolens.exit_codes import InputError
 from repolens.report.categories import RoutedRecord, build_category_index, route_occurrences
+from repolens.report.dependency_boundaries import (
+    build_dependency_boundary_summary,
+    render_dependency_boundaries_markdown,
+    write_dependency_boundary_artifacts,
+)
 from repolens.report.docx import render_docx
 from repolens.report.gate import ReportGateOpen, run_report_gate
 from repolens.report.selection import (
@@ -98,6 +103,7 @@ class ReportResult:
     file_gaps: tuple[str, ...]
     docx_path: Path | None = None
     appendix_paths: tuple[Path, ...] = ()
+    dependency_boundary_paths: tuple[Path, ...] = ()
     appendices: tuple[ReportAppendixSummary, ...] = ()
     coverage_gaps: tuple[tuple[str, int], ...] = ()
     docx_skipped: bool = False
@@ -173,9 +179,21 @@ def render_main_report(
     records, file_gaps = collect_resolved_records(root)
     split = route_occurrences(records, category_index, selection.include, default_category)
     rows = aggregate_rows(split.main_records)
+    dependency_boundary_summary = build_dependency_boundary_summary(root)
 
     csv_text = redact_tokens(render_csv(rows))
-    markdown_text = redact_tokens(render_markdown(rows, file_gaps))
+    markdown_text = render_markdown(rows, file_gaps)
+    if dependency_boundary_summary is not None:
+        markdown_text = (
+            markdown_text.rstrip()
+            + "\n\n"
+            + render_dependency_boundaries_markdown(
+                dependency_boundary_summary,
+                title="Dependency Boundaries",
+                heading_level=2,
+            )
+        )
+    markdown_text = redact_tokens(markdown_text)
 
     csv_path = output_dir / "report.main.csv"
     markdown_path = output_dir / "report.main.md"
@@ -183,6 +201,12 @@ def render_main_report(
     store.atomic_write_bytes(markdown_path, markdown_text.encode("utf-8"))
 
     appendix_paths: list[Path] = []
+    dependency_boundary_paths: tuple[Path, ...] = ()
+    if dependency_boundary_summary is not None:
+        dependency_boundary_paths = write_dependency_boundary_artifacts(
+            output_dir,
+            dependency_boundary_summary,
+        )
     appendices: list[ReportAppendixSummary] = []
     for label, routed_records in split.appendix_records_by_label.items():
         appendix_rows = aggregate_rows(routed_records)
@@ -234,6 +258,7 @@ def render_main_report(
         row_count=len(rows),
         file_gaps=tuple(file_gaps),
         appendix_paths=tuple(appendix_paths),
+        dependency_boundary_paths=dependency_boundary_paths,
         appendices=tuple(appendices),
         coverage_gaps=_coverage_gap_counts(rows, file_gaps),
         docx_skipped=docx_skipped,
