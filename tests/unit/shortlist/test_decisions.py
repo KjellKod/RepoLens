@@ -108,6 +108,40 @@ def test_reject_mark_recovered() -> None:
     assert decisions["acme-lib|MIT"].status == "rejected"
 
 
+def test_empty_tiers_explain_when_they_fill() -> None:
+    markdown = render_shortlist_markdown([])
+
+    assert "this fills after RepoLens verifies low-risk allow proposals" in markdown
+    assert "this fills for review/block items with enough evidence" in markdown
+    assert "no unresolved, abstained, failed-verification" in markdown
+
+
+def test_verified_candidate_displays_correction_without_changing_ref_key() -> None:
+    items = [
+        {
+            "component_ref": "zope-site|UNKNOWN",
+            "reason": "UNKNOWN",
+            "evidence": {
+                "source_layer": "agent",
+                "url": "https://pypi.org/pypi/zope-site/6.0/json",
+                "anchor": "ZPL-2.1",
+            },
+            "candidate_spdx": "ZPL-2.1",
+            "status": "open",
+            "decided_by": None,
+            "decided_at": None,
+            "note": "agent:verified_awaiting_human",
+        }
+    ]
+
+    markdown = render_shortlist_markdown(items)
+
+    assert "`zope-site|UNKNOWN` -&gt; `ZPL-2.1`" in markdown
+    ticked = _tick(markdown, "zope-site|UNKNOWN", "x")
+    decisions = parse_checkbox_decisions(ticked)
+    assert decisions["zope-site|UNKNOWN"].status == "approved"
+
+
 def test_garbled_key_yields_no_decision() -> None:
     markdown = render_shortlist_markdown(_items())
     ticked = _tick(markdown, "acme-lib|MIT", "x")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,9 +11,12 @@ from repolens.bootstrap.errors import UnhashedRequirement
 from repolens.bootstrap.scancode import (
     DEFAULT_REQUIREMENTS_PATH,
     build_pip_argv,
+    build_scancode_venv_wrapper,
     build_scancode_wrapper,
     install_scancode,
+    install_scancode_venv,
     load_requirements,
+    scancode_venv_digest,
     validate_requirements,
 )
 
@@ -36,7 +40,7 @@ def test_pip_argv_has_require_hashes():
 
 def test_scancode_wrapper_rejects_multiline_version():
     with pytest.raises(ValueError, match="single line"):
-        build_scancode_wrapper("32.3.1\nmalicious", "a" * 64)
+        build_scancode_wrapper("32.4.1\nmalicious", "a" * 64)
 
 
 def test_unhashed_line_rejected():
@@ -82,6 +86,27 @@ def test_install_runs_runner_only_after_validation(tmp_path):
     code = install_scancode(req, runner=runner)
     assert code == 0
     assert calls and "--require-hashes" in calls[0]
+
+
+def test_scancode_venv_wrapper_uses_work_root_local_python() -> None:
+    digest = scancode_venv_digest("32.4.1")
+    wrapper = build_scancode_venv_wrapper("32.4.1", digest)
+
+    assert "scancode-venv/bin/python" in wrapper
+    assert "python3 -m scancode.cli" not in wrapper
+
+
+def test_install_scancode_venv_creates_venv_then_installs_exact_version(tmp_path: Path) -> None:
+    calls: list[list[str]] = []
+
+    def runner(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    install_scancode_venv(tmp_path / "venv", version="32.4.1", python="python-test", runner=runner)
+
+    assert calls[0] == ["python-test", "-m", "venv", str(tmp_path / "venv")]
+    assert calls[1][-2:] == ["--only-binary=:all:", "scancode-toolkit==32.4.1"]
 
 
 def test_install_rejects_unhashed_without_running(tmp_path):

@@ -39,6 +39,19 @@ REF_PREFIX = "<!-- rpl:ref="
 REF_SUFFIX = " -->"
 GROUP_PREFIX = "<!-- rpl:group="
 GROUP_SUFFIX = " -->"
+_EMPTY_TIER_HINTS = {
+    "ACCEPT-RECOMMENDED": (
+        "_none yet - this fills after RepoLens verifies low-risk allow proposals from "
+        "`--proposals`._"
+    ),
+    "NEEDS-JUDGMENT": (
+        "_none yet - this fills for review/block items with enough evidence for group "
+        "judgment. Unresolved or abstained UNKNOWNs usually appear below._"
+    ),
+    "LOW-CONFIDENCE / CONFLICT": (
+        "_none - no unresolved, abstained, failed-verification, or low-confidence items._"
+    ),
+}
 
 
 def encode_component_ref(component_ref: str) -> str:
@@ -84,7 +97,7 @@ def render_shortlist_markdown(
         lines.append("")
         tier_groups = by_tier.get(tier, [])
         if not tier_groups:
-            lines.append("_none_")
+            lines.append(_EMPTY_TIER_HINTS.get(tier, "_none_"))
         else:
             for group in tier_groups:
                 lines.extend(_render_group(group))
@@ -116,7 +129,7 @@ def _render_group(group: ShortlistGroup) -> list[str]:
 
 def _render_item(item: Mapping[str, Any], *, indent: str = "") -> str:
     component_ref = str(item["component_ref"])
-    label = render_code_span(component_ref)
+    label = _component_label(component_ref, item)
     note = item.get("note") or str(item["reason"])
     evidence = item["evidence"] if isinstance(item.get("evidence"), Mapping) else {}
     key = f"{REF_PREFIX}{encode_component_ref(component_ref)}{REF_SUFFIX}"
@@ -124,6 +137,16 @@ def _render_item(item: Mapping[str, Any], *, indent: str = "") -> str:
     checkbox = _checkbox_for_status(status)
     decided = _decided_suffix(item)
     return f"{indent}- {checkbox} {label} — {note} — {_evidence_cell(evidence)}{decided} {key}"
+
+
+def _component_label(component_ref: str, item: Mapping[str, Any]) -> str:
+    candidate = item.get("candidate_spdx")
+    if not isinstance(candidate, str) or not candidate.strip():
+        return render_code_span(component_ref)
+    _name, separator, current_spdx = component_ref.rpartition("|")
+    if not separator or current_spdx == candidate:
+        return render_code_span(component_ref)
+    return f"{render_code_span(component_ref)} -> {render_code_span(candidate)}"
 
 
 def _checkbox_for_status(status: str) -> str:

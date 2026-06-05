@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import hashlib
 import re
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -23,6 +25,7 @@ PipRunner = Callable[[list[str]], int]
 #: Path of the hash-pinned requirements file shipped with the package.
 DEFAULT_REQUIREMENTS_PATH = Path(__file__).with_name("scancode.requirements.txt")
 SCANCODE_REQUIREMENTS_SOURCE_PREFIX = "hash-pinned-requirements:"
+SCANCODE_VENV_SOURCE_PREFIX = "exact-pip-venv:"
 SCANCODE_WRAPPER_MARKER = "repolens-scancode-wrapper/v1"
 
 _HASH_RE = re.compile(r"--hash=sha256:[0-9a-f]{64}")
@@ -116,6 +119,51 @@ def build_scancode_wrapper(version: str, requirements_digest: str) -> str:
     )
 
 
+def scancode_venv_source(version: str) -> str:
+    """Return the recorded source string for the user-facing venv bootstrap."""
+
+    return f"{SCANCODE_VENV_SOURCE_PREFIX}scancode-toolkit=={_clean_version(version)}"
+
+
+def scancode_venv_digest(version: str) -> str:
+    """Return a stable digest for the exact ScanCode venv install spec."""
+
+    return hashlib.sha256(scancode_venv_source(version).encode("utf-8")).hexdigest()
+
+
+def build_scancode_venv_wrapper(version: str, install_digest: str) -> str:
+    """Build the canonical work-root-local ScanCode venv wrapper."""
+
+    clean_version = _clean_version(version)
+    if not _HASH_RE.fullmatch(f"--hash=sha256:{install_digest}"):
+        raise ValueError("ScanCode install digest must be a lowercase sha256")
+    return (
+        "#!/bin/sh\n"
+        f"# {SCANCODE_WRAPPER_MARKER}\n"
+        f"# scancode-version: {clean_version}\n"
+        f"# install-source: {scancode_venv_source(clean_version)}\n"
+        f"# install-sha256: {install_digest}\n"
+        'SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\n'
+        'exec "$SCRIPT_DIR/scancode-venv/bin/python" -m scancode.cli "$@"\n'
+    )
+
+
+def write_scancode_venv_wrapper(
+    dest: Path | str,
+    *,
+    version: str,
+    install_digest: str,
+    make_executable: Callable[[Path], None],
+) -> Path:
+    """Write the canonical venv-backed ScanCode wrapper and mark it executable."""
+
+    wrapper = Path(dest)
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    wrapper.write_text(build_scancode_venv_wrapper(version, install_digest), encoding="utf-8")
+    make_executable(wrapper)
+    return wrapper
+
+
 def write_scancode_wrapper(
     dest: Path | str,
     *,
@@ -130,6 +178,58 @@ def write_scancode_wrapper(
     wrapper.write_text(build_scancode_wrapper(version, requirements_digest), encoding="utf-8")
     make_executable(wrapper)
     return wrapper
+
+
+def install_scancode_venv(
+    venv_dir: Path | str,
+    *,
+    version: str,
+    python: str = sys.executable,
+    runner: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
+) -> None:
+    """Create a work-root-local venv and install the exact pinned ScanCode version."""
+
+    venv = Path(venv_dir)
+    run = runner or _run_command
+    _run_checked(run, [python, "-m", "venv", str(venv)], "create ScanCode virtualenv")
+    venv_python = venv / "bin" / "python"
+    _run_checked(
+        run,
+        [
+            str(venv_python),
+            "-m",
+            "pip",
+            "install",
+            "--only-binary=:all:",
+            f"scancode-toolkit=={_clean_version(version)}",
+        ],
+        "install ScanCode",
+    )
+
+
+def _run_command(argv: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(argv, capture_output=True, text=True, check=False)
+
+
+def _run_checked(
+    runner: Callable[[list[str]], subprocess.CompletedProcess[str]],
+    argv: list[str],
+    action: str,
+) -> None:
+    completed = runner(argv)
+    if completed.returncode != 0:
+        stderr = (completed.stderr or completed.stdout or "").strip()
+        detail = f": {stderr}" if stderr else ""
+        raise RuntimeError(f"failed to {action}{detail}")
+
+
+def _clean_version(version: str) -> str:
+    clean_version = version.strip()
+    if not clean_version:
+        raise ValueError("ScanCode version must be non-empty")
+    if "\n" in clean_version or "\r" in clean_version:
+        raise ValueError("ScanCode version must be a single line")
+    return clean_version
 
 
 def build_pip_argv(requirements_path: Path | str, *, python: str = "python3") -> list[str]:

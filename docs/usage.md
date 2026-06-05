@@ -12,7 +12,8 @@
   `repolens` command and the importable package the `python -m repolens.*` commands use.
 - `syft` — acquired by `scan` on first use into RepoLens's shared verified cache, or
   pre-seeded with `repolens bootstrap` for offline runs.
-- `scancode` — version-pinned by bootstrap requirements for scoped fallback use.
+- `scancode-toolkit` — prepared with `repolens bootstrap --work-root <WORK>` when
+  scoped fallback retries are needed.
 - For mobile license enrichment (optional, auto-detected): a build toolchain
   (JDK + Gradle for Android, Xcode/SPM or a `GITHUB_TOKEN` for iOS).
 
@@ -111,6 +112,15 @@ repolens bootstrap
 repolens scan --work-root work --offline
 ```
 
+`repolens bootstrap` by itself prepares the shared Syft cache. ScanCode fallback
+is work-root-local because `resolve` validates `<WORK>/tools/scancode` against
+`<WORK>/tool_versions.json` before it can retry package-local scans:
+
+```bash
+repolens bootstrap --work-root <WORK>
+repolens resolve --work-root <WORK> --retry-scancode
+```
+
 Validate the manifest offline, no downloads:
 
 ```
@@ -120,8 +130,11 @@ python3 -m repolens.bootstrap --dry-run
 `repolens bootstrap` and `scan --yes` verify Syft **fail-closed**: they check the
 release artifact's sha256, verify the cosign-signed checksums file, then cross-check that
 the pinned digest matches the signed entry — all **before** the Syft executable is exposed
-from the cache. ScanCode installs via a hash-pinned `--require-hashes` requirements file
-when the full injected-runner library flow (`repolens.bootstrap.run(...)`) is used.
+from the cache. `repolens bootstrap --work-root <WORK>` prepares an isolated
+`<WORK>/tools/scancode-venv`, installs the exact pinned ScanCode version with binary-only
+pip resolution, writes `<WORK>/tools/scancode`, and records the proof in
+`<WORK>/tool_versions.json`. If Python, pip, network access, or wheel compatibility fails,
+the command exits with the pip error and a fix hint instead of writing a trusted proof.
 
 How the verification works (pins, the fail-closed gate order, ScanCode `--require-hashes`,
 `tool_versions.json`) is described in
@@ -414,6 +427,7 @@ shipped-license gaps in `report.main.{md,csv,docx}`.
 
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
+repolens bootstrap --work-root work  # prepare work-root-local ScanCode fallback tools
 repolens scan      --work-root work  # first use verifies Syft cache, then writes SBOMs
 repolens resolve --work-root work    # license resolution for scanned repo SBOMs
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
@@ -631,8 +645,8 @@ uses the checked repo list and resolves the checked repos that already have scan
 SBOMs. Checked repos without SBOMs are skipped with a warning so stale approval
 files do not block available scan output. If discover artifacts are absent,
 mismatched, or none of the checked repos have SBOMs, `resolve` falls back to
-every available SBOM under `<WORK>/work/`. Use `--repo-ref <REPO_REF>` only when
-you intentionally want to resolve a single repo artifact directory.
+every available SBOM under `<WORK>/work/`. Use one or more `--repo-ref <REPO_REF>` flags
+only when you intentionally want to resolve selected repo artifact directories.
 
 That normal form preserves the API-layer behavior: Syft-declared licenses and
 verified metadata API evidence are written to `resolved.ndjson`; unresolved records
@@ -653,11 +667,17 @@ than one scanned repo exists, because one source checkout can only describe one
 repository. It lets `resolve` detect mobile markers and derive package-local
 ScanCode targets from SBOM `locations`. ScanCode is invoked only for dependencies
 still unresolved by earlier layers, and target selection rejects broad repository-root
-scans and paths outside the source root. If the canonical hash-pinned/bootstrap-produced
-ScanCode executable is unavailable, affected packages stay unresolved instead of failing
+scans and paths outside the source root. If the bootstrap-produced ScanCode executable is
+unavailable during normal resolve, affected packages stay unresolved instead of failing
 the run.
 
-After fixing or bootstrapping ScanCode, retry only the checked repos whose existing
+Before retrying ScanCode, prepare the work-root-local fallback tool:
+
+```bash
+repolens bootstrap --work-root <WORK>
+```
+
+Then retry only the checked repos whose existing
 `resolved.ndjson` contains `unresolved:scancode_tool_unavailable`:
 
 ```bash
@@ -667,7 +687,13 @@ repolens flag --work-root <WORK>
 
 This reuses the same repo list and existing SBOM/source snapshot artifacts, rewrites
 `resolved.ndjson` only for affected repos, and leaves normal `run` resume behavior
-unchanged. Add `--repo-ref <REPO_REF>` to narrow the retry to one repo.
+unchanged. Add one or more `--repo-ref <REPO_REF>` flags to narrow the retry to selected
+repos:
+
+```bash
+repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME>
+repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>
+```
 
 Native mobile enrichment is opt-in and remains off by default even when mobile markers
 are present:
@@ -722,6 +748,12 @@ are not runtime-configurable through local config today.
 and `shortlist.md` that `flag` produced, renders a grouped review surface, and settles only
 the items a human approved or rejected:
 
+If you later retry resolution and rerun `flag`, RepoLens first ingests any pending
+`shortlist.md` checkbox decisions and then preserves approved/rejected decisions for
+matching `component_ref` rows. New or materially changed findings stay open, so a ScanCode
+or resolver retry should not erase completed human review while still forcing review of
+different evidence.
+
 1. **Ingest human decisions.** Any item whose checkbox you ticked in `shortlist.md`
    (`[x]` approve, `[r]` reject) is recorded with `status`, `decided_by` (from
    `--identity`, a runtime input — never an owner/repo literal), a UTC `decided_at`, and
@@ -770,6 +802,22 @@ repolens shortlist --work-root <WORK> --emit-contexts <WORK>/shortlist.contexts.
 # <WORK>/shortlist.proposals.json plus <WORK>/shortlist.review.md
 repolens shortlist --work-root <WORK> --proposals <WORK>/shortlist.proposals.json
 ```
+
+If any open rows came from `unresolved:scancode_tool_unavailable`, the console also prints
+the deterministic retry path first:
+
+```bash
+repolens bootstrap --work-root <WORK>
+repolens resolve --work-root <WORK> --retry-scancode
+repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME>
+repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>
+repolens flag --work-root <WORK>
+```
+
+Use the all-repos form when you can afford it, or the repeated `--repo-ref` form to retry
+only selected repos before rerunning `flag`. `flag` preserves matching approved/rejected
+shortlist decisions when it rebuilds the shortlist, and keeps new or materially changed
+findings open.
 
 Use this when the open rows include `UNKNOWN`, abstained, low-confidence, or stale evidence
 items that public package metadata might clarify. After proposal ingestion, review
