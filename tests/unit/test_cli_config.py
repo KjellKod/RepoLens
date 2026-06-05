@@ -278,7 +278,7 @@ def test_config_init_accepts_dead_repo_list_then_prompts_for_reason(
                 "",
                 "",
                 "",
-                "developer,node-onfleet",
+                "developer,legacy-node-sdk",
                 "retired SDK",
                 "",
                 "",
@@ -296,7 +296,7 @@ def test_config_init_accepts_dead_repo_list_then_prompts_for_reason(
     values = json.loads(path.read_text(encoding="utf-8"))
     assert values["discover"]["taxonomy"]["dead"] == {
         "developer": "retired SDK",
-        "node-onfleet": "retired SDK",
+        "legacy-node-sdk": "retired SDK",
     }
     out = capsys.readouterr().out
     assert "Dead repos need a visible reason" in out
