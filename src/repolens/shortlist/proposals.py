@@ -9,11 +9,13 @@ from functools import lru_cache
 from importlib import resources
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlparse
 
 from repolens.data import store
 from repolens.data.errors import SchemaValidationError
 from repolens.data.limits import max_bytes_for
 from repolens.resolve.models import FetchFunction
+from repolens.resolve.purl import parse_purl
 from repolens.security.http_client import Resolver, fetch_url
 from repolens.shortlist.agent import MAX_FETCHES_PER_ITEM, Resolution
 from repolens.shortlist.contexts import ShortlistMetadata, package_for_item
@@ -32,6 +34,8 @@ class ProposalRecord:
     confidence: str | int | float | None
     rationale: str | None
     sanity_check: str | None
+    evidence_kind: str | None
+    source_repo: Mapping[str, Any] | None
     abstain: bool
     reason: str | None
     invalid_reason: str | None = None
@@ -47,6 +51,12 @@ class ProposalRecord:
         )
 
     def ai_suggestion(self) -> dict[str, Any]:
+        source_repo = (
+            dict(self.source_repo)
+            if self.source_repo is not None
+            and _optional_str(self.source_repo.get("provenance")) == "package_metadata"
+            else None
+        )
         return {
             "component_ref": self.component_ref,
             "spdx_id": self.spdx_id,
@@ -56,6 +66,8 @@ class ProposalRecord:
             "confidence": self.confidence,
             "rationale": self.rationale,
             "sanity_check": self.sanity_check,
+            "evidence_kind": self.evidence_kind,
+            "source_repo": source_repo,
             "abstain": self.abstain,
             "reason": self.reason,
             "invalid_reason": self.invalid_reason,
@@ -199,6 +211,15 @@ def _apply_item_proposals(
         assert proposal.spdx_id is not None
         assert proposal.evidence_url is not None
         assert proposal.evidence_anchor is not None
+        source_repo_reason = _github_source_repo_proposal_mismatch(
+            proposal,
+            record,
+            metadata,
+        )
+        if source_repo_reason is not None:
+            record["note"] = f"verify_failed:{source_repo_reason}"
+            record["verify_reason"] = source_repo_reason
+            continue
         verified = verify_agent_resolution(
             Resolution(
                 spdx_id=proposal.spdx_id,
@@ -244,6 +265,141 @@ def _expected_ref_for_item(
         return None
     text = str(version).strip()
     return text or None
+
+
+def _github_source_repo_proposal_mismatch(
+    proposal: ProposalRecord,
+    record: Mapping[str, Any],
+    metadata: ShortlistMetadata | None,
+) -> str | None:
+    parsed = urlparse(proposal.evidence_url or "")
+    if parsed.hostname != "api.github.com":
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) != 4 or parts[0] != "repos" or parts[3] != "license":
+        return None
+    if proposal.evidence_kind != "github_source_repo" or proposal.source_repo is None:
+        return "verify:source_repo_provenance_required"
+    source_repo = proposal.source_repo
+    if _optional_str(source_repo.get("provenance")) != "package_metadata":
+        return "verify:source_repo_provenance_required"
+    if source_repo.get("bound_to_package") is not True:
+        return "verify:source_repo_provenance_required"
+    owner = _optional_str(source_repo.get("owner"))
+    repo = _optional_str(source_repo.get("repo"))
+    ref = _optional_str(source_repo.get("ref"))
+    if owner is None or repo is None or ref is None:
+        return "verify:source_repo_provenance_required"
+    if parts[1] != owner or parts[2] != repo:
+        return "verify:source_repo_mismatch"
+    refs = [value.strip() for value in parse_qs(parsed.query).get("ref", []) if value.strip()]
+    if not refs or refs[0] != ref:
+        return "verify:source_repo_ref_mismatch"
+    current = _current_package_source_repos(record, metadata)
+    if (owner, repo) not in current:
+        return "verify:source_repo_mismatch"
+    expected_ref = _expected_ref_for_item(record, metadata)
+    if not _proposal_ref_allowed(ref, expected_ref, current[(owner, repo)]):
+        return "verify:source_repo_ref_mismatch"
+    return None
+
+
+def _current_package_source_repos(
+    record: Mapping[str, Any],
+    metadata: ShortlistMetadata | None,
+) -> dict[tuple[str, str], set[str]]:
+    if metadata is None:
+        return {}
+    package_metadata = package_for_item(record, metadata)
+    refs: dict[tuple[str, str], set[str]] = {}
+    for value in (package_metadata.purl, package_metadata.source_url, package_metadata.package):
+        parsed = _github_repo_from_metadata(value)
+        if parsed is None:
+            continue
+        owner, repo, ref = parsed
+        refs.setdefault((owner, repo), set())
+        if ref is not None:
+            refs[(owner, repo)].add(ref)
+    return refs
+
+
+def _github_repo_from_metadata(value: str | None) -> tuple[str, str, str | None] | None:
+    if not value:
+        return None
+    parsed_purl = parse_purl(value)
+    if parsed_purl is not None and parsed_purl.package_type in {"swift", "swiftpm"}:
+        segments = [
+            segment
+            for segment in ((parsed_purl.namespace or "").split("/") + [parsed_purl.name])
+            if segment
+        ]
+        if len(segments) >= 3 and segments[0].casefold() == "github.com":
+            return (segments[1], _strip_git(segments[2]), parsed_purl.version)
+    text = value.strip()
+    plain_github = text.startswith("github.com/")
+    if text.startswith("github.com/"):
+        text = f"https://{text}"
+    parsed = urlparse(text)
+    if parsed.hostname not in {"github.com", "raw.githubusercontent.com"}:
+        return None
+    if parsed.query or parsed.fragment or parsed.username or parsed.password:
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if parsed.hostname == "raw.githubusercontent.com":
+        if len(parts) != 4 or parts[3] not in _CONTROLLED_LICENSE_PATHS:
+            return None
+        owner, repo, ref = parts[0], _strip_git(parts[1]), parts[2]
+    elif len(parts) == 2 or (plain_github and len(parts) == 3):
+        owner, repo, ref = parts[0], _strip_git(parts[1]), None
+    elif len(parts) == 5 and parts[2] in {"blob", "tree"} and parts[4] in _CONTROLLED_LICENSE_PATHS:
+        owner, repo, ref = parts[0], _strip_git(parts[1]), parts[3]
+    else:
+        return None
+    if (
+        not _safe_segment(owner)
+        or not _safe_segment(repo)
+        or (ref is not None and not _safe_ref(ref))
+    ):
+        return None
+    return (owner, repo, ref)
+
+
+def _strip_git(value: str) -> str:
+    return value[:-4] if value.endswith(".git") else value
+
+
+_CONTROLLED_LICENSE_PATHS = frozenset(
+    {"LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING", "COPYING.md"}
+)
+
+
+def _safe_segment(value: str) -> bool:
+    if not value or value in {".", ".."} or not value.isascii():
+        return False
+    return all(char.isalnum() or char in "._-" for char in value)
+
+
+def _safe_ref(value: str) -> bool:
+    if not value or value in {".", ".."} or not value.isascii():
+        return False
+    return not any(char in value for char in "/\\?#@:")
+
+
+def _proposal_ref_allowed(ref: str, expected_ref: str | None, source_refs: set[str]) -> bool:
+    if ref in source_refs and _is_sha(ref):
+        return True
+    if expected_ref is None:
+        return False
+    refs = {expected_ref}
+    if expected_ref.startswith("v") and len(expected_ref) > 1:
+        refs.add(expected_ref[1:])
+    else:
+        refs.add(f"v{expected_ref}")
+    return ref in refs
+
+
+def _is_sha(value: str) -> bool:
+    return len(value) == 40 and all(char in "0123456789abcdefABCDEF" for char in value)
 
 
 def _group_by_ref(records: Sequence[ProposalRecord]) -> dict[str, tuple[ProposalRecord, ...]]:
@@ -296,6 +452,8 @@ def _validate_proposal_artifact_shape(raw: list[object]) -> None:
 def _matches_schema_type(value: object, expected: set[str]) -> bool:
     if "boolean" in expected and isinstance(value, bool):
         return True
+    if "object" in expected and isinstance(value, Mapping):
+        return True
     if "string" in expected and isinstance(value, str):
         return True
     return "number" in expected and isinstance(value, int | float) and not isinstance(value, bool)
@@ -312,6 +470,8 @@ def _parse_entry(entry: object) -> ProposalRecord:
             confidence=None,
             rationale=None,
             sanity_check=None,
+            evidence_kind=None,
+            source_repo=None,
             abstain=True,
             reason=None,
             invalid_reason="proposal:invalid_non_object",
@@ -335,6 +495,10 @@ def _parse_entry(entry: object) -> ProposalRecord:
             confidence=_confidence(entry.get("confidence")),
             rationale=_optional_str(entry.get("rationale")),
             sanity_check=_optional_str(entry.get("sanity_check")),
+            evidence_kind=_optional_str(entry.get("evidence_kind")),
+            source_repo=(
+                entry.get("source_repo") if isinstance(entry.get("source_repo"), Mapping) else None
+            ),
             abstain=True,
             reason=reason,
             invalid_reason=invalid_reason,
@@ -347,6 +511,10 @@ def _parse_entry(entry: object) -> ProposalRecord:
     confidence = _confidence(entry.get("confidence"))
     rationale = _required_str(entry, "rationale")
     sanity_check = _required_str(entry, "sanity_check")
+    evidence_kind = _optional_str(entry.get("evidence_kind"))
+    source_repo = (
+        entry.get("source_repo") if isinstance(entry.get("source_repo"), Mapping) else None
+    )
     if invalid_reason is None:
         for field, value in (
             ("spdx_id", spdx_id),
@@ -371,6 +539,8 @@ def _parse_entry(entry: object) -> ProposalRecord:
         confidence=confidence,
         rationale=rationale,
         sanity_check=sanity_check,
+        evidence_kind=evidence_kind,
+        source_repo=source_repo,
         abstain=False,
         reason=reason,
         invalid_reason=invalid_reason,

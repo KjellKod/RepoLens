@@ -29,6 +29,8 @@ _EVIDENCE_OUTCOMES = frozenset(
         "legal_or_vendor_review",
     }
 )
+_SOURCE_REPO_PROVENANCE = frozenset({"package_metadata", "external_candidate"})
+_SOURCE_REPO_REF_KINDS = frozenset({"version", "commit", "default_branch", "unknown"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +77,41 @@ class ConflictEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class SourceRepoEvidence:
+    """Structured GitHub source-repo provenance for researched evidence."""
+
+    host: str
+    owner: str
+    repo: str
+    provenance: str
+    provenance_detail: str
+    bound_to_package: bool
+    ref: str | None = None
+    ref_kind: str | None = None
+    fetch_url: str | None = None
+    display_url: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        value: dict[str, Any] = {
+            "host": self.host,
+            "owner": self.owner,
+            "repo": self.repo,
+            "provenance": self.provenance,
+            "provenance_detail": self.provenance_detail,
+            "bound_to_package": self.bound_to_package,
+        }
+        if self.ref is not None:
+            value["ref"] = self.ref
+        if self.ref_kind is not None:
+            value["ref_kind"] = self.ref_kind
+        if self.fetch_url is not None:
+            value["fetch_url"] = self.fetch_url
+        if self.display_url is not None:
+            value["display_url"] = self.display_url
+        return value
+
+
+@dataclass(frozen=True, slots=True)
 class EvidenceIdentity:
     """Stable facts used to prevent stale research rows from attaching."""
 
@@ -107,9 +144,11 @@ class EvidenceRecord:
     machine_verification: str
     lookups_attempted: tuple[str, ...]
     likely_spdx: str | None
+    human_candidate_spdx: str | None
     confidence: str | int | float | None
     browser_evidence: tuple[BrowserEvidence, ...]
     conflicts: tuple[ConflictEvidence, ...]
+    source_repo: SourceRepoEvidence | None
     rationale: str | None
     review_note: str | None
 
@@ -127,12 +166,16 @@ class EvidenceRecord:
         }
         if self.likely_spdx is not None:
             value["likely_spdx"] = self.likely_spdx
+        if self.human_candidate_spdx is not None:
+            value["human_candidate_spdx"] = self.human_candidate_spdx
         if self.confidence is not None:
             value["confidence"] = self.confidence
         if self.browser_evidence:
             value["browser_evidence"] = [entry.to_dict() for entry in self.browser_evidence]
         if self.conflicts:
             value["conflicts"] = [entry.to_dict() for entry in self.conflicts]
+        if self.source_repo is not None:
+            value["source_repo"] = self.source_repo.to_dict()
         if self.rationale is not None:
             value["rationale"] = self.rationale
         if self.review_note is not None:
@@ -250,9 +293,11 @@ def _parse_record(entry: Mapping[str, object], index: int) -> EvidenceRecord:
         machine_verification=machine_verification,
         lookups_attempted=lookups_attempted,
         likely_spdx=_optional_text(entry.get("likely_spdx")),
+        human_candidate_spdx=_optional_text(entry.get("human_candidate_spdx")),
         confidence=_confidence(entry.get("confidence")),
         browser_evidence=browser_evidence,
         conflicts=conflicts,
+        source_repo=_parse_source_repo(entry.get("source_repo"), index),
         rationale=_optional_text(entry.get("rationale")),
         review_note=_optional_text(entry.get("review_note")),
     )
@@ -282,6 +327,10 @@ def _validate_outcome(record: EvidenceRecord, index: int) -> None:
             raise SchemaValidationError(
                 f"shortlist_evidence.{index}: pending outcome requires likely_spdx and links"
             )
+        if record.human_candidate_spdx is not None and not _is_external_candidate(record):
+            raise SchemaValidationError(
+                f"shortlist_evidence.{index}: human candidate requires external source_repo"
+            )
     elif record.outcome == "no_public_evidence":
         if record.machine_verification != "no_public_evidence" or not record.lookups_attempted:
             raise SchemaValidationError(
@@ -305,6 +354,21 @@ def _validate_outcome(record: EvidenceRecord, index: int) -> None:
             raise SchemaValidationError(
                 f"shortlist_evidence.{index}: legal review requires links or lookups"
             )
+    if (
+        record.source_repo is not None
+        and record.source_repo.provenance == "external_candidate"
+        and record.source_repo.bound_to_package
+    ):
+        raise SchemaValidationError(
+            f"shortlist_evidence.{index}: external candidate cannot be package-bound"
+        )
+    if (
+        record.human_candidate_spdx is not None
+        and record.likely_spdx != record.human_candidate_spdx
+    ):
+        raise SchemaValidationError(
+            f"shortlist_evidence.{index}: human_candidate_spdx must match likely_spdx"
+        )
 
 
 def _parse_browser_evidence(value: Mapping[str, object], index: int) -> BrowserEvidence:
@@ -329,6 +393,51 @@ def _parse_conflict_evidence(value: Mapping[str, object], index: int) -> Conflic
         label=label,
         url=url,
         anchor=_optional_text(value.get("anchor")),
+    )
+
+
+def _parse_source_repo(value: object, index: int) -> SourceRepoEvidence | None:
+    if value is None:
+        return None
+    if not isinstance(value, Mapping):
+        raise SchemaValidationError(f"shortlist_evidence.{index}.source_repo: expected object")
+    host = _required_text(value.get("host"), "source_repo.host").casefold()
+    if host != "github.com":
+        raise SchemaValidationError(f"shortlist_evidence.{index}.source_repo.host: unsupported")
+    provenance = _required_text(value.get("provenance"), "source_repo.provenance")
+    if provenance not in _SOURCE_REPO_PROVENANCE:
+        raise SchemaValidationError(
+            f"shortlist_evidence.{index}.source_repo.provenance: unsupported"
+        )
+    ref_kind = _optional_text(value.get("ref_kind"))
+    if ref_kind is not None and ref_kind not in _SOURCE_REPO_REF_KINDS:
+        raise SchemaValidationError(f"shortlist_evidence.{index}.source_repo.ref_kind: unsupported")
+    source_repo = SourceRepoEvidence(
+        host=host,
+        owner=_required_text(value.get("owner"), "source_repo.owner"),
+        repo=_required_text(value.get("repo"), "source_repo.repo"),
+        ref=_optional_text(value.get("ref")),
+        ref_kind=ref_kind,
+        provenance=provenance,
+        provenance_detail=_required_text(
+            value.get("provenance_detail"), "source_repo.provenance_detail"
+        ),
+        bound_to_package=bool(value.get("bound_to_package")),
+        fetch_url=_optional_text(value.get("fetch_url")),
+        display_url=_optional_text(value.get("display_url")),
+    )
+    if source_repo.fetch_url is not None:
+        _validate_direct_link("fetch_url", source_repo.fetch_url, "source_repo.fetch_url")
+    if source_repo.display_url is not None:
+        _validate_direct_link("display_url", source_repo.display_url, "source_repo.display_url")
+    return source_repo
+
+
+def _is_external_candidate(record: EvidenceRecord) -> bool:
+    return (
+        record.source_repo is not None
+        and record.source_repo.provenance == "external_candidate"
+        and not record.source_repo.bound_to_package
     )
 
 
@@ -394,6 +503,7 @@ __all__ = [
     "ConflictEvidence",
     "EvidenceIdentity",
     "EvidenceRecord",
+    "SourceRepoEvidence",
     "apply_evidence",
     "identity_for_context",
     "identity_for_item",

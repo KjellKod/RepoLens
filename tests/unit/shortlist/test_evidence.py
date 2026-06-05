@@ -180,6 +180,24 @@ def _evidence_record(
     return record
 
 
+def _external_candidate_record(tmp_path: Path) -> dict[str, object]:
+    record = _evidence_record(tmp_path)
+    record["human_candidate_spdx"] = "MIT"
+    record["source_repo"] = {
+        "host": "github.com",
+        "owner": "sentinel",
+        "repo": "acme-lib",
+        "ref": "1.2.3",
+        "ref_kind": "version",
+        "provenance": "external_candidate",
+        "provenance_detail": "triage_evidence_url",
+        "bound_to_package": False,
+        "fetch_url": "https://api.github.com/repos/sentinel/acme-lib/license?ref=1.2.3",
+        "display_url": "https://github.com/sentinel/acme-lib/blob/1.2.3/LICENSE",
+    }
+    return record
+
+
 def test_load_evidence_rejects_unknown_fields(tmp_path: Path) -> None:
     path = tmp_path / "shortlist.evidence.json"
     record = _evidence_record(tmp_path)
@@ -210,6 +228,27 @@ def test_pending_evidence_requires_direct_https_link_and_label(tmp_path: Path) -
     store.atomic_write_json(path, [record])
 
     with pytest.raises(SchemaValidationError, match="placeholder"):
+        load_evidence(path)
+
+
+def test_external_candidate_source_repo_schema_loads(tmp_path: Path) -> None:
+    path = tmp_path / "shortlist.evidence.json"
+    store.atomic_write_json(path, [_external_candidate_record(tmp_path)])
+
+    loaded = load_evidence(path)
+
+    assert loaded[0].human_candidate_spdx == "MIT"
+    assert loaded[0].source_repo is not None
+    assert loaded[0].source_repo.provenance == "external_candidate"
+
+
+def test_human_candidate_requires_external_source_repo(tmp_path: Path) -> None:
+    path = tmp_path / "shortlist.evidence.json"
+    record = _evidence_record(tmp_path)
+    record["human_candidate_spdx"] = "MIT"
+    store.atomic_write_json(path, [record])
+
+    with pytest.raises(SchemaValidationError, match="human candidate requires external"):
         load_evidence(path)
 
 
@@ -306,3 +345,15 @@ def test_emitted_contexts_research_and_ingest_preserve_identity_facts(tmp_path: 
     assert item["research_evidence"]["ecosystem"] == "pypi"
     assert item["research_evidence"]["found_in"] == ["sentinel-alpha"]
     assert item["research_evidence"]["browser_evidence"][0]["label"] == "PyPI metadata"
+
+
+def test_external_candidate_evidence_persists_in_shortlist_schema(tmp_path: Path) -> None:
+    _write_shortlist(tmp_path)
+    evidence_path = tmp_path / "shortlist.evidence.json"
+    store.atomic_write_json(evidence_path, [_external_candidate_record(tmp_path)])
+
+    run_shortlist(tmp_path, agent_client=_ExplodingAgent(), evidence_path=evidence_path)
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["research_evidence"]["human_candidate_spdx"] == "MIT"
+    assert item["research_evidence"]["source_repo"]["provenance"] == "external_candidate"

@@ -157,16 +157,25 @@ def _render_item(
     found_in = _found_in_cell(item, metadata)
     evidence_cell = _combined_evidence_cell(evidence, research)
     verifier = _machine_verification_cell(research)
+    provenance = _source_candidate_cell(research)
+    provenance_text = f" — {provenance}" if provenance else ""
     return (
         f"{indent}- {checkbox} {label} — found in {found_in} — {note} — "
-        f"{evidence_cell} — {verifier}{decided} {key}"
+        f"{evidence_cell}{provenance_text} — {verifier}{decided} {key}"
     )
 
 
 def _component_label(component_ref: str, item: Mapping[str, Any]) -> str:
     candidate = item.get("candidate_spdx")
     if not isinstance(candidate, str) or not candidate.strip():
-        return render_code_span(component_ref)
+        research = (
+            item.get("research_evidence")
+            if isinstance(item.get("research_evidence"), Mapping)
+            else {}
+        )
+        candidate = _human_candidate_spdx(research)
+        if candidate is None:
+            return render_code_span(component_ref)
     _name, separator, current_spdx = component_ref.rpartition("|")
     if not separator or current_spdx == candidate:
         return render_code_span(component_ref)
@@ -274,6 +283,33 @@ def _machine_verification_cell(research: Mapping[str, Any]) -> str:
     if outcome is not None:
         parts.append(f"outcome: {render_code_span(outcome)}")
     return "; ".join(parts)
+
+
+def _source_candidate_cell(research: Mapping[str, Any]) -> str | None:
+    if _human_candidate_spdx(research) is None:
+        return None
+    source_repo = research.get("source_repo")
+    if not isinstance(source_repo, Mapping):
+        return None
+    owner = _non_empty(source_repo.get("owner"))
+    repo = _non_empty(source_repo.get("repo"))
+    if owner is None or repo is None:
+        return "external source candidate"
+    return f"external source candidate {render_code_span(f'{owner}/{repo}')}"
+
+
+def _human_candidate_spdx(research: Mapping[str, Any]) -> str | None:
+    candidate = _non_empty(research.get("human_candidate_spdx"))
+    if candidate is None:
+        return None
+    source_repo = research.get("source_repo")
+    if not isinstance(source_repo, Mapping):
+        return None
+    if _non_empty(source_repo.get("provenance")) != "external_candidate":
+        return None
+    if source_repo.get("bound_to_package") is True:
+        return None
+    return candidate
 
 
 def _found_in_cell(item: Mapping[str, Any], metadata: ShortlistMetadata) -> str:

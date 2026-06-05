@@ -69,6 +69,56 @@ def _write_inventory_metadata(work_root: Path) -> None:
     )
 
 
+def _write_swift_github_metadata(work_root: Path) -> None:
+    store.write_inventory(
+        work_root,
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "components": [
+                {
+                    "name": "acme-lib",
+                    "license": "MIT",
+                    "origin": "third-party-oss",
+                    "scope": "runtime",
+                    "distribution": "server",
+                    "versions": ["1.2.3"],
+                    "source_url": "pkg:swift/github.com/sentinel/acme-lib/acme-lib@1.2.3",
+                    "modified": "unknown",
+                    "found_in": ["acme-alpha"],
+                    "policy_tier": "REVIEW",
+                    "evidence_refs": ["acme-alpha/resolved.ndjson:1"],
+                }
+            ],
+        },
+    )
+
+
+def _write_swift_github_issue_metadata(work_root: Path) -> None:
+    store.write_inventory(
+        work_root,
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "components": [
+                {
+                    "name": "acme-lib",
+                    "license": "MIT",
+                    "origin": "third-party-oss",
+                    "scope": "runtime",
+                    "distribution": "server",
+                    "versions": ["1.2.3"],
+                    "source_url": "https://github.com/sentinel/acme-lib/issues/1",
+                    "modified": "unknown",
+                    "found_in": ["acme-alpha"],
+                    "policy_tier": "REVIEW",
+                    "evidence_refs": ["acme-alpha/resolved.ndjson:1"],
+                }
+            ],
+        },
+    )
+
+
 def _item(component_ref: str) -> dict[str, object]:
     return {
         "component_ref": component_ref,
@@ -199,7 +249,7 @@ def test_github_main_ref_proposal_rejected_for_versioned_item(tmp_path: Path) ->
     assert fetched == []
     assert item["status"] == "open"
     assert item["candidate_spdx"] is None
-    assert item["note"] == "verify_failed:verify:default_branch_rejected"
+    assert item["note"] == "verify_failed:verify:source_repo_provenance_required"
 
 
 def test_github_wrong_tag_proposal_rejected_for_versioned_item(tmp_path: Path) -> None:
@@ -226,7 +276,7 @@ def test_github_wrong_tag_proposal_rejected_for_versioned_item(tmp_path: Path) -
     item = store.read_shortlist(tmp_path)["items"][0]
     assert item["status"] == "open"
     assert item["candidate_spdx"] is None
-    assert item["note"] == "verify_failed:verify:ref_mismatch"
+    assert item["note"] == "verify_failed:verify:source_repo_provenance_required"
 
 
 def test_off_allowlist_url_rejected(tmp_path: Path) -> None:
@@ -323,3 +373,151 @@ def test_proposal_artifact_schema_rejects_unknown_fields(tmp_path: Path) -> None
             fetcher=_fetcher(b'{"license":"MIT"}'),
             evidence_resolver=_public_resolver,
         )
+
+
+def test_source_repo_proposal_fields_fail_closed_until_supported(tmp_path: Path) -> None:
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license?ref=1.2.3",
+                evidence_kind="github_source_repo",
+                source_repo={
+                    "host": "github.com",
+                    "owner": "sentinel",
+                    "repo": "acme-lib",
+                    "ref": "1.2.3",
+                    "provenance": "external_candidate",
+                    "provenance_detail": "proposal_candidate",
+                    "bound_to_package": False,
+                },
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(b'{"license":"MIT"}'),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_provenance_required"
+
+
+def test_github_source_repo_proposal_rejects_wrong_repo(tmp_path: Path) -> None:
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/attacker/acme-lib/license?ref=1.2.3",
+                evidence_kind="github_source_repo",
+                source_repo={
+                    "host": "github.com",
+                    "owner": "attacker",
+                    "repo": "acme-lib",
+                    "ref": "1.2.3",
+                    "ref_kind": "version",
+                    "provenance": "package_metadata",
+                    "provenance_detail": "swiftpm_purl",
+                    "bound_to_package": True,
+                },
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(b'{"license":"MIT"}'),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_mismatch"
+
+
+def test_github_source_repo_proposal_accepts_matching_package_repo(tmp_path: Path) -> None:
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license?ref=1.2.3",
+                evidence_kind="github_source_repo",
+                source_repo={
+                    "host": "github.com",
+                    "owner": "sentinel",
+                    "repo": "acme-lib",
+                    "ref": "1.2.3",
+                    "ref_kind": "version",
+                    "provenance": "package_metadata",
+                    "provenance_detail": "swiftpm_purl",
+                    "bound_to_package": True,
+                },
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(b'{"license":{"spdx_id":"MIT"}}'),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] == "MIT"
+    assert item["note"] == "agent:verified_awaiting_human"
+    assert item["ai_suggestion"]["source_repo"]["owner"] == "sentinel"
+
+
+def test_github_source_repo_proposal_rejects_arbitrary_metadata_path(tmp_path: Path) -> None:
+    _write_shortlist(tmp_path)
+    _write_swift_github_issue_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license?ref=1.2.3",
+                evidence_kind="github_source_repo",
+                source_repo={
+                    "host": "github.com",
+                    "owner": "sentinel",
+                    "repo": "acme-lib",
+                    "ref": "1.2.3",
+                    "ref_kind": "version",
+                    "provenance": "package_metadata",
+                    "provenance_detail": "swiftpm_purl",
+                    "bound_to_package": True,
+                },
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(b'{"license":{"spdx_id":"MIT"}}'),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_mismatch"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,7 @@ from repolens.policy.config import load_default_policy
 from repolens.resolve.adapters import API_ALLOWED_HOSTS, target_license_candidates
 from repolens.resolve.license_expression import license_resolution_id
 from repolens.resolve.models import FetchFunction
+from repolens.resolve.purl import parse_purl
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import HttpFetchOptions, fetch_url
 from repolens.shortlist.evidence import (
@@ -22,6 +24,7 @@ from repolens.shortlist.evidence import (
     ConflictEvidence,
     EvidenceIdentity,
     EvidenceRecord,
+    SourceRepoEvidence,
     identity_for_context,
 )
 
@@ -34,9 +37,17 @@ _LOOKUP_LABELS = {
     "pypi": "PyPI metadata",
     "clearlydefined": "ClearlyDefined",
     "github_license_api": "GitHub license API",
+    "github_raw_license": "LICENSE",
     "cocoapods": "CocoaPods podspec",
     "swiftpm": "SwiftPM tag license",
 }
+_GITHUB_HOST = "github.com"
+_GITHUB_API_HOST = "api.github.com"
+_RAW_GITHUB_HOST = "raw.githubusercontent.com"
+_CONTROLLED_LICENSE_PATHS = ("LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING", "COPYING.md")
+_SAFE_SEGMENT_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+_SHA_RE = re.compile(r"^[0-9A-Fa-f]{40}$")
+_MUTABLE_REFS = frozenset({"main", "master", "develop", "development", "trunk", "default"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,11 +72,13 @@ class LookupResult:
     anchor: str
     machine_verifiable: bool
     ref: str | None = None
+    display_url: str | None = None
+    source_repo: SourceRepoEvidence | None = None
 
     def browser_evidence(self) -> BrowserEvidence:
         return BrowserEvidence(
             label=self.label,
-            url=self.url,
+            url=self.display_url or self.url,
             source_type=self.source,
             anchor=self.anchor,
             ref=self.ref,
@@ -139,6 +152,8 @@ def research_context(
         result = _fetch_lookup(lookup, fetcher)
         if result is not None:
             lookup_results.append(result)
+            if lookup.source_repo is not None:
+                break
 
     if not attempted:
         attempted.append("deterministic metadata lookup")
@@ -205,11 +220,18 @@ def research_context(
                 lookups_attempted=attempted,
                 likely_spdx=result.spdx_id,
                 browser_evidence=evidence,
+                source_repo=result.source_repo,
                 review_note="Machine-verifiable allow candidate awaiting human approval.",
             ),
             proposal,
         )
 
+    human_candidate_spdx = (
+        result.spdx_id
+        if result.source_repo is not None
+        and result.source_repo.provenance == "external_candidate"
+        else None
+    )
     return (
         _record(
             identity,
@@ -218,6 +240,8 @@ def research_context(
             lookups_attempted=attempted,
             likely_spdx=result.spdx_id,
             browser_evidence=evidence,
+            human_candidate_spdx=human_candidate_spdx,
+            source_repo=result.source_repo,
             review_note="Browser evidence found; verifier support pending.",
         ),
         None,
@@ -272,14 +296,61 @@ class _Lookup:
     url: str
     machine_verifiable: bool
     ref: str | None = None
+    display_url: str | None = None
+    source_repo: SourceRepoEvidence | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _GitHubRepo:
+    owner: str
+    repo: str
+    ref: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _SourceRepoIdentity:
+    component_ref: str
+    ecosystem: str | None
+    package: str | None
+    version: str | None
+    source_repo_host: str
+    owner: str
+    repo: str
+    acceptable_refs: tuple[str, ...]
+    provenance: str
+    provenance_detail: str
+    ref: str | None = None
+    ref_kind: str | None = None
+
+    @property
+    def bound_to_package(self) -> bool:
+        return self.provenance == "package_metadata"
+
+    def evidence(
+        self,
+        *,
+        ref: str | None,
+        fetch_url: str,
+        display_url: str | None = None,
+    ) -> SourceRepoEvidence:
+        return SourceRepoEvidence(
+            host=self.source_repo_host,
+            owner=self.owner,
+            repo=self.repo,
+            ref=ref,
+            ref_kind=_ref_kind(ref, self.version),
+            provenance=self.provenance,
+            provenance_detail=self.provenance_detail,
+            bound_to_package=self.bound_to_package,
+            fetch_url=fetch_url,
+            display_url=display_url,
+        )
 
 
 def _lookup_urls(row: Mapping[str, Any], identity: EvidenceIdentity) -> tuple[_Lookup, ...]:
     package = identity.package
     version = identity.version or _UNKNOWN_VERSION
     ecosystem = (identity.ecosystem or "").casefold()
-    triage = row.get("triage") if isinstance(row.get("triage"), Mapping) else {}
-    evidence_url = _optional_text(triage.get("evidence_url"))
     urls: list[_Lookup] = []
     if package and ecosystem in {"python", "pypi"}:
         package_part = quote(package, safe="")
@@ -303,21 +374,8 @@ def _lookup_urls(row: Mapping[str, Any], identity: EvidenceIdentity) -> tuple[_L
             f"{quote(package, safe='')}/specs/{quote(version, safe='')}"
         )
         urls.append(_Lookup("cocoapods", "podspec", url, True, ref=version))
-    github_license = _github_license_lookup(evidence_url, version)
-    if github_license is not None:
-        urls.append(github_license)
-    if ecosystem in {"swift", "swiftpm"} and evidence_url:
-        swiftpm_lookup = _github_license_lookup(evidence_url, version)
-        if swiftpm_lookup is not None:
-            urls.append(
-                _Lookup(
-                    "swiftpm",
-                    "LICENSE",
-                    swiftpm_lookup.url,
-                    swiftpm_lookup.machine_verifiable,
-                    ref=swiftpm_lookup.ref,
-                )
-            )
+    for source_repo in _source_repos_from_row(row, identity):
+        urls.extend(_github_source_repo_lookups(source_repo))
     return tuple(dict.fromkeys(urls))
 
 
@@ -347,12 +405,279 @@ def _github_license_lookup(url: str | None, version: str) -> _Lookup | None:
     )
 
 
+def _source_repos_from_row(
+    row: Mapping[str, Any],
+    identity: EvidenceIdentity,
+) -> tuple[_SourceRepoIdentity, ...]:
+    triage = row.get("triage") if isinstance(row.get("triage"), Mapping) else {}
+    version = _clean_version(identity.version)
+    trusted_values = (
+        ("purl", _optional_text(row.get("purl"))),
+        ("source_url", _optional_text(row.get("source_url"))),
+        ("package", _optional_text(row.get("package"))),
+    )
+    repos: list[_SourceRepoIdentity] = []
+    seen: set[tuple[str, str, tuple[str, ...]]] = set()
+    for detail, value in trusted_values:
+        repo = _github_repo_from_value(value, version, package_metadata=True)
+        if repo is None:
+            continue
+        identity_repo = _source_identity(identity, repo, "package_metadata", detail, version)
+        key = _source_key(identity_repo)
+        if key not in seen:
+            seen.add(key)
+            repos.append(identity_repo)
+
+    evidence_url = _optional_text(triage.get("evidence_url"))
+    external_repo = _github_repo_from_value(evidence_url, version, package_metadata=False)
+    if external_repo is not None:
+        candidate = _source_identity(
+            identity,
+            external_repo,
+            "external_candidate",
+            "triage_evidence_url",
+            version,
+        )
+        key = _source_key(candidate)
+        if key not in seen:
+            seen.add(key)
+            repos.append(candidate)
+    return tuple(repos)
+
+
+def _source_identity(
+    identity: EvidenceIdentity,
+    repo: _GitHubRepo,
+    provenance: str,
+    provenance_detail: str,
+    version: str | None,
+) -> _SourceRepoIdentity:
+    accepted_refs = _acceptable_refs(version, repo.ref, trusted=provenance == "package_metadata")
+    ref = repo.ref if repo.ref in accepted_refs else None
+    return _SourceRepoIdentity(
+        component_ref=identity.component_ref,
+        ecosystem=identity.ecosystem,
+        package=identity.package,
+        version=identity.version,
+        source_repo_host=_GITHUB_HOST,
+        owner=repo.owner,
+        repo=repo.repo,
+        acceptable_refs=accepted_refs,
+        provenance=provenance,
+        provenance_detail=provenance_detail,
+        ref=ref,
+        ref_kind=_ref_kind(ref, version),
+    )
+
+
+def _source_key(source_repo: _SourceRepoIdentity) -> tuple[str, str, tuple[str, ...]]:
+    return (
+        source_repo.owner.casefold(),
+        source_repo.repo.casefold(),
+        source_repo.acceptable_refs,
+    )
+
+
+def _github_repo_from_value(
+    value: str | None,
+    fallback_version: str | None,
+    *,
+    package_metadata: bool,
+) -> _GitHubRepo | None:
+    return (
+        _github_repo_from_purl(value, fallback_version)
+        or _github_repo_from_http_url(value, fallback_version, package_metadata=package_metadata)
+        or _github_repo_from_package(value, fallback_version)
+    )
+
+
+def _github_repo_from_purl(value: str | None, fallback_version: str | None) -> _GitHubRepo | None:
+    parsed = parse_purl(value)
+    if parsed is None or parsed.package_type not in {"swift", "swiftpm"}:
+        return None
+    segments = [
+        segment for segment in ((parsed.namespace or "").split("/") + [parsed.name]) if segment
+    ]
+    if len(segments) < 3 or segments[0].casefold() != _GITHUB_HOST:
+        return None
+    owner = _valid_segment(segments[1])
+    repo = _valid_repo_segment(segments[2])
+    if owner is None or repo is None:
+        return None
+    return _GitHubRepo(owner=owner, repo=repo, ref=_clean_ref(parsed.version or fallback_version))
+
+
+def _github_repo_from_package(
+    value: str | None,
+    fallback_version: str | None,
+) -> _GitHubRepo | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text.startswith(f"{_GITHUB_HOST}/"):
+        return None
+    if any(char in text for char in "?#") or "\\" in text:
+        return None
+    parts = [part for part in text.split("/") if part]
+    if len(parts) < 3 or parts[0].casefold() != _GITHUB_HOST:
+        return None
+    if any(part in {".", ".."} for part in parts[:3]):
+        return None
+    owner = _valid_segment(parts[1])
+    repo = _valid_repo_segment(parts[2])
+    if owner is None or repo is None:
+        return None
+    return _GitHubRepo(owner=owner, repo=repo, ref=_clean_ref(fallback_version))
+
+
+def _github_repo_from_http_url(
+    value: str | None,
+    fallback_version: str | None,
+    *,
+    package_metadata: bool,
+) -> _GitHubRepo | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if text.startswith("git@github.com:"):
+        suffix = text.removeprefix("git@github.com:")
+        if "/" not in suffix or suffix.count("/") != 1:
+            return None
+        owner_text, repo_text = suffix.split("/", 1)
+        owner = _valid_segment(owner_text)
+        repo = _valid_repo_segment(repo_text)
+        if owner is None or repo is None:
+            return None
+        return _GitHubRepo(owner=owner, repo=repo, ref=_clean_ref(fallback_version))
+    if text.startswith(f"{_GITHUB_HOST}/"):
+        text = f"https://{text}"
+    parsed = urlparse(text)
+    if parsed.scheme not in {"http", "https"} or parsed.hostname is None:
+        return None
+    host = parsed.hostname.casefold()
+    if host not in {_GITHUB_HOST, _GITHUB_API_HOST, _RAW_GITHUB_HOST}:
+        return None
+    if parsed.username or parsed.password or parsed.fragment:
+        return None
+    if parsed.query and host != _GITHUB_API_HOST:
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if host == _GITHUB_API_HOST:
+        if len(parts) < 4 or parts[0] != "repos" or parts[3] != "license":
+            return None
+        owner_part, repo_part = parts[1], parts[2]
+        ref = _clean_ref(_query_ref(parsed.query) or fallback_version)
+    elif host == _RAW_GITHUB_HOST:
+        if len(parts) < 4 or parts[3] not in _CONTROLLED_LICENSE_PATHS:
+            return None
+        owner_part, repo_part, ref = parts[0], parts[1], parts[2]
+    else:
+        if len(parts) < 2:
+            return None
+        owner_part, repo_part = parts[0], parts[1]
+        ref = _clean_ref(fallback_version)
+        if len(parts) > 2:
+            if package_metadata and len(parts) == 3:
+                pass
+            elif (
+                len(parts) == 5
+                and parts[2] in {"blob", "tree"}
+                and parts[4] in _CONTROLLED_LICENSE_PATHS
+            ):
+                if parts[3] in _MUTABLE_REFS:
+                    return None
+                ref = _clean_ref(parts[3])
+            else:
+                return None
+    owner = _valid_segment(owner_part)
+    repo = _valid_repo_segment(repo_part)
+    if owner is None or repo is None:
+        return None
+    return _GitHubRepo(owner=owner, repo=repo, ref=ref)
+
+
+def _query_ref(query: str) -> str | None:
+    for part in query.split("&"):
+        key, separator, value = part.partition("=")
+        if separator and key == "ref":
+            return value
+    return None
+
+
+def _github_source_repo_lookups(source_repo: _SourceRepoIdentity) -> tuple[_Lookup, ...]:
+    lookups: list[_Lookup] = []
+    refs = source_repo.acceptable_refs
+    if refs:
+        for ref in refs:
+            api_url = _github_license_api_url(source_repo.owner, source_repo.repo, ref)
+            lookups.append(
+                _Lookup(
+                    "github_license_api",
+                    "GitHub license API",
+                    api_url,
+                    source_repo.provenance == "package_metadata",
+                    ref=ref,
+                    source_repo=source_repo.evidence(ref=ref, fetch_url=api_url),
+                )
+            )
+        for ref in refs:
+            for path in _CONTROLLED_LICENSE_PATHS:
+                raw_url = (
+                    f"https://{_RAW_GITHUB_HOST}/{quote(source_repo.owner, safe='')}/"
+                    f"{quote(source_repo.repo, safe='')}/{quote(ref, safe='')}/{path}"
+                )
+                display_url = (
+                    f"https://{_GITHUB_HOST}/{quote(source_repo.owner, safe='')}/"
+                    f"{quote(source_repo.repo, safe='')}/blob/{quote(ref, safe='')}/{path}"
+                )
+                lookups.append(
+                    _Lookup(
+                        "github_raw_license",
+                        "LICENSE",
+                        raw_url,
+                        False,
+                        ref=ref,
+                        display_url=display_url,
+                        source_repo=source_repo.evidence(
+                            ref=ref,
+                            fetch_url=raw_url,
+                            display_url=display_url,
+                        ),
+                    )
+                )
+    else:
+        api_url = _github_license_api_url(source_repo.owner, source_repo.repo, None)
+        lookups.append(
+            _Lookup(
+                "github_license_api",
+                "GitHub license API",
+                api_url,
+                False,
+                source_repo=source_repo.evidence(ref=None, fetch_url=api_url),
+            )
+        )
+    return tuple(lookups)
+
+
+def _github_license_api_url(owner: str, repo: str, ref: str | None) -> str:
+    base = (
+        f"https://{_GITHUB_API_HOST}/repos/"
+        f"{quote(owner, safe='')}/{quote(repo, safe='')}/license"
+    )
+    if ref is None:
+        return base
+    return f"{base}?{urlencode({'ref': ref})}"
+
+
 def _fetch_lookup(lookup: _Lookup, fetcher: FetchFunction) -> LookupResult | None:
     try:
         result = fetcher(lookup.url, _FETCH_OPTIONS)
     except FetchSecurityError:
         return None
-    for license_text in target_license_candidates(result.body):
+    candidates = list(target_license_candidates(result.body))
+    if lookup.source == "github_raw_license":
+        candidates.extend(_raw_license_candidates(result.body))
+    for license_text in tuple(dict.fromkeys(candidates)):
         spdx_id = license_resolution_id(license_text, load_default_policy())
         if spdx_id is None:
             continue
@@ -364,8 +689,88 @@ def _fetch_lookup(lookup: _Lookup, fetcher: FetchFunction) -> LookupResult | Non
             anchor=license_text,
             machine_verifiable=lookup.machine_verifiable,
             ref=lookup.ref,
+            display_url=lookup.display_url,
+            source_repo=lookup.source_repo,
         )
     return None
+
+
+def _raw_license_candidates(body: bytes) -> tuple[str, ...]:
+    text = body.decode("utf-8", errors="replace")
+    normalized = " ".join(text.split()).casefold()
+    if (
+        normalized.startswith("mit license")
+        and "permission is hereby granted" in normalized
+        and "the software is provided" in normalized
+    ):
+        return ("MIT",)
+    return ()
+
+
+def _valid_segment(value: str) -> str | None:
+    if not value or value in {".", ".."}:
+        return None
+    if value.strip() != value or not value.isascii() or not _SAFE_SEGMENT_RE.fullmatch(value):
+        return None
+    return value
+
+
+def _valid_repo_segment(value: str) -> str | None:
+    text = value[:-4] if value.endswith(".git") else value
+    return _valid_segment(text)
+
+
+def _clean_version(value: str | None) -> str | None:
+    text = _clean_ref(value)
+    if text is None or text.casefold() in {_UNKNOWN_VERSION, "declared-unpinned"}:
+        return None
+    return text
+
+
+def _clean_ref(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text or not text.isascii():
+        return None
+    if any(char in text for char in "\\?#@") or "/" in text or ":" in text:
+        return None
+    if text in {".", ".."}:
+        return None
+    return text
+
+
+def _acceptable_refs(
+    version: str | None,
+    source_ref: str | None,
+    *,
+    trusted: bool,
+) -> tuple[str, ...]:
+    refs: list[str] = []
+    if version is not None and version.casefold() not in _MUTABLE_REFS:
+        refs.extend(_bounded_version_refs(version))
+    clean_source_ref = _clean_ref(source_ref)
+    if trusted and clean_source_ref is not None and _SHA_RE.fullmatch(clean_source_ref):
+        refs.append(clean_source_ref)
+    return tuple(dict.fromkeys(refs))
+
+
+def _bounded_version_refs(version: str) -> tuple[str, ...]:
+    if version.startswith("v") and len(version) > 1:
+        return (version, version[1:])
+    return (version, f"v{version}")
+
+
+def _ref_kind(ref: str | None, version: str | None) -> str | None:
+    if ref is None:
+        return None
+    if _SHA_RE.fullmatch(ref):
+        return "commit"
+    if version is not None and ref in _bounded_version_refs(version):
+        return "version"
+    if ref.casefold() in _MUTABLE_REFS:
+        return "default_branch"
+    return "unknown"
 
 
 def _record(
@@ -377,6 +782,8 @@ def _record(
     likely_spdx: str | None = None,
     browser_evidence: Sequence[BrowserEvidence] = (),
     conflicts: Sequence[ConflictEvidence] = (),
+    human_candidate_spdx: str | None = None,
+    source_repo: SourceRepoEvidence | None = None,
     review_note: str | None = None,
 ) -> EvidenceRecord:
     return EvidenceRecord(
@@ -386,16 +793,18 @@ def _record(
         machine_verification=machine_verification,
         lookups_attempted=tuple(dict.fromkeys(lookups_attempted)),
         likely_spdx=likely_spdx,
+        human_candidate_spdx=human_candidate_spdx,
         confidence="high" if likely_spdx else None,
         browser_evidence=tuple(browser_evidence),
         conflicts=tuple(conflicts),
+        source_repo=source_repo,
         rationale=review_note,
         review_note=review_note,
     )
 
 
 def _proposal_for_result(identity: EvidenceIdentity, result: LookupResult) -> dict[str, Any]:
-    return {
+    proposal: dict[str, Any] = {
         "component_ref": identity.component_ref,
         "spdx_id": result.spdx_id,
         "evidence_url": result.url,
@@ -405,6 +814,19 @@ def _proposal_for_result(identity: EvidenceIdentity, result: LookupResult) -> di
         "rationale": f"{result.label} anchors {result.spdx_id}.",
         "sanity_check": "Deterministic public metadata only; no model invocation.",
     }
+    if result.source_repo is not None and result.source_repo.provenance == "package_metadata":
+        proposal["evidence_kind"] = "github_source_repo"
+        proposal["source_repo"] = {
+            "host": result.source_repo.host,
+            "owner": result.source_repo.owner,
+            "repo": result.source_repo.repo,
+            "ref": result.source_repo.ref,
+            "ref_kind": result.source_repo.ref_kind,
+            "provenance": result.source_repo.provenance,
+            "provenance_detail": result.source_repo.provenance_detail,
+            "bound_to_package": result.source_repo.bound_to_package,
+        }
+    return proposal
 
 
 def _review_evidence_cell(record: EvidenceRecord) -> str:
