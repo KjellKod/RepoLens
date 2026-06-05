@@ -1,0 +1,21 @@
+tests/unit/shortlist/test_decisions.py
+  s_853eb455586efb::t_5643686fd5ddc7 119-144
+src/repolens/shortlist/render.py
+  s_853eb455586efb::t_a2e186fcf95299 132,142-149
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "f54311416dceea8608ca0e12c93c5333b3f1a8cc",
+  "prompts": {},
+  "sessions": {
+    "s_853eb455586efb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e94a7-867e-7881-aa54-d0c218023533",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
