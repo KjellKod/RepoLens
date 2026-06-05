@@ -6,6 +6,8 @@ import pytest
 
 from repolens import cli
 from repolens.data.store import iter_resolved, replace_source_snapshot, write_sbom
+from repolens.resolve.stage import run_resolve
+from repolens.security.http_client import FetchResult, HttpFetchOptions
 
 
 def test_resolve_cli_reads_sbom_and_writes_resolved_ndjson(tmp_path: Path, repo_ref: str) -> None:
@@ -249,6 +251,108 @@ def test_resolve_cli_default_uses_stored_source_snapshot_for_scancode(
     records = list(iter_resolved(tmp_path / "work" / repo_ref / "resolved.ndjson"))
     assert records[0]["spdx_id"] == "Apache-2.0"
     assert records[0]["evidence"]["source_layer"] == "scancode"
+
+
+def test_resolve_metadata_only_mobile_dependencies_from_stored_snapshot(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "schema_version": "1.0",
+            "repo": repo_ref,
+            "generated_at": "2026-01-01T00:00:00Z",
+            "tool": {"name": "syft", "version": "1.0.0"},
+            "source": "https://example.invalid/fixture",
+            "artifacts": [
+                {
+                    "name": "sentinel-swift-runtime",
+                    "version": "1.0.0",
+                    "type": "swift",
+                    "purl": "pkg:swift/sentinel-swift-runtime@1.0.0",
+                    "licenses": [],
+                    "locations": ["Package.resolved"],
+                },
+                {
+                    "name": "SentinelPodRuntime",
+                    "version": "2.0.0",
+                    "type": "cocoapods",
+                    "purl": "pkg:cocoapods/SentinelPodRuntime@2.0.0",
+                    "licenses": [],
+                    "locations": ["Podfile.lock"],
+                },
+            ],
+        },
+    )
+    staged = tmp_path / "staged-source"
+    staged.mkdir()
+    (staged / "Package.swift").write_text("// swift package\n", encoding="utf-8")
+    (staged / "Package.resolved").write_text(
+        """
+{
+  "pins": [
+    {
+      "identity": "sentinel-swift-runtime",
+      "kind": "remoteSourceControl",
+      "location": "https://github.com/example/sentinel-swift-runtime.git",
+      "state": {"version": "1.0.0", "revision": "abc123"}
+    }
+  ],
+  "version": 3
+}
+""".strip(),
+        encoding="utf-8",
+    )
+    (staged / "Podfile.lock").write_text(
+        "PODS:\n  - SentinelPodRuntime (2.0.0)\n", encoding="utf-8"
+    )
+    replace_source_snapshot(tmp_path, repo_ref, staged)
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        seen.append(url)
+        if "api.github.com" in url:
+            body = b'{"license":{"spdx_id":"MIT"}}'
+        else:
+            body = b'{"license":"Apache-2.0"}'
+        return FetchResult(url=url, status=200, headers=(), body=body)
+
+    def public_resolver(host: str, port: int) -> tuple[str, ...]:
+        del host, port
+        return ("8.8.8.8",)
+
+    def fail_mobile_enricher(*args: object, **kwargs: object) -> object:
+        raise AssertionError("native mobile enrichment must stay opt-in")
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        fetcher=fetcher,
+        evidence_resolver=public_resolver,
+        mobile_enricher=fail_mobile_enricher,  # type: ignore[arg-type]
+    )
+
+    records = list(iter_resolved(tmp_path / "work" / repo_ref / "resolved.ndjson"))
+    by_name = {record["name"]: record for record in records}
+    assert by_name["sentinel-swift-runtime"]["spdx_id"] == "MIT"
+    assert by_name["sentinel-swift-runtime"]["evidence"]["source_layer"] == "api"
+    assert by_name["sentinel-swift-runtime"]["evidence"]["url"] == (
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123"
+    )
+    assert by_name["SentinelPodRuntime"]["spdx_id"] == "Apache-2.0"
+    assert by_name["SentinelPodRuntime"]["evidence"]["source_layer"] == "api"
+    assert by_name["SentinelPodRuntime"]["evidence"]["url"] == (
+        "https://trunk.cocoapods.org/api/v1/pods/SentinelPodRuntime/specs/2.0.0"
+    )
+    assert seen == [
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123",
+        "https://api.github.com/repos/example/sentinel-swift-runtime/license?ref=abc123",
+        "https://trunk.cocoapods.org/api/v1/pods/SentinelPodRuntime/specs/2.0.0",
+        "https://trunk.cocoapods.org/api/v1/pods/SentinelPodRuntime/specs/2.0.0",
+    ]
 
 
 def test_resolve_cli_explicit_source_root_overrides_stored_snapshot(

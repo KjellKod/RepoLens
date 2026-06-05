@@ -38,6 +38,7 @@ RESOLVER_SUPPORTED_PUBLIC_ECOSYSTEMS = frozenset(
     for system in frozenset(ECOSYSTEM_TO_DEPS_DEV.values())
 )
 CATALOGING_ONLY_ECOSYSTEMS = frozenset({"swift", "cocoapods"})
+MOBILE_METADATA_ECOSYSTEMS = frozenset({"swift", "cocoapods"})
 CI_ONLY_ECOSYSTEMS = frozenset({"githubactions"})
 CI_ONLY_PACKAGE_TYPES = frozenset({"github-action", "githubactions"})
 BUILD_TOOL_LOCATION_PREFIXES = frozenset(
@@ -68,7 +69,7 @@ class EcosystemSupport:
 
 _ECOSYSTEM_NOTES = {
     "cargo": "Rust crates resolve through deps.dev/Crates.",
-    "cocoapods": "Cataloged only; unresolved without SBOM license.",
+    "cocoapods": "Metadata-only from CocoaPods trunk exact specs; native tooling stays opt-in.",
     "githubactions": "Build/CI inventory; excluded from shipped main.",
     "go-module": "Go modules resolve through deps.dev/proxy data.",
     "maven": "Maven purls include Gradle-originated dependencies.",
@@ -76,7 +77,7 @@ _ECOSYSTEM_NOTES = {
     "nuget": "NuGet packages resolve through deps.dev.",
     "pypi": "Python packages include Syft and pyproject facts.",
     "rubygems": "Ruby gems resolve through deps.dev.",
-    "swift": "Cataloged only; unresolved without SBOM license.",
+    "swift": "Metadata-only from Package.resolved GitHub pins; native tooling stays opt-in.",
 }
 
 
@@ -86,7 +87,10 @@ def _supported_ecosystems() -> tuple[EcosystemSupport, ...]:
         EcosystemSupport(
             key,
             cataloged=True,
-            api_resolved=key in RESOLVER_SUPPORTED_PUBLIC_ECOSYSTEMS,
+            api_resolved=(
+                key in RESOLVER_SUPPORTED_PUBLIC_ECOSYSTEMS
+                or key in MOBILE_METADATA_ECOSYSTEMS
+            ),
             notes=_ECOSYSTEM_NOTES[key],
         )
         for key in sorted(keys)

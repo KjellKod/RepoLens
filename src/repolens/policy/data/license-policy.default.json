@@ -1,5 +1,5 @@
 {
-  "policy_version": "2026.06.04-f5",
+  "policy_version": "2026.06.05-mobile-metadata",
   "default_unknown_action": "BLOCK",
   "tiers": {
     "ALLOW": [
@@ -43,6 +43,7 @@
       "APSL-2.0",
       "CECILL-2.1",
       "CC-BY-SA-4.0",
+      "CC-BY-4.0",
       "CPL-1.0",
       "IPL-1.0",
       "Unicode-3.0"
@@ -80,6 +81,7 @@
     "agplv3": "AGPL-3.0-only",
     "psfl": "PSF-2.0",
     "zpl 2.1": "ZPL-2.1",
+    "unlicence": "Unlicense",
     "zope public license": "ZPL-2.1"
   },
   "deprecated_ids": [
@@ -131,6 +133,7 @@
   "caveats": {
     "LGPL": "LGPL review depends on static versus dynamic linking.",
     "BUSL": "BUSL includes a Change Date that must be reviewed.",
-    "Unicode-3.0": "Unicode-3.0 requires legal review before allowlisting."
+    "Unicode-3.0": "Unicode-3.0 requires legal review before allowlisting.",
+    "CC-BY-4.0": "CC-BY-4.0 attribution obligations require review for shipped notices."
   }
 }

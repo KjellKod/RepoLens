@@ -55,10 +55,45 @@ def test_mismatched_anchor_fails() -> None:
 
 
 def test_off_allowlist_url_fails_closed() -> None:
-    # github.com / raw.githubusercontent.com are NOT in API_ALLOWED_HOSTS; an off-allowlist
-    # evidence URL fails closed to the human queue rather than forking the allowlist (AC 15).
-    assert "raw.githubusercontent.com" not in API_ALLOWED_HOSTS
+    assert "github.com" not in API_ALLOWED_HOSTS
     resolution = Resolution("MIT", "https://attacker.example.invalid/license?token=ghp_x", "MIT")
+    outcome = verify_agent_resolution(
+        resolution,
+        fetcher=_fetcher_returning(b'{"license":"MIT"}'),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:fetch_blocked_or_failed"
+
+
+def test_raw_github_evidence_host_can_verify_exact_anchor() -> None:
+    assert "raw.githubusercontent.com" in API_ALLOWED_HOSTS
+    resolution = Resolution(
+        "MIT",
+        "https://raw.githubusercontent.com/CocoaPods/Specs/abc123/"
+        "Specs/a/7/6/Analytics/4.1.8/Analytics.podspec.json",
+        "MIT",
+    )
+
+    outcome = verify_agent_resolution(
+        resolution,
+        fetcher=_fetcher_returning(b'{"license":{"type":"MIT"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.evidence_url == resolution.evidence_url
+    assert outcome.evidence_anchor == "MIT"
+
+
+def test_arbitrary_raw_github_evidence_fails_closed() -> None:
+    resolution = Resolution(
+        "MIT",
+        "https://raw.githubusercontent.com/attacker/not-the-package/main/package.json",
+        "MIT",
+    )
+
     outcome = verify_agent_resolution(
         resolution,
         fetcher=_fetcher_returning(b'{"license":"MIT"}'),
@@ -128,7 +163,7 @@ def test_off_allowlist_host_raises_at_validate() -> None:
     options = HttpFetchOptions(allowed_hosts=API_ALLOWED_HOSTS, headers={})
     with pytest.raises(FetchSecurityError, match="host is not allowlisted"):
         validate_url_for_fetch(
-            "https://raw.githubusercontent.com/acme/acme/main/LICENSE",
+            "https://github.com/acme/acme/blob/main/LICENSE",
             options,
             resolver=_public_resolver,
         )

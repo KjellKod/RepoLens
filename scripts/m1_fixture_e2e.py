@@ -297,6 +297,8 @@ def _fixture_fetcher_for(components: object):
     def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
         del options
         license_value = license_by_url.get(url)
+        if url == "https://trunk.cocoapods.org/api/v1/pods/SentinelPodRuntime/specs/2.0.0":
+            license_value = "NOASSERTION"
         if license_value is None:
             raise RuntimeError(f"unexpected fixture evidence URL: {url}")
         body = json.dumps({"license": license_value})

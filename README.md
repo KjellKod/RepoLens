@@ -186,7 +186,8 @@ repolens discover --owner <OWNER> --work-root work
 repolens bootstrap --work-root work
 repolens scan --work-root work
 repolens resolve --work-root work
-# after fixing ScanCode availability, retry only repos that previously hit it:
+# after fixing ScanCode availability, retry only repos with
+# unresolved:scancode_tool_unavailable:
 # repolens bootstrap --work-root work
 # repolens resolve --work-root work --retry-scancode
 # or retry selected affected repos:

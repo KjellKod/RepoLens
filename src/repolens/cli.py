@@ -2867,6 +2867,7 @@ def _shortlist_open_guidance(
         f"repolens shortlist --work-root {work_root_arg} --proposals {shlex.quote(str(proposals))}"
     )
     rerun_command = f"repolens shortlist --work-root {work_root_arg}"
+    bucket_hint = _shortlist_unresolved_bucket_hint(work_root)
     scancode_retry_hint = _shortlist_scancode_retry_hint(work_root)
 
     if args.proposals is not None:
@@ -2874,6 +2875,8 @@ def _shortlist_open_guidance(
             "Manual step: proposals were ingested, but some items remain open.",
             "",
         ]
+        if bucket_hint:
+            sections.extend((bucket_hint, ""))
         if scancode_retry_hint:
             sections.extend((scancode_retry_hint, ""))
         sections.extend(
@@ -2892,6 +2895,8 @@ def _shortlist_open_guidance(
             "Manual step: contexts are ready for AI-assisted shortlist review.",
             "",
         ]
+        if bucket_hint:
+            sections.extend((bucket_hint, ""))
         if scancode_retry_hint:
             sections.extend((scancode_retry_hint, ""))
         sections.extend(
@@ -2917,6 +2922,8 @@ def _shortlist_open_guidance(
         "Manual step: resolve open shortlist items before report.",
         "",
     ]
+    if bucket_hint:
+        sections.extend((bucket_hint, ""))
     if scancode_retry_hint:
         sections.extend((scancode_retry_hint, ""))
     sections.extend(
@@ -2944,6 +2951,47 @@ def _shortlist_open_guidance(
         )
     )
     return "\n".join(sections)
+
+
+def _shortlist_unresolved_bucket_hint(work_root: Path) -> str:
+    path = Path(work_root) / "shortlist.json"
+    if not path.is_file():
+        return ""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return ""
+    items = payload.get("items")
+    if not isinstance(items, list):
+        return ""
+    counts: dict[str, int] = {}
+    for item in items:
+        if not isinstance(item, dict) or item.get("status") != "open":
+            continue
+        evidence = item.get("evidence")
+        if not isinstance(evidence, dict):
+            continue
+        anchor = evidence.get("anchor")
+        if isinstance(anchor, str):
+            counts[anchor] = counts.get(anchor, 0) + 1
+    sections: list[str] = []
+    no_target = counts.get("unresolved:scancode_no_target", 0)
+    if no_target:
+        sections.append(
+            f"  {no_target} open row(s) have unresolved:scancode_no_target: RepoLens found "
+            "no safe package-local source target, often because the SBOM points only at a "
+            "lockfile. Bootstrapping ScanCode or --retry-scancode does not change this selector."
+        )
+    no_api = counts.get("unresolved:no_supported_catalog_license_api", 0)
+    if no_api:
+        sections.append(
+            f"  {no_api} open row(s) have unresolved:no_supported_catalog_license_api: "
+            "RepoLens did not find exact supported public metadata for those package "
+            "identities and versions."
+        )
+    if not sections:
+        return ""
+    return "\n".join(("Open UNKNOWN bucket summary:", *sections))
 
 
 def _shortlist_scancode_retry_hint(work_root: Path) -> str:

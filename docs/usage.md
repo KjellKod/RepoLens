@@ -399,16 +399,16 @@ Exit codes are:
 ## Supported ecosystem coverage
 
 RepoLens inventories dependencies through Syft and resolves licenses through
-unauthenticated public APIs where a supported package identity exists. Mobile package
-manifests are cataloged by Syft, but RepoLens does not run native mobile tooling unless
-the explicit mobile-native resolver option is used; the default resolver keeps SwiftPM and
-CocoaPods cataloging-only when Syft did not already provide a declared license.
+unauthenticated public APIs where a supported package identity exists. SwiftPM and
+CocoaPods also have default-safe metadata-only resolution: RepoLens reads stored
+`Package.resolved` / `Podfile.lock` metadata and verifies exact public metadata evidence
+without running Swift, Xcode, CocoaPods, dependency checkout, or native mobile tooling.
 
 <!-- repolens-supported-ecosystems:start -->
 | ecosystem | Syft cataloged | RepoLens API/license resolution | notes |
 |-----------|----------------|----------------------------------|-------|
 | cargo | yes | yes | Rust crates resolve through deps.dev/Crates. |
-| cocoapods | yes | no | Cataloged only; unresolved without SBOM license. |
+| cocoapods | yes | yes | Metadata-only from CocoaPods trunk exact specs; native tooling stays opt-in. |
 | githubactions | yes | no | Build/CI inventory; excluded from shipped main. |
 | go-module | yes | yes | Go modules resolve through deps.dev/proxy data. |
 | maven | yes | yes | Maven purls include Gradle-originated dependencies. |
@@ -416,7 +416,7 @@ CocoaPods cataloging-only when Syft did not already provide a declared license.
 | nuget | yes | yes | NuGet packages resolve through deps.dev. |
 | pypi | yes | yes | Python packages include Syft and pyproject facts. |
 | rubygems | yes | yes | Ruby gems resolve through deps.dev. |
-| swift | yes | no | Cataloged only; unresolved without SBOM license. |
+| swift | yes | yes | Metadata-only from Package.resolved GitHub pins; native tooling stays opt-in. |
 <!-- repolens-supported-ecosystems:end -->
 
 GitHub Actions package-url records are retained in inventory as `scope: build` and
@@ -728,10 +728,10 @@ repolens resolve \
   --enable-mobile-native
 ```
 
-The native mobile path runs only through the sandbox boundary. Missing mobile
-toolchains or a missing sandbox backend lower affected packages to unresolved mobile
-evidence, such as `unresolved:mobile_sandbox_unavailable`, without hard-failing the
-stage.
+The native mobile path is separate from default metadata-only mobile resolution and runs
+only through the sandbox boundary. Missing mobile toolchains or a missing sandbox backend
+lower affected packages to unresolved mobile evidence, such as
+`unresolved:mobile_sandbox_unavailable`, without hard-failing the stage.
 
 The command writes `<WORK>/work/<REPO_REF>/resolved.ndjson` with SPDX-normalized
 license records or schema-valid unresolved records when evidence cannot be verified.
@@ -841,6 +841,13 @@ Use the all-repos form when you can afford it, or the repeated `--repo-ref` form
 only selected repos before rerunning `flag`. `flag` preserves matching approved/rejected
 shortlist decisions when it rebuilds the shortlist, and keeps new or materially changed
 findings open.
+
+Other ScanCode-looking buckets have different meanings:
+`unresolved:scancode_no_target` means RepoLens did not find a safe package-local source
+target to scan, often because the SBOM points only at a lockfile, and
+`unresolved:no_supported_catalog_license_api` means exact supported public metadata was
+not found for that package identity/version. `--retry-scancode` does not change either
+condition.
 
 Use this when the open rows include `UNKNOWN`, abstained, low-confidence, or stale evidence
 items that public package metadata might clarify. After proposal ingestion, review

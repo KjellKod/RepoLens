@@ -7,6 +7,7 @@ from repolens.resolve.ecosystems import (
     CI_ONLY_ECOSYSTEMS,
     DEPS_DEV_SYSTEM_TO_PUBLIC_ECOSYSTEM,
     ECOSYSTEM_TO_DEPS_DEV,
+    MOBILE_METADATA_ECOSYSTEMS,
     RESOLVER_SUPPORTED_PUBLIC_ECOSYSTEMS,
     SUPPORTED_ECOSYSTEMS,
 )
@@ -40,9 +41,9 @@ def test_supported_ecosystem_contract_is_derived_from_resolver_mapping() -> None
     )
     assert {
         key for key, item in supported.items() if item.api_resolved
-    } == RESOLVER_SUPPORTED_PUBLIC_ECOSYSTEMS
+    } == RESOLVER_SUPPORTED_PUBLIC_ECOSYSTEMS | MOBILE_METADATA_ECOSYSTEMS
     assert all(supported[key].cataloged for key in supported)
-    assert all(not supported[key].api_resolved for key in CATALOGING_ONLY_ECOSYSTEMS)
+    assert all(supported[key].api_resolved for key in MOBILE_METADATA_ECOSYSTEMS)
     assert all(not supported[key].api_resolved for key in CI_ONLY_ECOSYSTEMS)
 
 
