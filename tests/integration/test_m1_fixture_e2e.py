@@ -53,6 +53,16 @@ def test_m1_fixture_e2e_harness_writes_valid_deduped_report(
     assert summary["report_docx_exists"] is True
     assert summary["appendix_csv_exists"] is True
     assert summary["appendix_md_exists"] is True
+    assert summary["dependency_boundaries_json_exists"] is True
+    assert summary["dependency_boundaries_csv_exists"] is True
+    assert summary["dependency_boundaries_md_exists"] is True
+    assert summary["dependency_boundaries_total_component_rows"] == 12
+    assert summary["dependency_boundaries_attributed_rows"] == 14
+    assert summary["dependency_boundaries_unique_manifest_paths"] == 12
+    assert summary["dependency_boundaries_top_repeated"][0]["purl"] == (
+        "pkg:npm/acme-monorepo-shared@7.8.9"
+    )
+    assert summary["dependency_boundaries_top_repeated"][0]["manifest_path_count"] == 2
 
     ios_sbom = json.loads(
         (work_root / "work" / "sentinel_ios_client" / "sbom.syft.json").read_text(encoding="utf-8")

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import json
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,39 @@ def test_render_main_report_defaults_out_dir_under_work_root(
     assert result.markdown_path == tmp_path / "reports" / "report.main.md"
     assert result.csv_path == tmp_path / "reports" / "report.main.csv"
     assert result.docx_path == tmp_path / "reports" / "report.main.docx"
+
+
+def test_render_main_report_writes_dependency_boundary_artifacts(
+    tmp_path: Path, resolved_record: dict[str, Any], sbom: dict[str, Any]
+) -> None:
+    store.write_resolved(tmp_path, "acme-alpha", [resolved_record])
+    store.write_sbom(
+        tmp_path,
+        "acme-alpha",
+        {
+            **sbom,
+            "artifacts": [
+                {
+                    **sbom["artifacts"][0],
+                    "locations": ["apps/api/package-lock.json", "apps/web/package-lock.json"],
+                }
+            ],
+        },
+    )
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+    assert result.dependency_boundary_paths == (
+        tmp_path / "out" / "dependency-boundaries.json",
+        tmp_path / "out" / "report.dependency-boundaries.csv",
+        tmp_path / "out" / "report.dependency-boundaries.md",
+    )
+    markdown = result.markdown_path.read_text(encoding="utf-8")
+    assert "## Dependency Boundaries" in markdown
+    payload = json.loads(result.dependency_boundary_paths[0].read_text(encoding="utf-8"))
+    assert payload["total_component_rows"] == 1
+    assert payload["boundary_attributed_row_count"] == 2
+    assert payload["unique_manifest_path_count"] == 2
 
 
 def test_deduplicates_by_name_and_spdx_id_across_repos(
