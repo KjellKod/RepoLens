@@ -47,7 +47,7 @@ from repolens.shortlist.decisions import apply_decisions, parse_review_decisions
 from repolens.shortlist.evidence import apply_evidence
 from repolens.shortlist.grouping import build_groups, group_membership_by_ref
 from repolens.shortlist.prescreen import ItemContent
-from repolens.shortlist.proposals import apply_proposals
+from repolens.shortlist.proposals import ProposalIngestSummary, apply_proposals_with_summary
 from repolens.shortlist.render import render_shortlist_markdown
 from repolens.shortlist.verify import verify_agent_resolution
 
@@ -65,6 +65,7 @@ class ShortlistResult:
     item_count: int
     agent_invocations: int
     contexts_path: Path | None = None
+    proposal_summary: ProposalIngestSummary | None = None
 
 
 def _evidence_content_loader(item: Mapping[str, Any]) -> ItemContent:
@@ -115,14 +116,17 @@ def run_shortlist(
             limits=limits,
         )
 
+    proposal_summary: ProposalIngestSummary | None = None
     if proposals_path is not None:
-        settled_items = apply_proposals(
+        proposal_result = apply_proposals_with_summary(
             settled_items,
             Path(proposals_path),
             metadata=metadata,
             fetcher=fetcher,
             evidence_resolver=evidence_resolver,
         )
+        settled_items = proposal_result.items
+        proposal_summary = proposal_result.summary
     if evidence_path is not None:
         settled_items = apply_evidence(
             settled_items,
@@ -175,6 +179,7 @@ def run_shortlist(
         item_count=len(resolved_items),
         agent_invocations=agent_invocations,
         contexts_path=written_contexts_path,
+        proposal_summary=proposal_summary,
     )
 
 

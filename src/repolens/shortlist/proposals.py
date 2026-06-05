@@ -62,6 +62,24 @@ class ProposalRecord:
         }
 
 
+@dataclass(frozen=True, slots=True)
+class ProposalIngestSummary:
+    """Structured proposal-ref summary for the current shortlist state."""
+
+    total_records: int
+    matched_open_refs: tuple[str, ...]
+    skipped_missing_refs: tuple[str, ...]
+    skipped_settled_refs: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ProposalApplyResult:
+    """Updated items plus proposal-ingest diagnostics."""
+
+    items: list[dict[str, Any]]
+    summary: ProposalIngestSummary
+
+
 def load_proposals(path: Path) -> tuple[ProposalRecord, ...]:
     """Read an external proposal JSON array and return fail-closed typed records."""
 
@@ -83,14 +101,41 @@ def apply_proposals(
     fetcher: FetchFunction = fetch_url,
     evidence_resolver: Resolver | None = None,
 ) -> list[dict[str, Any]]:
+    """Apply proposals and return updated items.
+
+    Use :func:`apply_proposals_with_summary` when callers need diagnostics about stale or
+    already-settled proposal refs.
+    """
+
+    return apply_proposals_with_summary(
+        items,
+        proposals_path,
+        metadata=metadata,
+        fetcher=fetcher,
+        evidence_resolver=evidence_resolver,
+    ).items
+
+
+def apply_proposals_with_summary(
+    items: Sequence[Mapping[str, Any]],
+    proposals_path: Path,
+    *,
+    metadata: ShortlistMetadata | None = None,
+    fetcher: FetchFunction = fetch_url,
+    evidence_resolver: Resolver | None = None,
+) -> ProposalApplyResult:
     """Apply proposal metadata to matching open items after independent verification.
 
     Verified proposals record candidate evidence and AI-suggested metadata, but they do
     not approve or reject the item. Failed, abstained, malformed, and off-allowlist
-    proposals leave the item open with an explicit fail-closed reason.
+    proposals leave the item open with an explicit fail-closed reason. Proposal refs that
+    do not match current open rows are returned in the summary rather than silently
+    disappearing from the operator workflow.
     """
 
-    proposals = _group_by_ref(load_proposals(proposals_path))
+    records = load_proposals(proposals_path)
+    proposals = _group_by_ref(records)
+    summary = _proposal_ingest_summary(items, proposals, total_records=len(records))
     updated: list[dict[str, Any]] = []
     for item in items:
         record = dict(item)
@@ -103,7 +148,32 @@ def apply_proposals(
                 evidence_resolver=evidence_resolver,
             )
         updated.append(record)
-    return updated
+    return ProposalApplyResult(items=updated, summary=summary)
+
+
+def _proposal_ingest_summary(
+    items: Sequence[Mapping[str, Any]],
+    proposals: Mapping[str, Sequence[ProposalRecord]],
+    *,
+    total_records: int,
+) -> ProposalIngestSummary:
+    open_refs: set[str] = set()
+    settled_refs: set[str] = set()
+    for item in items:
+        component_ref = str(item.get("component_ref"))
+        if item.get("status") == "open":
+            open_refs.add(component_ref)
+        else:
+            settled_refs.add(component_ref)
+
+    proposal_refs = set(proposals)
+    current_refs = open_refs | settled_refs
+    return ProposalIngestSummary(
+        total_records=total_records,
+        matched_open_refs=tuple(sorted(proposal_refs & open_refs)),
+        skipped_missing_refs=tuple(sorted(proposal_refs - current_refs)),
+        skipped_settled_refs=tuple(sorted(proposal_refs & (settled_refs - open_refs))),
+    )
 
 
 def _apply_item_proposals(
@@ -335,4 +405,11 @@ def _confidence(value: object) -> str | int | float | None:
     return None
 
 
-__all__ = ["ProposalRecord", "apply_proposals", "load_proposals"]
+__all__ = [
+    "ProposalApplyResult",
+    "ProposalIngestSummary",
+    "ProposalRecord",
+    "apply_proposals",
+    "apply_proposals_with_summary",
+    "load_proposals",
+]

@@ -2923,6 +2923,11 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     evidence_arg = getattr(args, "evidence", None)
     if evidence_arg is not None:
         summary = f"{summary}; ingested evidence {evidence_arg}"
+    proposal_notice = _shortlist_proposal_ingest_notice(
+        getattr(result, "proposal_summary", None)
+    )
+    if proposal_notice:
+        summary = f"{summary}\n{proposal_notice}"
     if result.open_count > 0:
         return CommandResult(
             CommandStatus.FINDINGS_OPEN,
@@ -2930,6 +2935,51 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
         )
     report_command = f"repolens report --work-root {shlex.quote(str(args.work_root))}"
     return CommandResult(CommandStatus.SUCCESS, f"{summary}\nNext CLI stage: {report_command}")
+
+
+def _shortlist_proposal_ingest_notice(proposal_summary: object | None) -> str:
+    if proposal_summary is None:
+        return ""
+    missing_refs = _proposal_summary_refs(proposal_summary, "skipped_missing_refs")
+    settled_refs = _proposal_summary_refs(proposal_summary, "skipped_settled_refs")
+    if not missing_refs and not settled_refs:
+        return ""
+
+    lines = ["Proposal ingest notice:"]
+    if missing_refs:
+        lines.append(
+            "  "
+            f"{len(missing_refs)} proposal ref(s) were not applied because they are not "
+            "in the current shortlist:"
+        )
+        lines.extend(_format_shortlist_ref_list(missing_refs))
+    if settled_refs:
+        lines.append(
+            "  "
+            f"{len(settled_refs)} proposal ref(s) were not applied because they are "
+            "already approved or rejected:"
+        )
+        lines.extend(_format_shortlist_ref_list(settled_refs))
+    lines.append(
+        "  Re-emit contexts and regenerate proposals if you expected these rows to appear "
+        "in shortlist.md."
+    )
+    return "\n".join(lines)
+
+
+def _proposal_summary_refs(proposal_summary: object, field: str) -> tuple[object, ...]:
+    value = getattr(proposal_summary, field, ())
+    if not isinstance(value, tuple | list):
+        return ()
+    return tuple(value)
+
+
+def _format_shortlist_ref_list(refs: tuple[object, ...], *, limit: int = 12) -> list[str]:
+    rendered = [f"    - {ref}" for ref in refs[:limit]]
+    remaining = len(refs) - limit
+    if remaining > 0:
+        rendered.append(f"    - ... {remaining} more")
+    return rendered
 
 
 def _shortlist_open_guidance(

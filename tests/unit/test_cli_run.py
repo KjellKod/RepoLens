@@ -12,6 +12,7 @@ from repolens import cli
 from repolens.data import store
 from repolens.exit_codes import InputError
 from repolens.scan.runner import RepoScanOutcome, ScanReport
+from repolens.shortlist.proposals import ProposalIngestSummary
 
 
 class _TtyStringIO(io.StringIO):
@@ -731,6 +732,24 @@ def test_shortlist_open_after_proposal_ingest_points_to_review_notes(
     assert f"Read supporting evidence: {review_notes_path}" in result.message
     assert "browser-evidence breadcrumbs" in result.message
     assert f"Open and edit decisions: {tmp_path / 'shortlist.md'}" in result.message
+
+
+def test_shortlist_proposal_ingest_notice_lists_skipped_refs() -> None:
+    message = cli._shortlist_proposal_ingest_notice(
+        ProposalIngestSummary(
+            total_records=3,
+            matched_open_refs=("acme-lib|MIT",),
+            skipped_missing_refs=("Analytics|UNKNOWN",),
+            skipped_settled_refs=("already-done|MIT",),
+        )
+    )
+
+    assert "Proposal ingest notice:" in message
+    assert "not in the current shortlist" in message
+    assert "Analytics|UNKNOWN" in message
+    assert "already approved or rejected" in message
+    assert "already-done|MIT" in message
+    assert "Re-emit contexts and regenerate proposals" in message
 
 
 def test_shortlist_context_emit_still_mentions_selected_scancode_retry(

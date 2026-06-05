@@ -272,6 +272,44 @@ def test_abstention_records_reason_without_verification(tmp_path: Path) -> None:
     assert item["ai_suggestion"]["reason"] == "ambiguous"
 
 
+def test_proposal_ingest_reports_missing_and_settled_refs(tmp_path: Path) -> None:
+    store.write_shortlist(
+        tmp_path,
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "open_count": 1,
+            "items": [
+                _item("acme-lib|MIT"),
+                {**_item("settled-lib|MIT"), "status": "approved"},
+            ],
+        },
+    )
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(component_ref="acme-lib|MIT"),
+            _proposal(component_ref="settled-lib|MIT"),
+            _proposal(component_ref="stale-lib|MIT"),
+        ],
+    )
+
+    result = run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(b'{"license":"MIT"}'),
+        evidence_resolver=_public_resolver,
+    )
+
+    assert result.proposal_summary is not None
+    assert result.proposal_summary.total_records == 3
+    assert result.proposal_summary.matched_open_refs == ("acme-lib|MIT",)
+    assert result.proposal_summary.skipped_settled_refs == ("settled-lib|MIT",)
+    assert result.proposal_summary.skipped_missing_refs == ("stale-lib|MIT",)
+
+
 def test_proposal_artifact_schema_rejects_unknown_fields(tmp_path: Path) -> None:
     _write_shortlist(tmp_path)
     proposals_path = tmp_path / "proposals.json"
