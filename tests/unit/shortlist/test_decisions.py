@@ -116,6 +116,21 @@ def test_empty_tiers_explain_when_they_fill() -> None:
     assert "no unresolved, abstained, failed-verification" in markdown
 
 
+def test_group_label_distinguishes_open_from_total_items() -> None:
+    items = _needs_judgment_items()
+    items[1] = {
+        **items[1],
+        "status": "approved",
+        "decided_at": "2026-06-05T00:00:00Z",
+    }
+
+    markdown = render_shortlist_markdown(items, metadata=ShortlistMetadata(triage_by_ref={}))
+
+    assert "(1 open / 2 total items)" in markdown
+    assert "- [ ] `acme-tool|GPL-3.0-only`" in markdown
+    assert "- [x] `acme-core|GPL-3.0-or-later`" in markdown
+
+
 def test_verified_candidate_displays_correction_without_changing_ref_key() -> None:
     items = [
         {

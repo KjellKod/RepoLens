@@ -110,7 +110,7 @@ def render_shortlist_markdown(
 def _render_group(group: ShortlistGroup) -> list[str]:
     label = (
         f"{group.key.spdx_family} / {group.key.distribution} / {group.key.scope} "
-        f"({len(group.items)} item{'s' if len(group.items) != 1 else ''})"
+        f"({_group_count_label(group.items)})"
     )
     found_in = ", ".join(group.found_in[:5]) if group.found_in else "unknown repo"
     if len(group.found_in) > 5:
@@ -125,6 +125,15 @@ def _render_group(group: ShortlistGroup) -> list[str]:
     indent = "  " if has_group_decision else ""
     lines.extend(_render_item(item, indent=indent) for item in group.items)
     return lines
+
+
+def _group_count_label(items: Sequence[Mapping[str, Any]]) -> str:
+    total_count = len(items)
+    open_count = sum(1 for item in items if str(item.get("status") or "open") == "open")
+    total_label = f"{total_count} item{'s' if total_count != 1 else ''}"
+    if open_count == total_count:
+        return total_label
+    return f"{open_count} open / {total_count} total item{'s' if total_count != 1 else ''}"
 
 
 def _render_item(item: Mapping[str, Any], *, indent: str = "") -> str:
