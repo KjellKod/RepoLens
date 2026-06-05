@@ -1,0 +1,34 @@
+tests/unit/test_report_main.py
+  s_21e46d14508219::t_c4cf870354aede 5,53-83
+src/repolens/report/dependency_boundaries.py
+  s_21e46d14508219::t_618717be894d99 1-9,11-198,200-414,416-419,437-445,447-461,463-676
+  s_21e46d14508219::t_2cdec2952fa888 10,199
+  s_21e46d14508219::t_d189331b449a77 420-425,427-436
+scripts/m1_fixture_e2e.py
+  s_21e46d14508219::t_f91a4f9adf9a40 347-350,396-412
+src/repolens/report/main.py
+  s_21e46d14508219::t_fb7e4cb4b87381 19-23,106,182,185-196,204-209,261
+tests/integration/test_m1_fixture_e2e.py
+  s_21e46d14508219::t_c1a8c349f38821 60-61,63
+  s_21e46d14508219::t_42e2623e42d2e7 56-59,62,64-65
+tests/unit/test_dependency_boundaries.py
+  s_21e46d14508219::t_6550f070ff1c7c 5,8-9,250-272
+  s_21e46d14508219::t_2cdec2952fa888 137-154
+  s_21e46d14508219::t_db89380abe7715 1-4,6-7,10-136,155-249,273-308
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "fc0e2c02e961ac0551efdc156ea9e220f9e3ad67",
+  "prompts": {},
+  "sessions": {
+    "s_21e46d14508219": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e996b-612b-7611-8823-a66ce43de96f",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
