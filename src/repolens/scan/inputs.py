@@ -35,8 +35,37 @@ def load_explicit_repo_specs(path: Path, repo_spec_cls: type) -> list:
     return repo_specs_from_records(records, repo_spec_cls)
 
 
+def load_discover_approved_repo_refs(work_root: Path) -> tuple[str, ...]:
+    """Load checked discover candidate repo refs from ``discovered.json`` and Markdown."""
+
+    return tuple(
+        _repo_ref_from_discovered(record) for record in _load_discover_approved_records(work_root)
+    )
+
+
 def load_discover_approved_repo_specs(work_root: Path, repo_spec_cls: type) -> list:
     """Load checked discover candidates from ``discovered.json`` and checklist Markdown."""
+
+    records = []
+    for discovered_record in _load_discover_approved_records(work_root):
+        repo_ref = _repo_ref_from_discovered(discovered_record)
+        name_with_owner = discovered_record["name_with_owner"]
+        records.append(
+            {
+                "repo_ref": repo_ref,
+                "clone_url": f"https://github.com/{name_with_owner}.git",
+                # Carry the discovered privacy flag onto the record so the runner
+                # resolves a credential for private repos. Dropping it here (as the
+                # loader used to) silently clones private repos unauthenticated.
+                "private": discovered_record.get("private") is True,
+            }
+        )
+
+    return repo_specs_from_records(records, repo_spec_cls)
+
+
+def _load_discover_approved_records(work_root: Path) -> list[dict]:
+    """Return discovered records for checked, non-hard-excluded candidates."""
 
     root = Path(work_root)
     discovered = _read_discovered_input(root)
@@ -56,30 +85,29 @@ def load_discover_approved_repo_specs(work_root: Path, repo_spec_cls: type) -> l
         by_name_with_owner[name_with_owner] = record
 
     checked_names = _checked_candidate_names(root / "repos.candidate.md")
-    records = []
+    records: list[dict] = []
     for name_with_owner in checked_names:
         discovered_record = by_name_with_owner.get(name_with_owner)
         if discovered_record is None:
             raise InputError(f"checked repo not found in discovered.json: {name_with_owner}")
         if discovered_record.get("hard_excluded") is True:
             continue
-        repo_ref = discovered_record.get("name")
-        if not isinstance(repo_ref, str) or not repo_ref:
-            raise InputError(f"discovered repo {name_with_owner} is missing a non-empty name")
-        records.append(
-            {
-                "repo_ref": repo_ref,
-                "clone_url": f"https://github.com/{name_with_owner}.git",
-                # Carry the discovered privacy flag onto the record so the runner
-                # resolves a credential for private repos. Dropping it here (as the
-                # loader used to) silently clones private repos unauthenticated.
-                "private": discovered_record.get("private") is True,
-            }
-        )
+        _repo_ref_from_discovered(discovered_record)
+        records.append(discovered_record)
 
     if not records:
         raise InputError("no repos checked in repos.candidate.md")
-    return repo_specs_from_records(records, repo_spec_cls)
+    return records
+
+
+def _repo_ref_from_discovered(record: dict) -> str:
+    name_with_owner = record.get("name_with_owner")
+    repo_ref = record.get("name")
+    if not isinstance(repo_ref, str) or not repo_ref:
+        if isinstance(name_with_owner, str) and name_with_owner:
+            raise InputError(f"discovered repo {name_with_owner} is missing a non-empty name")
+        raise InputError("discovered repo is missing a non-empty name")
+    return repo_ref
 
 
 def repo_specs_from_records(records: object, repo_spec_cls: type) -> list:

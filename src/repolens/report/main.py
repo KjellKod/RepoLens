@@ -28,6 +28,7 @@ from repolens.report.selection import (
     report_header_if_configured,
     report_selection_from_config,
 )
+from repolens.scan.inputs import load_discover_approved_repo_refs
 from repolens.security.redaction import redact_tokens
 from repolens.security.sanitize import (
     markdown_link,
@@ -176,7 +177,7 @@ def render_main_report(
     category_index = build_category_index(_read_discovered_or_empty(root))
     default_category = _default_category(config)
 
-    records, file_gaps = collect_resolved_records(root)
+    records, file_gaps = collect_resolved_records(root, _active_report_repo_refs(root))
     split = route_occurrences(records, category_index, selection.include, default_category)
     rows = aggregate_rows(split.main_records)
     dependency_boundary_summary = build_dependency_boundary_summary(root)
@@ -323,27 +324,35 @@ def _prompt_legal_text(in_stream: TextIO, out_stream: TextIO) -> str:
     return line.strip() or DEFAULT_LEGAL_TEXT
 
 
-def collect_resolved_records(work_root: Path) -> tuple[list[dict[str, Any]], list[str]]:
+def collect_resolved_records(
+    work_root: Path,
+    active_repo_refs: Sequence[str] | None = None,
+) -> tuple[list[dict[str, Any]], list[str]]:
     """Collect records from ``work/*/resolved.ndjson`` using the store boundary."""
 
     work_dir = Path(work_root) / "work"
-    if not work_dir.is_dir():
+    if active_repo_refs is None and not work_dir.is_dir():
         raise InputError("report requires work/<repo>/resolved.ndjson input")
 
-    repo_dirs = sorted((path for path in work_dir.iterdir() if path.is_dir()), key=_path_sort_key)
+    if active_repo_refs is None:
+        repo_dirs = sorted(
+            (path for path in work_dir.iterdir() if path.is_dir()), key=_path_sort_key
+        )
+    else:
+        repo_dirs = [store.repo_dir(work_root, repo_ref) for repo_ref in active_repo_refs]
+
     if not repo_dirs:
         raise InputError("report requires at least one work/<repo>/resolved.ndjson input")
 
     records: list[dict[str, Any]] = []
     file_gaps: list[str] = []
+    missing_resolved: list[str] = []
     resolved_seen = False
     for repo_dir in repo_dirs:
         resolved_path = repo_dir / "resolved.ndjson"
         if not resolved_path.exists():
-            if (repo_dir / "sbom.syft.json").exists():
-                raise InputError(
-                    f"incomplete R1 input: missing {resolved_path.relative_to(work_root)}"
-                )
+            if active_repo_refs is not None or (repo_dir / "sbom.syft.json").exists():
+                missing_resolved.append(str(resolved_path.relative_to(work_root)))
             continue
 
         resolved_seen = True
@@ -352,9 +361,20 @@ def collect_resolved_records(work_root: Path) -> tuple[list[dict[str, Any]], lis
         if len(records) == before_count:
             file_gaps.append(f"empty_resolved_file: {resolved_path.relative_to(work_root)}")
 
+    if missing_resolved:
+        raise InputError(f"incomplete R1 input: missing {', '.join(missing_resolved)}")
     if not resolved_seen:
         raise InputError("report found no work/<repo>/resolved.ndjson input")
     return records, sorted(file_gaps, key=lambda value: (value.casefold(), value))
+
+
+def _active_report_repo_refs(work_root: Path) -> tuple[str, ...] | None:
+    """Return approved discover refs when the work root has review artifacts."""
+
+    root = Path(work_root)
+    if not (root / "discovered.json").exists() or not (root / "repos.candidate.md").exists():
+        return None
+    return load_discover_approved_repo_refs(root)
 
 
 def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[DisclosureRow]:

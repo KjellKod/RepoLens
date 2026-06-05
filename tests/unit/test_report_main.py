@@ -301,6 +301,65 @@ def test_report_uses_resolved_ndjson_not_inventory_json(
     assert result.row_count == 1
 
 
+def test_report_ignores_unchecked_stale_scan_artifacts(
+    tmp_path: Path, resolved_record: dict[str, Any], sbom: dict[str, Any]
+) -> None:
+    _write_discovered(
+        tmp_path,
+        [
+            {"name": "acme-alpha", "name_with_owner": "acme/acme-alpha", "category": "runtime"},
+            {
+                "name": "internal-datadog-mcp",
+                "name_with_owner": "acme/internal-datadog-mcp",
+                "category": "internal",
+            },
+        ],
+    )
+    _write_candidates(
+        tmp_path,
+        [
+            "- [x] `acme/acme-alpha` - category `runtime` (`test`)",
+            "- [ ] `acme/internal-datadog-mcp` - category `internal` (`test`)",
+        ],
+    )
+    store.write_resolved(tmp_path, "acme-alpha", [resolved_record])
+    store.write_sbom(tmp_path, "internal-datadog-mcp", sbom)
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config(include=("runtime",)))
+
+    rows = _csv_records(result.csv_path)
+    assert result.row_count == 1
+    assert rows[0]["found_in"] == "acme-alpha"
+
+
+def test_report_lists_missing_checked_resolved_inputs(tmp_path: Path, sbom: dict[str, Any]) -> None:
+    _write_discovered(
+        tmp_path,
+        [
+            {"name": "acme-alpha", "name_with_owner": "acme/acme-alpha", "category": "runtime"},
+            {"name": "acme-beta", "name_with_owner": "acme/acme-beta", "category": "runtime"},
+        ],
+    )
+    _write_candidates(
+        tmp_path,
+        [
+            "- [x] `acme/acme-alpha` - category `runtime` (`test`)",
+            "- [x] `acme/acme-beta` - category `runtime` (`test`)",
+        ],
+    )
+    store.write_sbom(tmp_path, "acme-alpha", sbom)
+    store.write_sbom(tmp_path, "acme-beta", sbom)
+
+    with pytest.raises(
+        InputError,
+        match=(
+            r"incomplete R1 input: missing work/acme-alpha/resolved\.ndjson, "
+            r"work/acme-beta/resolved\.ndjson"
+        ),
+    ):
+        render_main_report(tmp_path, tmp_path / "out", _report_config(include=("runtime",)))
+
+
 def test_pipe_characters_are_escaped_in_markdown_table(
     tmp_path: Path, resolved_record: dict[str, Any]
 ) -> None:
@@ -652,3 +711,21 @@ def _write_discovered(tmp_path: Path, repositories: list[dict[str, str]]) -> Non
         ],
     }
     store.write_discovered(tmp_path, payload)
+
+
+def _write_candidates(tmp_path: Path, rows: list[str]) -> None:
+    (tmp_path / "repos.candidate.md").write_text(
+        "\n".join(
+            [
+                "# Repository candidates",
+                "",
+                "## Candidates",
+                "",
+                *rows,
+                "",
+                "## Hard exclusions",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
