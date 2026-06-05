@@ -20,7 +20,6 @@ from typing import TYPE_CHECKING, Protocol, TextIO, TypeVar
 from urllib.parse import unquote
 
 from repolens.bootstrap.cache import (
-    DOC_LINK,
     SyftCacheResult,
     SyftPinSummary,
     cached_syft_path,
@@ -180,9 +179,9 @@ _STAGE_HELP = {
         ),
         epilog=_stage_epilog(
             "reviewed discover artifacts at <WORK>/discovered.json and "
-            "<WORK>/repos.candidate.md. On first use, scan can acquire RepoLens's "
+            "<WORK>/repos.candidate.md. On first use, scan acquires RepoLens's "
             "pinned Syft into the shared verified cache.",
-            "repolens scan --work-root <WORK>  (automation: --yes; offline: --offline)",
+            "repolens scan --work-root <WORK>  (offline: --offline)",
             "<WORK>/work/<repo_ref>/sbom.syft.json + scan.status.json per repo "
             "(resumable — safe to re-run).",
             "`repolens resolve --work-root <WORK>`.",
@@ -576,12 +575,6 @@ def _configure_scan_parser(subparser: argparse.ArgumentParser) -> None:
         help="Per-repo wall-clock budget for hardened git clone (default: 300).",
     )
     subparser.add_argument(
-        "--yes",
-        "-y",
-        action="store_true",
-        help="Pre-consent to download and verify RepoLens's pinned Syft when the cache is empty.",
-    )
-    subparser.add_argument(
         "--offline",
         action="store_true",
         help="Require the verified shared Syft cache; never download or prompt.",
@@ -638,10 +631,7 @@ def _configure_run_parser(subparser: argparse.ArgumentParser) -> None:
         "--yes",
         "-y",
         action="store_true",
-        help=(
-            "Automation mode: pass discovery and tool-consent gates, but never approve "
-            "shortlist items."
-        ),
+        help=("Automation mode: pass discovery gates, but never approve shortlist items."),
     )
     subparser.add_argument(
         "--quiet",
@@ -2176,8 +2166,6 @@ def _handle_scan(args: argparse.Namespace) -> CommandResult:
     from repolens.scan.inputs import load_discover_approved_repo_specs, load_explicit_repo_specs
 
     _print_config_summary(args, label="scan")
-    if args.offline and args.yes:
-        raise InputError("--offline cannot be combined with --yes")
     _validate_positive_timeout("--timeout", args.timeout)
     _validate_positive_timeout("--clone-timeout", args.clone_timeout)
     if args.repos is not None:
@@ -2400,22 +2388,6 @@ def _ensure_syft_for_scan(args: argparse.Namespace) -> Path:
             raise InputError(str(exc)) from exc
         return result.path
 
-    interactive = sys.stdin.isatty() and sys.stderr.isatty()
-    if not args.yes:
-        if interactive:
-            print(_syft_not_installed_message(pin), file=sys.stderr)
-            print(
-                "Download and install RepoLens's validated Syft now? [y/N] ",
-                end="",
-                file=sys.stderr,
-                flush=True,
-            )
-            answer = sys.stdin.readline().strip().lower()
-            if answer not in {"y", "yes"}:
-                raise InputError(_syft_declined_message(pin, interactive=True))
-        else:
-            raise InputError(_syft_declined_message(pin, interactive=False))
-
     progress = _SyftAcquireProgressPrinter(quiet=args.quiet, stream=sys.stderr)
     progress.notice(pin)
     try:
@@ -2488,27 +2460,6 @@ class _SyftAcquireProgressPrinter:
         if self._heartbeat is not None:
             self._heartbeat.stop()
             self._heartbeat = None
-
-
-def _syft_not_installed_message(pin: SyftPinSummary) -> str:
-    return (
-        f"RepoLens's validated Syft is not installed in the shared cache.\n"
-        f"Tool: Syft {pin.version} (sha256 {pin.short_sha256}...)\n"
-        f"Verification: {pin.cosign_note}\n"
-        f"Docs: {DOC_LINK}"
-    )
-
-
-def _syft_declined_message(pin: SyftPinSummary, *, interactive: bool) -> str:
-    mode_hint = (
-        "Rerun and answer yes, pass --yes, or run `repolens bootstrap`."
-        if interactive
-        else "Pass --yes for automation or run `repolens bootstrap` before scanning."
-    )
-    return (
-        f"RepoLens's validated Syft {pin.version} (sha256 {pin.short_sha256}...) is required. "
-        f"Nothing was downloaded. See {DOC_LINK}. {mode_hint}"
-    )
 
 
 def _resolve_stage(args: argparse.Namespace) -> CommandResult:
@@ -2923,9 +2874,7 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     evidence_arg = getattr(args, "evidence", None)
     if evidence_arg is not None:
         summary = f"{summary}; ingested evidence {evidence_arg}"
-    proposal_notice = _shortlist_proposal_ingest_notice(
-        getattr(result, "proposal_summary", None)
-    )
+    proposal_notice = _shortlist_proposal_ingest_notice(getattr(result, "proposal_summary", None))
     if proposal_notice:
         summary = f"{summary}\n{proposal_notice}"
     if result.open_count > 0:

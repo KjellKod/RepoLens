@@ -271,7 +271,8 @@ def _cache_required_message(pin: SyftPinSummary) -> str:
     return (
         f"RepoLens's validated Syft {pin.version} (sha256 {pin.short_sha256}...) "
         "is required but is not in the verified shared cache. Nothing was downloaded. "
-        f"See {DOC_LINK}. Rerun with --yes or run `repolens bootstrap` before offline use."
+        f"See {DOC_LINK}. Run `repolens scan` online or run `repolens bootstrap` before "
+        "offline use."
     )
 
 
