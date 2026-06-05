@@ -7,6 +7,7 @@ re-verifies proposal citations against freshly re-fetched evidence, ingests huma
 decisions from ``shortlist.md``, and writes both artifacts back.
 """
 
+from repolens.shortlist.research import ResearchResult, run_research
 from repolens.shortlist.stage import ShortlistResult, run_shortlist
 
-__all__ = ["ShortlistResult", "run_shortlist"]
+__all__ = ["ResearchResult", "ShortlistResult", "run_research", "run_shortlist"]

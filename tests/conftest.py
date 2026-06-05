@@ -189,3 +189,32 @@ def shortlist_proposals() -> list[dict[str, Any]]:
             "reason": "No fetchable evidence URL in context.",
         },
     ]
+
+
+@pytest.fixture
+def shortlist_evidence() -> list[dict[str, Any]]:
+    return [
+        {
+            "component_ref": "acme-lib|UNKNOWN",
+            "context_fingerprint": "abc123def456",
+            "package": "acme-lib",
+            "version": "1.2.3",
+            "ecosystem": "pypi",
+            "found_in": ["acme-alpha"],
+            "outcome": "pending_verifier_support",
+            "machine_verification": "pending_verifier_support",
+            "lookups_attempted": ["PyPI metadata"],
+            "likely_spdx": "MIT",
+            "confidence": "high",
+            "browser_evidence": [
+                {
+                    "label": "PyPI metadata",
+                    "url": "https://pypi.org/pypi/acme-lib/1.2.3/json",
+                    "source_type": "pypi",
+                    "anchor": "MIT",
+                }
+            ],
+            "rationale": "Registry metadata anchors MIT.",
+            "review_note": "Browser evidence found.",
+        }
+    ]

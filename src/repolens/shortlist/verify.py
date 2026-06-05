@@ -17,7 +17,7 @@ blocked by ``validate_url_for_fetch``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from repolens.policy.config import load_default_policy
 from repolens.resolve.adapters import API_ALLOWED_HOSTS
@@ -32,6 +32,8 @@ from repolens.security.http_client import (
     validate_url_for_fetch,
 )
 from repolens.shortlist.agent import Resolution
+
+_MUTABLE_GITHUB_REFS = frozenset({"main", "master", "develop", "development", "trunk", "default"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,6 +54,7 @@ def _evidence_options() -> HttpFetchOptions:
 def verify_agent_resolution(
     resolution: Resolution,
     *,
+    expected_ref: str | None = None,
     fetcher: FetchFunction = fetch_url,
     resolver: Resolver | None = None,
 ) -> VerifyOutcome:
@@ -72,6 +75,14 @@ def verify_agent_resolution(
         return VerifyOutcome(verified=False, reason="verify:unrecognized_spdx")
     if not resolution.evidence_anchor:
         return VerifyOutcome(verified=False, reason="verify:empty_anchor")
+    if _github_license_api_missing_ref(resolution.evidence_url):
+        return VerifyOutcome(verified=False, reason="verify:missing_ref")
+    github_ref_reason = _github_license_api_ref_mismatch(
+        resolution.evidence_url,
+        expected_ref=expected_ref,
+    )
+    if github_ref_reason is not None:
+        return VerifyOutcome(verified=False, reason=github_ref_reason)
 
     candidate = ApiCandidate(
         spdx_id=spdx_id,
@@ -106,6 +117,59 @@ def _proposal_evidence_url_allowed(url: str) -> bool:
     if parsed.hostname != "raw.githubusercontent.com":
         return True
     return parsed.path.startswith("/CocoaPods/Specs/") and parsed.path.endswith(".podspec.json")
+
+
+def _github_license_api_missing_ref(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.hostname != "api.github.com":
+        return False
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) != 4 or parts[0] != "repos" or parts[3] != "license":
+        return False
+    refs = parse_qs(parsed.query).get("ref", [])
+    return not any(ref.strip() for ref in refs)
+
+
+def _github_license_api_ref_mismatch(url: str, *, expected_ref: str | None) -> str | None:
+    expected = _clean_ref(expected_ref)
+    if expected is None:
+        return None
+    parsed = urlparse(url)
+    if parsed.hostname != "api.github.com":
+        return None
+    parts = [part for part in parsed.path.split("/") if part]
+    if len(parts) != 4 or parts[0] != "repos" or parts[3] != "license":
+        return None
+    refs = [ref.strip() for ref in parse_qs(parsed.query).get("ref", []) if ref.strip()]
+    if not refs:
+        return "verify:missing_ref"
+    ref = refs[0]
+    if _is_immutable_sha(ref):
+        return None
+    if ref.casefold() in _MUTABLE_GITHUB_REFS:
+        return "verify:default_branch_rejected"
+    if ref not in _acceptable_refs(expected):
+        return "verify:ref_mismatch"
+    return None
+
+
+def _clean_ref(value: str | None) -> str | None:
+    if value is None:
+        return None
+    text = value.strip()
+    if not text or text.casefold() in {"unknown", "declared-unpinned"}:
+        return None
+    return text
+
+
+def _acceptable_refs(expected_ref: str) -> frozenset[str]:
+    if expected_ref.startswith("v"):
+        return frozenset({expected_ref, expected_ref[1:]})
+    return frozenset({expected_ref, f"v{expected_ref}"})
+
+
+def _is_immutable_sha(ref: str) -> bool:
+    return len(ref) == 40 and all(char in "0123456789abcdefABCDEF" for char in ref)
 
 
 __all__ = ["VerifyOutcome", "verify_agent_resolution"]

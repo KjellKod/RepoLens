@@ -186,7 +186,7 @@ def test_item_rows_include_repo_provenance() -> None:
 
     markdown = render_shortlist_markdown([item], metadata=metadata)
 
-    assert "`zope-site|UNKNOWN` -&gt; `ZPL-2.1` — found in `platform-sol, web`" in markdown
+    assert "`zope-site|UNKNOWN` -&gt; `ZPL-2.1` — found in `platform-sol`, `web`" in markdown
 
 
 def test_verified_candidate_displays_correction_without_changing_ref_key() -> None:

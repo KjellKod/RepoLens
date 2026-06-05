@@ -717,7 +717,6 @@ def _configure_shortlist_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--work-root",
         type=Path,
-        required=True,
         metavar="PATH",
         help="Root containing the shortlist.json + shortlist.md that flag wrote.",
     )
@@ -747,7 +746,60 @@ def _configure_shortlist_parser(subparser: argparse.ArgumentParser) -> None:
             "recording candidates."
         ),
     )
+    subparser.add_argument(
+        "--evidence",
+        type=Path,
+        metavar="PATH",
+        help="Read deterministic research evidence JSON and preserve browser evidence.",
+    )
     subparser.set_defaults(handler=_shortlist_stage)
+    actions = subparser.add_subparsers(
+        dest="shortlist_action",
+        metavar="<action>",
+        title="shortlist actions",
+        required=False,
+    )
+    research_parser = actions.add_parser(
+        "research",
+        help="Research emitted shortlist contexts and write model-free evidence artifacts.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Research emitted shortlist contexts with deterministic public metadata lookups. "
+            "This writes proposals, browser evidence, and review notes without invoking a model."
+        ),
+    )
+    research_parser.add_argument(
+        "--work-root",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Pipeline work root used for default artifact paths.",
+    )
+    research_parser.add_argument(
+        "--contexts",
+        type=Path,
+        metavar="PATH",
+        help="shortlist.contexts.json to research (default: <work-root>/shortlist.contexts.json).",
+    )
+    research_parser.add_argument(
+        "--proposals",
+        type=Path,
+        metavar="PATH",
+        help="shortlist.proposals.json to write (default: <work-root>/shortlist.proposals.json).",
+    )
+    research_parser.add_argument(
+        "--evidence",
+        type=Path,
+        metavar="PATH",
+        help="shortlist.evidence.json to write (default: <work-root>/shortlist.evidence.json).",
+    )
+    research_parser.add_argument(
+        "--review",
+        type=Path,
+        metavar="PATH",
+        help="shortlist.review.md to write (default: <work-root>/shortlist.review.md).",
+    )
+    research_parser.set_defaults(handler=_shortlist_research_stage)
 
 
 def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
@@ -1537,6 +1589,7 @@ def _stage_args(
     out_dir: Path | None = None,
     emit_contexts_path: Path | None = None,
     proposals_path: Path | None = None,
+    evidence_path: Path | None = None,
 ) -> argparse.Namespace:
     return argparse.Namespace(
         work_root=work_root,
@@ -1555,6 +1608,7 @@ def _stage_args(
         identity=None,
         emit_contexts=emit_contexts_path,
         proposals=proposals_path,
+        evidence=evidence_path,
         in_run=True,
     )
 
@@ -1642,6 +1696,7 @@ def _run_shortlist_loop(
 ) -> CommandResult | None:
     contexts_path = work_root / "shortlist.contexts.json"
     proposals_path = work_root / "shortlist.proposals.json"
+    evidence_path = work_root / "shortlist.evidence.json"
 
     while True:
         _shortlist_stage(_stage_args(args, work_root=work_root, emit_contexts_path=contexts_path))
@@ -1651,12 +1706,21 @@ def _run_shortlist_loop(
             return None
 
         if not interactive:
-            if proposals_path.exists():
+            if proposals_path.exists() or evidence_path.exists():
                 _shortlist_stage(
-                    _stage_args(args, work_root=work_root, proposals_path=proposals_path)
+                    _stage_args(
+                        args,
+                        work_root=work_root,
+                        proposals_path=proposals_path if proposals_path.exists() else None,
+                        evidence_path=evidence_path if evidence_path.exists() else None,
+                    )
                 )
                 open_count = _shortlist_open_count(work_root)
-                _run_banner(args, "shortlist", f"{open_count} open item(s) after proposals")
+                _run_banner(
+                    args,
+                    "shortlist",
+                    f"{open_count} open item(s) after research artifacts",
+                )
                 if open_count == 0:
                     return None
             instruction = _shortlist_artifact_instruction(
@@ -1664,19 +1728,28 @@ def _run_shortlist_loop(
                 work_root,
                 contexts_path,
                 proposals_path,
+                evidence_path,
             )
             return CommandResult(CommandStatus.FINDINGS_OPEN, instruction)
 
         _run_pause(
-            "External proposal step: use the `.skills/repolens` runbook to review "
-            f"{contexts_path} and write optional proposals to {proposals_path}, then "
+            "External research step: run `repolens shortlist research` against "
+            f"{contexts_path} and write optional proposals to {proposals_path} plus "
+            f"evidence to {evidence_path}, then "
             "press Enter.",
             interactive=True,
         )
-        if proposals_path.exists():
-            _shortlist_stage(_stage_args(args, work_root=work_root, proposals_path=proposals_path))
+        if proposals_path.exists() or evidence_path.exists():
+            _shortlist_stage(
+                _stage_args(
+                    args,
+                    work_root=work_root,
+                    proposals_path=proposals_path if proposals_path.exists() else None,
+                    evidence_path=evidence_path if evidence_path.exists() else None,
+                )
+            )
             open_count = _shortlist_open_count(work_root)
-            _run_banner(args, "shortlist", f"{open_count} open item(s) after proposals")
+            _run_banner(args, "shortlist", f"{open_count} open item(s) after research artifacts")
             if open_count == 0:
                 return None
 
@@ -1697,15 +1770,19 @@ def _shortlist_artifact_instruction(
     work_root: Path,
     contexts_path: Path,
     proposals_path: Path,
+    evidence_path: Path,
 ) -> str:
     return (
         f"Open shipped-license findings: {open_count}; report is halted before disclosure.\n"
         f"Contexts: {contexts_path}\n"
         f"Optional proposals: {proposals_path}\n"
+        f"Research evidence: {evidence_path}\n"
         f"Grouped human review: {work_root / 'shortlist.md'}\n"
-        "Next: create proposals outside RepoLens if useful, then ingest them with "
+        "Next: run deterministic research or create artifacts outside RepoLens if useful, "
+        "then ingest them with "
         f"`repolens shortlist --work-root {shlex.quote(str(work_root))} "
-        f"--proposals {shlex.quote(str(proposals_path))}` and approve/reject groups "
+        f"--proposals {shlex.quote(str(proposals_path))} "
+        f"--evidence {shlex.quote(str(evidence_path))}` and approve/reject groups "
         "or items in shortlist.md. Rerun `repolens run` after human approval."
     )
 
@@ -2824,12 +2901,15 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
             del request
             return Abstain(reason="no_offline_agent")
 
+    if args.work_root is None:
+        raise InputError("shortlist requires --work-root")
     result = run_shortlist(
         args.work_root,
         agent_client=_AbstainingAgent(),
         identity=args.identity,
         emit_contexts_path=args.emit_contexts,
         proposals_path=args.proposals,
+        evidence_path=getattr(args, "evidence", None),
     )
     summary = (
         f"settled shortlist: {result.open_count} open item(s) of {result.item_count}; "
@@ -2840,6 +2920,9 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
         summary = f"{summary}; emitted contexts {contexts_path}"
     if args.proposals is not None:
         summary = f"{summary}; ingested proposals {args.proposals}"
+    evidence_arg = getattr(args, "evidence", None)
+    if evidence_arg is not None:
+        summary = f"{summary}; ingested evidence {evidence_arg}"
     if result.open_count > 0:
         return CommandResult(
             CommandStatus.FINDINGS_OPEN,
@@ -2858,21 +2941,28 @@ def _shortlist_open_guidance(
     work_root_arg = shlex.quote(str(work_root))
     contexts = contexts_path or work_root / "shortlist.contexts.json"
     proposals = work_root / "shortlist.proposals.json"
+    evidence = work_root / "shortlist.evidence.json"
     review_notes = work_root / "shortlist.review.md"
     emit_command = (
         f"repolens shortlist --work-root {work_root_arg} "
         f"--emit-contexts {shlex.quote(str(contexts))}"
     )
     ingest_command = (
-        f"repolens shortlist --work-root {work_root_arg} --proposals {shlex.quote(str(proposals))}"
+        f"repolens shortlist --work-root {work_root_arg} "
+        f"--proposals {shlex.quote(str(proposals))} --evidence {shlex.quote(str(evidence))}"
+    )
+    research_command = (
+        f"repolens shortlist research --work-root {work_root_arg} "
+        f"--contexts {shlex.quote(str(contexts))} --proposals {shlex.quote(str(proposals))} "
+        f"--evidence {shlex.quote(str(evidence))} --review {shlex.quote(str(review_notes))}"
     )
     rerun_command = f"repolens shortlist --work-root {work_root_arg}"
     bucket_hint = _shortlist_unresolved_bucket_hint(work_root)
     scancode_retry_hint = _shortlist_scancode_retry_hint(work_root)
 
-    if args.proposals is not None:
+    if args.proposals is not None or getattr(args, "evidence", None) is not None:
         sections = [
-            "Manual step: proposals were ingested, but some items remain open.",
+            "Manual step: research artifacts were ingested, but some items remain open.",
             "",
         ]
         if bucket_hint:
@@ -2893,7 +2983,7 @@ def _shortlist_open_guidance(
         return "\n".join(sections)
     if contexts_path is not None:
         sections = [
-            "Manual step: contexts are ready for AI-assisted shortlist review.",
+            "Manual step: contexts are ready for shortlist research.",
             "",
         ]
         if bucket_hint:
@@ -2907,9 +2997,13 @@ def _shortlist_open_guidance(
                 f"    {contexts}",
                 "  Write:",
                 f"    proposals: {proposals}",
+                f"    evidence: {evidence}",
                 f"    review notes: {review_notes}",
                 "",
-                "Then ingest verified proposals:",
+                "  Or run deterministic model-free research:",
+                f"    {research_command}",
+                "",
+                "Then ingest verified proposals and browser evidence:",
                 f"  {ingest_command}",
                 "",
                 "Evidence notes:",
@@ -2934,18 +3028,22 @@ def _shortlist_open_guidance(
     sections.extend(_shortlist_review_notes_guidance(work_root, None))
     sections.extend(
         (
-            "AI-assisted pass for UNKNOWNs/stale evidence:",
+            "Research pass for UNKNOWNs/stale evidence:",
             "  Emit contexts:",
             f"    {emit_command}",
+            "",
+            "  Run deterministic model-free research:",
+            f"    {research_command}",
             "",
             "  Ask Codex/Claude:",
             "    $repolens review every row in:",
             f"      {contexts}",
             "    Write:",
             f"      proposals: {proposals}",
+            f"      evidence: {evidence}",
             f"      review notes: {review_notes}",
             "",
-            "  Ingest verified proposals:",
+            "  Ingest verified proposals and browser evidence:",
             f"    {ingest_command}",
             "",
             "Human review:",
@@ -3031,6 +3129,30 @@ def _shortlist_unresolved_bucket_hint(work_root: Path) -> str:
     if not sections:
         return ""
     return "\n".join(("Open UNKNOWN bucket summary:", *sections))
+
+
+def _shortlist_research_stage(args: argparse.Namespace) -> CommandResult:
+    from repolens.shortlist.research import run_research
+
+    work_root = Path(args.work_root)
+    contexts = args.contexts or work_root / "shortlist.contexts.json"
+    proposals = args.proposals or work_root / "shortlist.proposals.json"
+    evidence = args.evidence or work_root / "shortlist.evidence.json"
+    review = args.review or work_root / "shortlist.review.md"
+    result = run_research(
+        contexts_path=contexts,
+        proposals_path=proposals,
+        evidence_path=evidence,
+        review_path=review,
+    )
+    return CommandResult(
+        CommandStatus.SUCCESS,
+        (
+            f"researched {result.row_count} shortlist context row(s); wrote "
+            f"{result.proposals_path.name}, {result.evidence_path.name}, "
+            f"{result.review_path.name}; proposals: {result.proposal_count}"
+        ),
+    )
 
 
 def _shortlist_scancode_retry_hint(work_root: Path) -> str:

@@ -44,6 +44,7 @@ from repolens.shortlist.contexts import (
     load_shortlist_metadata,
 )
 from repolens.shortlist.decisions import apply_decisions, parse_review_decisions
+from repolens.shortlist.evidence import apply_evidence
 from repolens.shortlist.grouping import build_groups, group_membership_by_ref
 from repolens.shortlist.prescreen import ItemContent
 from repolens.shortlist.proposals import apply_proposals
@@ -88,6 +89,7 @@ def run_shortlist(
     now: str | None = None,
     emit_contexts_path: str | Path | None = None,
     proposals_path: str | Path | None = None,
+    evidence_path: str | Path | None = None,
 ) -> ShortlistResult:
     """Settle the flagged items in ``work_root`` and write the artifacts back."""
 
@@ -117,8 +119,15 @@ def run_shortlist(
         settled_items = apply_proposals(
             settled_items,
             Path(proposals_path),
+            metadata=metadata,
             fetcher=fetcher,
             evidence_resolver=evidence_resolver,
+        )
+    if evidence_path is not None:
+        settled_items = apply_evidence(
+            settled_items,
+            Path(evidence_path),
+            metadata=metadata,
         )
 
     # 2. Run the injected agent path only for the legacy no-artifact mode. The new
@@ -131,8 +140,10 @@ def run_shortlist(
         if (
             emit_contexts_path is None
             and proposals_path is None
+            and evidence_path is None
             and record.get("status") == "open"
             and not _has_verified_candidate(record)
+            and not isinstance(record.get("research_evidence"), Mapping)
         ):
             agent_invocations += _resolve_open_item(
                 record,

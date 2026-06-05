@@ -44,6 +44,31 @@ def _write_shortlist(work_root: Path) -> None:
     )
 
 
+def _write_inventory_metadata(work_root: Path) -> None:
+    store.write_inventory(
+        work_root,
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "components": [
+                {
+                    "name": "acme-lib",
+                    "license": "MIT",
+                    "origin": "third-party-oss",
+                    "scope": "runtime",
+                    "distribution": "server",
+                    "versions": ["1.2.3"],
+                    "source_url": "pkg:pypi/acme-lib@1.2.3",
+                    "modified": "unknown",
+                    "found_in": ["acme-alpha"],
+                    "policy_tier": "REVIEW",
+                    "evidence_refs": ["acme-alpha/resolved.ndjson:1"],
+                }
+            ],
+        },
+    )
+
+
 def _item(component_ref: str) -> dict[str, object]:
     return {
         "component_ref": component_ref,
@@ -145,6 +170,63 @@ def test_bad_anchor_keeps_open_with_verify_failed(tmp_path: Path) -> None:
     assert item["status"] == "open"
     assert item["candidate_spdx"] is None
     assert item["note"] == "verify_failed:verify:anchor_mismatch"
+
+
+def test_github_main_ref_proposal_rejected_for_versioned_item(tmp_path: Path) -> None:
+    _write_shortlist(tmp_path)
+    _write_inventory_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [_proposal(evidence_url="https://api.github.com/repos/sentinel/acme-lib/license?ref=main")],
+    )
+    fetched: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        fetched.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"license":"MIT"}')
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=fetcher,
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert fetched == []
+    assert item["status"] == "open"
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:default_branch_rejected"
+
+
+def test_github_wrong_tag_proposal_rejected_for_versioned_item(tmp_path: Path) -> None:
+    _write_shortlist(tmp_path)
+    _write_inventory_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license?ref=2.0.0"
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(b'{"license":"MIT"}'),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["status"] == "open"
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:ref_mismatch"
 
 
 def test_off_allowlist_url_rejected(tmp_path: Path) -> None:

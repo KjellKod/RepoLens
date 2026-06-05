@@ -1444,10 +1444,10 @@ def test_run_yes_open_shortlist_emits_contexts_without_proposal_or_report(
 ) -> None:
     work_root = _patch_common_success(monkeypatch, tmp_path)
     monkeypatch.setattr(cli, "_shortlist_open_count", lambda _work_root: 1)
-    calls: list[tuple[Path | None, Path | None]] = []
+    calls: list[tuple[Path | None, Path | None, Path | None]] = []
 
     def shortlist(args):
-        calls.append((args.emit_contexts, args.proposals))
+        calls.append((args.emit_contexts, args.proposals, args.evidence))
         return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "open")
 
     def fail_report(_args):
@@ -1470,7 +1470,7 @@ def test_run_yes_open_shortlist_emits_contexts_without_proposal_or_report(
     )
 
     assert code == 1
-    assert calls == [(work_root / "shortlist.contexts.json", None)]
+    assert calls == [(work_root / "shortlist.contexts.json", None, None)]
 
 
 def test_open_shortlist_noninteractive_prints_instruction_once(
@@ -1511,11 +1511,11 @@ def test_run_yes_ingests_existing_shortlist_proposals_before_halt(
     work_root = tmp_path / "work"
     work_root.mkdir()
     (work_root / "shortlist.proposals.json").write_text("[]\n", encoding="utf-8")
-    calls: list[tuple[Path | None, Path | None]] = []
+    calls: list[tuple[Path | None, Path | None, Path | None]] = []
     open_counts = iter([1, 0])
 
     def shortlist(args):
-        calls.append((args.emit_contexts, args.proposals))
+        calls.append((args.emit_contexts, args.proposals, args.evidence))
         return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "open")
 
     monkeypatch.setattr(cli, "_shortlist_stage", shortlist)
@@ -1526,8 +1526,35 @@ def test_run_yes_ingests_existing_shortlist_proposals_before_halt(
 
     assert result is None
     assert calls == [
-        (work_root / "shortlist.contexts.json", None),
-        (None, work_root / "shortlist.proposals.json"),
+        (work_root / "shortlist.contexts.json", None, None),
+        (None, work_root / "shortlist.proposals.json", None),
+    ]
+
+
+def test_run_yes_ingests_existing_shortlist_evidence_before_halt(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    work_root = tmp_path / "work"
+    work_root.mkdir()
+    (work_root / "shortlist.evidence.json").write_text("[]\n", encoding="utf-8")
+    calls: list[tuple[Path | None, Path | None, Path | None]] = []
+    open_counts = iter([1, 0])
+
+    def shortlist(args):
+        calls.append((args.emit_contexts, args.proposals, args.evidence))
+        return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "open")
+
+    monkeypatch.setattr(cli, "_shortlist_stage", shortlist)
+    monkeypatch.setattr(cli, "_shortlist_open_count", lambda _work_root: next(open_counts))
+    args = SimpleNamespace(runtime_config=object(), quiet=True, yes=True, timeout=None)
+
+    result = cli._run_shortlist_loop(args, work_root, interactive=False)
+
+    assert result is None
+    assert calls == [
+        (work_root / "shortlist.contexts.json", None, None),
+        (None, None, work_root / "shortlist.evidence.json"),
     ]
 
 
@@ -1537,11 +1564,11 @@ def test_run_shortlist_loop_ingests_proposals_then_human_decisions(
     work_root = tmp_path / "work"
     work_root.mkdir()
     (work_root / "shortlist.proposals.json").write_text("[]\n", encoding="utf-8")
-    calls: list[tuple[Path | None, Path | None]] = []
+    calls: list[tuple[Path | None, Path | None, Path | None]] = []
     open_counts = iter([1, 1, 0])
 
     def shortlist(args):
-        calls.append((args.emit_contexts, args.proposals))
+        calls.append((args.emit_contexts, args.proposals, args.evidence))
         return cli.CommandResult(cli.CommandStatus.FINDINGS_OPEN, "open")
 
     monkeypatch.setattr(cli, "_shortlist_stage", shortlist)
@@ -1554,9 +1581,9 @@ def test_run_shortlist_loop_ingests_proposals_then_human_decisions(
 
     assert result is None
     assert calls == [
-        (work_root / "shortlist.contexts.json", None),
-        (None, work_root / "shortlist.proposals.json"),
-        (None, None),
+        (work_root / "shortlist.contexts.json", None, None),
+        (None, work_root / "shortlist.proposals.json", None),
+        (None, None, None),
     ]
 
 

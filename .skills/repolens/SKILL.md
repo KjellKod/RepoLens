@@ -55,32 +55,40 @@ repolens flag --work-root work
 repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
 ```
 
-6. External AI proposal pass:
+6. Deterministic research or external assistant pass:
 
 Read `work/shortlist.contexts.json`. For each row, inspect only `component_ref`,
 `wrapped_context`, and read-only `triage`. Review every row, not only the easy ones. For
 each item, either propose a verified correction, confirm the existing finding needs human
 judgment, or abstain because evidence is missing/contradictory.
 
-Before writing proposals, load these references from the RepoLens repository root:
+Before writing artifacts, load these references from the RepoLens repository root:
 
 - `.skills/repolens/reference/evidence-lookup.md` for the per-item lookup workflow and
   allowed evidence hosts.
 - `.skills/repolens/reference/proposal-schema.md` and
   `src/repolens/data/schemas/shortlist_proposals.schema.json` for the output contract.
+- `src/repolens/data/schemas/shortlist_evidence.schema.json` for the evidence contract.
 - `.skills/repolens/reference/triage-cheatsheet.md` when judging distribution/scope risk.
 
-Prefer the bundled deterministic helper
-`.skills/repolens/scripts/generate_shortlist_proposals.py` over hand-written Python/jq:
+Prefer the product-owned deterministic research command when a work root has contexts:
 
 ```bash
-PYTHONPATH=src python3 .skills/repolens/scripts/generate_shortlist_proposals.py \
-  --work-root work
+repolens shortlist research --work-root work \
+  --contexts work/shortlist.contexts.json \
+  --proposals work/shortlist.proposals.json \
+  --evidence work/shortlist.evidence.json \
+  --review work/shortlist.review.md
 ```
 
-It writes `work/shortlist.proposals.json` as a JSON array with one entry per context row
-and `work/shortlist.review.md` with a compact human-readable note for each row:
-`proposed`, `confirmed-needs-review`, or `abstained`, the evidence checked, and the reason.
+It writes machine-verifiable allow proposals only when deterministic public metadata can
+be re-fetched by RepoLens. It writes `work/shortlist.evidence.json` for every row with one
+explicit outcome: `machine_verified`, `pending_verifier_support`, `no_public_evidence`,
+`conflict`, or `legal_or_vendor_review`. It also writes `work/shortlist.review.md` with
+one compact row per context row, direct short-label evidence links or lookup trails, and
+outcome counts.
+For compatibility with older artifact workflows, `.skills/repolens/scripts/generate_shortlist_proposals.py`
+can still generate proposal artifacts from an existing contexts file.
 For one-off evidence debugging, use
 `.skills/repolens/scripts/inspect_evidence.py` with exact allowlisted evidence URLs.
 
@@ -96,14 +104,18 @@ Run a BLOCK sanity pass before writing the file:
   be encoded as verified public evidence. Note those cases in `shortlist.review.md` and
   leave the proposal abstained.
 
-7. Ingest proposals through RepoLens verification:
+7. Ingest proposals and evidence through RepoLens verification:
 
 ```bash
-repolens shortlist --work-root work --proposals work/shortlist.proposals.json
+repolens shortlist --work-root work \
+  --proposals work/shortlist.proposals.json \
+  --evidence work/shortlist.evidence.json
 ```
 
-RepoLens re-fetches every cited URL through its allowlisted HTTP client and checks the
-exact SPDX anchor. Verified proposals remain open until human approval.
+RepoLens re-fetches supported proposal citations through its allowlisted HTTP client and
+checks the exact SPDX anchor. Verified proposals remain open until human approval.
+Research evidence is preserved separately, including browser evidence whose verifier
+support is pending. Evidence ingestion never approves, rejects, or clears an item.
 
 8. Human grouped approval loop:
 
@@ -140,8 +152,9 @@ repolens run --work-root work --owner <OWNER> --out-dir reports
 ```
 
 When open shortlist items remain, `run` emits `work/shortlist.contexts.json`, pauses for
-an optional external proposal pass to `work/shortlist.proposals.json`, ingests proposals if
-that file exists, renders grouped `work/shortlist.md`, and loops until no item is open.
+an optional research pass to `work/shortlist.proposals.json`,
+`work/shortlist.evidence.json`, and `work/shortlist.review.md`, ingests proposals/evidence
+if those files exist, renders grouped `work/shortlist.md`, and loops until no item is open.
 
 For automation:
 

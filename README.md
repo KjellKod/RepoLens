@@ -139,14 +139,15 @@ Flagged 823 components (deduped across 5 repos).
 On a big estate that "375" can be thousands. RepoLens shrinks the pile in three passes:
 
 1. **Code resolves what it can** — the resolution ladder auto-clears anything policy allows.
-2. **An AI takes the first stab** — for what's left, an AI proposes a license + a
-   cited source, and double-checks every BLOCK for false positives (dual-licensed,
-   build-only, a license exception, not actually shipped...).
-3. **You approve** — RepoLens **re-fetches and verifies every citation itself** (it never
-   trusts the AI), then hands you a grouped checklist.
+2. **Research preserves evidence** — for what's left, deterministic research or an
+   external assistant can produce machine-verifiable proposals plus browser evidence for
+   rows RepoLens cannot verify yet.
+3. **You approve** — RepoLens **re-fetches and verifies supported citations itself** (it
+   never trusts an assistant), preserves useful browser evidence separately, then hands
+   you a grouped checklist.
 
-> The AI only *suggests*. RepoLens verifies the evidence, and nothing lands without your
-> tick. A wrong AI guess simply fails verification and stays open.
+> Assistants only *suggest*. RepoLens verifies supported evidence, preserves researched
+> browser links when verifier support is pending, and nothing lands without your tick.
 
 ### Review in bulk, override the exceptions
 
@@ -194,9 +195,15 @@ repolens resolve --work-root work
 # repolens resolve --work-root work --retry-scancode --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>
 repolens flag --work-root work
 repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
-#   ↳ run the bundled repolens skill to review every row, look up verifiable
-#      evidence, and write work/shortlist.proposals.json + work/shortlist.review.md
-repolens shortlist --work-root work --proposals work/shortlist.proposals.json
+#   ↳ deterministic, model-free research:
+repolens shortlist research --work-root work \
+  --contexts work/shortlist.contexts.json \
+  --proposals work/shortlist.proposals.json \
+  --evidence work/shortlist.evidence.json \
+  --review work/shortlist.review.md
+repolens shortlist --work-root work \
+  --proposals work/shortlist.proposals.json \
+  --evidence work/shortlist.evidence.json
 #   ↳ review grouped work/shortlist.md, mark remaining rows/groups [x] or [r],
 #      then rerun repolens shortlist --work-root work until open_count is zero
 repolens report --work-root work
@@ -205,12 +212,14 @@ repolens report --work-root work
 If you retry resolution and rerun `flag`, RepoLens preserves approved/rejected decisions
 for matching shortlist rows and keeps new or changed findings open.
 
-The AI step is the same seam in both modes — and it's optional. RepoLens itself never
-calls a model; it only emits the questions and verifies the answers. Drive it with the
+The research step is the same seam in both modes - and it is optional. RepoLens itself
+never calls a model; it only emits contexts, runs deterministic metadata lookups when you
+ask for `shortlist research`, and verifies supported answers. You can also drive it with the
 bundled **`repolens` skill** (works in both Claude and Codex), for example:
-`$repolens review every row in work/shortlist.contexts.json and write proposals plus review notes`.
-The skill may look up public package metadata on RepoLens-verifiable hosts, but RepoLens
-still re-fetches every cited URL and leaves final approval in `shortlist.md`.
+`$repolens review every row in work/shortlist.contexts.json and write proposals, evidence, and review notes`.
+The skill may look up public package metadata and browser evidence, but RepoLens still
+re-fetches supported citations, preserves unsupported browser evidence, and leaves final
+approval in `shortlist.md`.
 
 ## What the disclosure looks like
 
