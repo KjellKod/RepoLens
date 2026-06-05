@@ -14,6 +14,7 @@ label, so the round-trip survives ``sanitize_markdown`` (finding arb-it1-3).
 
 from __future__ import annotations
 
+import getpass
 import re
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
@@ -115,11 +116,13 @@ def apply_decisions(
     """Return a new item list with human decisions recorded on matching ``open`` items.
 
     A decision only takes effect on an item that is still ``open`` (a settled item is never
-    silently re-flipped). ``decided_by`` comes from the runtime ``identity`` input (never an
-    owner/repo literal — plan A2); ``decided_at`` is the caller-supplied UTC timestamp.
+    silently re-flipped). ``decided_by`` uses the explicit runtime ``identity`` override when
+    present, otherwise the logged-in OS user; ``decided_at`` is the caller-supplied UTC
+    timestamp.
     """
 
     updated: list[dict[str, Any]] = []
+    reviewer = _reviewer_identity(identity)
     groups = group_decisions or {}
     memberships = group_membership or {}
     for item in items:
@@ -133,7 +136,7 @@ def apply_decisions(
             decided_via = "group"
         if decision is not None and record.get("status") == "open":
             record["status"] = decision.status
-            record["decided_by"] = identity
+            record["decided_by"] = reviewer
             record["decided_at"] = now
             record["decided_via"] = decided_via
             if decided_via == "group" and membership is not None:
@@ -150,6 +153,24 @@ def apply_decisions(
                 record.pop("decision_provenance", None)
         updated.append(record)
     return updated
+
+
+def _reviewer_identity(identity: str | None) -> str:
+    explicit = _non_empty(identity)
+    if explicit is not None:
+        return explicit
+    try:
+        detected = _non_empty(getpass.getuser())
+    except OSError:
+        detected = None
+    return detected or "unknown"
+
+
+def _non_empty(value: str | None) -> str | None:
+    if value is None:
+        return None
+    stripped = value.strip()
+    return stripped or None
 
 
 __all__ = [

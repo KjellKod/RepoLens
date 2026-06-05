@@ -116,10 +116,11 @@ Open `work/shortlist.md`. It has three tiers:
 - `LOW-CONFIDENCE / CONFLICT`: per-item only.
 
 Mark `[x]` to approve or `[r]` to reject. Item `rpl:ref` decisions override group
-`rpl:group` decisions. Do not edit markers. Re-run:
+`rpl:group` decisions. Do not edit markers. Re-run. RepoLens records `decided_by` from the
+logged-in OS user by default; `--identity <REVIEWER>` is only an override:
 
 ```bash
-repolens shortlist --work-root work --identity <REVIEWER>
+repolens shortlist --work-root work
 ```
 
 Repeat proposal ingestion and human review until `shortlist.json` has `open_count == 0`.

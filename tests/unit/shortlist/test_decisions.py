@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from repolens.shortlist.contexts import ShortlistMetadata
 from repolens.shortlist.decisions import (
     apply_decisions,
@@ -157,6 +159,29 @@ def test_verified_candidate_displays_correction_without_changing_ref_key() -> No
     assert decisions["zope-site|UNKNOWN"].status == "approved"
 
 
+def test_verified_expression_candidate_displays_correction() -> None:
+    items = [
+        {
+            "component_ref": "zodbpickle|UNKNOWN",
+            "reason": "UNKNOWN",
+            "evidence": {
+                "source_layer": "agent",
+                "url": "https://api.clearlydefined.io/definitions/pypi/pypi/-/zodbpickle/4.2",
+                "anchor": "PSF-2.0 AND ZPL-2.1",
+            },
+            "candidate_spdx": "PSF-2.0 AND ZPL-2.1",
+            "status": "open",
+            "decided_by": None,
+            "decided_at": None,
+            "note": "agent:verified_awaiting_human",
+        }
+    ]
+
+    markdown = render_shortlist_markdown(items)
+
+    assert "`zodbpickle|UNKNOWN` -&gt; `PSF-2.0 AND ZPL-2.1`" in markdown
+
+
 def test_garbled_key_yields_no_decision() -> None:
     markdown = render_shortlist_markdown(_items())
     ticked = _tick(markdown, "acme-lib|MIT", "x")
@@ -186,6 +211,24 @@ def test_apply_decisions_records_decided_fields_only_on_open_items() -> None:
     untouched = next(item for item in updated if item["component_ref"] == "acme-tool|GPL-3.0-only")
     assert untouched["status"] == "open"
     assert untouched["decided_by"] is None
+
+
+def test_apply_decisions_defaults_decided_by_to_logged_in_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("repolens.shortlist.decisions.getpass.getuser", lambda: "os-sentinel")
+    items = _items()
+    decisions = parse_checkbox_decisions(
+        _tick(render_shortlist_markdown(items), "acme-lib|MIT", "x")
+    )
+
+    updated = apply_decisions(
+        items, decisions, identity=None, now="2026-06-02T00:00:00Z"
+    )
+
+    approved = next(item for item in updated if item["component_ref"] == "acme-lib|MIT")
+    assert approved["status"] == "approved"
+    assert approved["decided_by"] == "os-sentinel"
 
 
 def test_group_accept_applies_to_members_with_provenance() -> None:

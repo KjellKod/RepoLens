@@ -725,8 +725,8 @@ def _configure_shortlist_parser(subparser: argparse.ArgumentParser) -> None:
         "--identity",
         metavar="REVIEWER",
         help=(
-            "Runtime reviewer identity recorded as decided_by on approved/rejected items; "
-            "never an owner/repo literal."
+            "Optional reviewer label override recorded as decided_by on approved/rejected "
+            "items; default is the logged-in OS user."
         ),
     )
     subparser.add_argument(

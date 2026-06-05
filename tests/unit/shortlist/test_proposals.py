@@ -98,6 +98,36 @@ def test_verified_proposal_records_candidate_but_keeps_open(tmp_path: Path) -> N
     assert item["ai_suggestion"]["disposition"] == "allow"
 
 
+def test_verified_expression_proposal_records_candidate(tmp_path: Path) -> None:
+    _write_shortlist(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    expression = "PSF-2.0 AND ZPL-2.1"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                spdx_id=expression,
+                evidence_anchor=expression,
+                rationale="Registry metadata anchors a permissive expression.",
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(b'{"licensed":{"declared":"PSF-2.0 AND ZPL-2.1"}}'),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["status"] == "open"
+    assert item["candidate_spdx"] == expression
+    assert item["note"] == "agent:verified_awaiting_human"
+    assert item["verify_reason"] == "verify:exact_anchor"
+
+
 def test_bad_anchor_keeps_open_with_verify_failed(tmp_path: Path) -> None:
     _write_shortlist(tmp_path)
     proposals_path = tmp_path / "proposals.json"

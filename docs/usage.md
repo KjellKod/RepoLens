@@ -431,9 +431,8 @@ repolens bootstrap --work-root work  # prepare work-root-local ScanCode fallback
 repolens scan      --work-root work  # first use verifies Syft cache, then writes SBOMs
 repolens resolve --work-root work    # license resolution for scanned repo SBOMs
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
-repolens shortlist --work-root work [--identity <REVIEWER>]
-                                      # settle checked decisions; if open items remain,
-                                      # the console prints the AI proposal workflow below
+repolens shortlist --work-root work   # settle checked decisions; decided_by defaults
+                                      # to the logged-in OS user; --identity overrides it
 repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
                                       # emit model-free external proposal contexts
 # ask Codex/Claude:
@@ -767,7 +766,7 @@ are not runtime-configurable through local config today.
 
 ## `shortlist` — artifact proposals + grouped human approval
 
-`repolens shortlist --work-root work [--identity <REVIEWER>]` reads the `shortlist.json`
+`repolens shortlist --work-root work` reads the `shortlist.json`
 and `shortlist.md` that `flag` produced, renders a grouped review surface, and settles only
 the items a human approved or rejected:
 
@@ -778,10 +777,11 @@ or resolver retry should not erase completed human review while still forcing re
 different evidence.
 
 1. **Ingest human decisions.** Any item whose checkbox you ticked in `shortlist.md`
-   (`[x]` approve, `[r]` reject) is recorded with `status`, `decided_by` (from
-   `--identity`, a runtime input — never an owner/repo literal), a UTC `decided_at`, and
-   `decided_via`. Group ticks apply to every covered member; item `rpl:ref` ticks override
-   group `rpl:group` ticks.
+   (`[x]` approve, `[r]` reject) is recorded with `status`, `decided_by`, a UTC
+   `decided_at`, and `decided_via`. By default, `decided_by` is the logged-in OS user
+   (`getpass.getuser()`); pass `--identity <REVIEWER>` only to override that label. Group
+   ticks apply to every covered member; item `rpl:ref` ticks override group `rpl:group`
+   ticks.
 2. **Pre-screen → route.** Each still-open item's untrusted text (LICENSE / README /
    description / evidence) is capped, NFC-normalized, and screened for injection markers
    (role-play, output-override, container-escape, imperative, directional Unicode). Use

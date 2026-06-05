@@ -98,21 +98,30 @@ def test_unrecognized_spdx_abstains_without_fetch() -> None:
     assert fetched == []  # never re-fetches on an unrecognized claim
 
 
-def test_compound_expression_claim_still_fails_closed_without_fetch() -> None:
-    fetched: list[str] = []
-
-    def counting_fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
-        fetched.append(url)
-        return FetchResult(url=url, status=200, headers=(), body=b"{}")
-
-    resolution = Resolution("Apache-2.0 OR MIT", _DEPS_DEV_URL, "Apache-2.0 OR MIT")
+def test_compound_expression_claim_verifies_against_exact_anchor() -> None:
+    expression = "PSF-2.0 AND ZPL-2.1"
+    resolution = Resolution(expression, _DEPS_DEV_URL, expression)
     outcome = verify_agent_resolution(
-        resolution, fetcher=counting_fetcher, resolver=_public_resolver
+        resolution,
+        fetcher=_fetcher_returning(b'{"licensed":{"declared":"PSF-2.0 AND ZPL-2.1"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.spdx_id == expression
+    assert outcome.evidence_anchor == expression
+
+
+def test_partial_claim_against_compound_expression_fails_anchor_match() -> None:
+    resolution = Resolution("ZPL-2.1", _DEPS_DEV_URL, "ZPL-2.1")
+    outcome = verify_agent_resolution(
+        resolution,
+        fetcher=_fetcher_returning(b'{"licensed":{"declared":"PSF-2.0 AND ZPL-2.1"}}'),
+        resolver=_public_resolver,
     )
 
     assert not outcome.verified
-    assert outcome.reason == "verify:unrecognized_spdx"
-    assert fetched == []
+    assert outcome.reason == "verify:anchor_mismatch"
 
 
 def test_off_allowlist_host_raises_at_validate() -> None:

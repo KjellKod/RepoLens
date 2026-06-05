@@ -2,7 +2,7 @@
 
 Before any agent claim can influence an item the orchestrator re-fetches the cited evidence
 URL through the SSRF-guarded :func:`repolens.security.http_client.fetch_url` and confirms the
-fetched body exactly contains the claimed SPDX id via
+fetched body exactly contains the claimed SPDX id or supported expression via
 :func:`repolens.resolve.evidence.has_exact_license_evidence`. This reuses the resolve
 stage's verification primitives (one home per concern) rather than reimplementing them.
 
@@ -19,9 +19,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from repolens.policy.config import load_default_policy
-from repolens.policy.spdx import normalize_license
 from repolens.resolve.adapters import API_ALLOWED_HOSTS
 from repolens.resolve.evidence import has_exact_license_evidence
+from repolens.resolve.license_expression import license_resolution_id
 from repolens.resolve.models import ApiCandidate, FetchFunction
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import (
@@ -54,24 +54,26 @@ def verify_agent_resolution(
     fetcher: FetchFunction = fetch_url,
     resolver: Resolver | None = None,
 ) -> VerifyOutcome:
-    """Re-fetch the cited evidence URL and confirm it exactly anchors the claimed SPDX id.
+    """Re-fetch the cited evidence URL and confirm it exactly anchors the claim.
 
     Returns a fail-closed :class:`VerifyOutcome`: ``verified`` is ``True`` only when the
-    SPDX id normalizes, the URL is allowlisted and resolves to a public IP, the re-fetch
-    succeeds, and ``has_exact_license_evidence`` confirms the claim. Every other path
-    (bad SPDX, empty anchor, off-allowlist host, private IP, fetch failure, anchor
+    SPDX id or expression is policy-supported, the URL is allowlisted and resolves to a
+    public IP, the re-fetch succeeds, and ``has_exact_license_evidence`` confirms the
+    claim. Every other path (bad SPDX, empty anchor, off-allowlist host, private IP,
+    fetch failure, anchor
     mismatch) returns ``verified=False`` with a stated reason so the caller can route the
     item to the human queue.
     """
 
-    normalized = normalize_license(resolution.spdx_id, load_default_policy())
-    if normalized.spdx_id is None:
+    policy = load_default_policy()
+    spdx_id = license_resolution_id(resolution.spdx_id, policy)
+    if spdx_id is None:
         return VerifyOutcome(verified=False, reason="verify:unrecognized_spdx")
     if not resolution.evidence_anchor:
         return VerifyOutcome(verified=False, reason="verify:empty_anchor")
 
     candidate = ApiCandidate(
-        spdx_id=normalized.spdx_id,
+        spdx_id=spdx_id,
         evidence_url=resolution.evidence_url,
         evidence_anchor=resolution.evidence_anchor,
     )
@@ -84,13 +86,13 @@ def verify_agent_resolution(
         # fail closed to the human queue (AC 7, 15).
         return VerifyOutcome(verified=False, reason="verify:fetch_blocked_or_failed")
 
-    if not has_exact_license_evidence(result.body, candidate, normalized.spdx_id):
+    if not has_exact_license_evidence(result.body, candidate, spdx_id):
         return VerifyOutcome(verified=False, reason="verify:anchor_mismatch")
 
     return VerifyOutcome(
         verified=True,
         reason="verify:exact_anchor",
-        spdx_id=normalized.spdx_id,
+        spdx_id=spdx_id,
         evidence_url=result.url,
         evidence_anchor=candidate.evidence_anchor,
     )
