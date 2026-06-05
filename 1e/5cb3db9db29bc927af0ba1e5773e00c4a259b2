@@ -1,0 +1,19 @@
+.skills/repolens/reference/evidence-lookup.md
+  s_b4a2d295e3cdbd::t_c8244586f99541 64-76,82-84,86,88,90,92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "1e5cb3db9db29bc927af0ba1e5773e00c4a259b2",
+  "prompts": {},
+  "sessions": {
+    "s_b4a2d295e3cdbd": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e98b5-6515-7ac2-91e7-e3478c46fe7a",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
