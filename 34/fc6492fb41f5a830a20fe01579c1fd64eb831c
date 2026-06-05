@@ -1,0 +1,81 @@
+.claude/skills/repolens/SKILL.md
+  s_853eb455586efb::t_b531b51b2b13bd 3
+docs/usage.md
+  s_853eb455586efb::t_e596cacbe63d8f 229,466-468
+  s_853eb455586efb::t_2a1ab0c2528741 216-219,227,233-234,256-261
+  s_853eb455586efb::t_653ca2a47af719 421-422,425-427,764-777
+  s_853eb455586efb::t_8a46466933509d 660-671
+  s_853eb455586efb::t_0dceac26e49c34 742-746
+  s_853eb455586efb::t_06e6d77f8fe883 461-465,511-513
+src/repolens/cli.py
+  s_853eb455586efb::t_3ef124cab3aaf2 2604,2606-2607,2609-2615
+  s_853eb455586efb::t_eb8bda2f7b6a8b 661-669
+  s_853eb455586efb::t_103a0f5ca9565e 2407-2413,2580-2603,2605,2608,2616-2617
+  s_853eb455586efb::t_8bb9bc24223091 415-417,921-922,986-989,992-1006,1225-1228
+  s_853eb455586efb::t_0701394031c899 2348-2360,2401,2405-2406
+  s_853eb455586efb::t_653ca2a47af719 191-193
+  s_853eb455586efb::t_03dddbc488944f 2558-2579,2618-2619
+  s_853eb455586efb::t_d7a95aa6b8cfb8 2728-2734,2741-2742,2748-2755,2761-2766,2772-2781
+  s_853eb455586efb::t_8a46466933509d 158-159,163-164
+  s_853eb455586efb::t_d5732738669625 2743-2747,2767-2771
+  s_853eb455586efb::t_08f3ef8e456b6f 990-991
+  s_853eb455586efb::t_519e34ef6b6bda 2698,2704-2727,2735-2740,2756-2760,2782-2783
+  s_853eb455586efb::t_6ee777be93baaa 1435,1519-1528
+README.md
+  s_853eb455586efb::t_3c2da684ef8db8 118-121,124
+  s_853eb455586efb::t_0dceac26e49c34 188-189,198-201
+  s_853eb455586efb::t_487ffe9bcd1888 191-192
+  s_853eb455586efb::t_60665ba06f4a55 122-123
+  s_853eb455586efb::t_8a46466933509d 184-185
+tests/unit/test_skill_references.py
+  s_853eb455586efb::t_b531b51b2b13bd 29
+.skills/repolens/reference/proposal-schema.md
+  s_853eb455586efb::t_0dceac26e49c34 39-42
+tests/unit/test_config.py
+  s_853eb455586efb::t_83791fa4c2da18 184-186,207,215,221-222
+src/repolens/config.py
+  s_853eb455586efb::t_f807fdfb0c5711 121,126-127,130-131,182,194
+  s_853eb455586efb::t_98580821192567 128-129
+tests/unit/test_discovery_taxonomy.py
+  s_853eb455586efb::t_c5abc408335d0d 41
+  s_853eb455586efb::t_f8d1879fcf0ad4 81-89,105-113
+.skills/repolens/reference/evidence-lookup.md
+  s_853eb455586efb::t_934ff2f6b4eb39 1-90
+tests/unit/test_cli_run.py
+  s_853eb455586efb::t_7ae2ea56b4df8c 317-405,482-489,491-523,525-548
+  s_853eb455586efb::t_df9b053225293e 406-481,549-550
+  s_853eb455586efb::t_4ff865d3d0eb72 490,524
+src/repolens/discovery/taxonomy.py
+  s_853eb455586efb::t_e6a9ba096d93f7 116,147-149
+  s_853eb455586efb::t_c5abc408335d0d 150
+  s_853eb455586efb::t_86411964546a69 24-28,35,64,114-115,138-146,151-154
+src/repolens/data/schemas/local_config.schema.json
+  s_853eb455586efb::t_f8a857496c867b 44-61
+.skills/repolens/SKILL.md
+  s_853eb455586efb::t_934ff2f6b4eb39 3,10-12,17-18,61-75,85-87
+tests/unit/test_cli_config.py
+  s_853eb455586efb::t_74315cdb2431f6 245
+  s_853eb455586efb::t_3a5a72f017bf92 169
+  s_853eb455586efb::t_fb8d3646b76e3d 97,124,280
+  s_853eb455586efb::t_50023abaf7c840 33-34,65
+  s_853eb455586efb::t_4276ef511f7d94 189-228
+  s_853eb455586efb::t_2ecce5ae0e78b4 369
+.agents/skills/repolens/SKILL.md
+  s_853eb455586efb::t_0dceac26e49c34 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "34fc6492fb41f5a830a20fe01579c1fd64eb831c",
+  "prompts": {},
+  "sessions": {
+    "s_853eb455586efb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e94a7-867e-7881-aa54-d0c218023533",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
