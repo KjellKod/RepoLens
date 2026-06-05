@@ -1,0 +1,25 @@
+.gitignore
+  s_b94247f2be259a::t_1d93487aa4f960 36
+src/repolens/__init__.py
+  s_b94247f2be259a::t_1a38fbcfc2abde 3-6,9-21
+tests/unit/test_package_version.py
+  s_b94247f2be259a::t_78e77716222a3f 1-21
+pyproject.toml
+  s_b94247f2be259a::t_6341fd5250515b 14,19,47-51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "6f88382824834dd9f938ab6479255b13769dc544",
+  "prompts": {},
+  "sessions": {
+    "s_b94247f2be259a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e97f6-7d4e-79c2-a672-264cae3a1fbe",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
