@@ -1,0 +1,76 @@
+tests/unit/shortlist/test_verify.py
+  s_92f20be60ed08d::t_113d83d9e61826 90-106
+  s_92f20be60ed08d::t_d7e8fa848171a6 58,70-89,166
+src/repolens/resolve/stage.py
+  s_92f20be60ed08d::t_18d63ed9fd169c 9,57-60,623,639-641
+  s_92f20be60ed08d::t_c326dd3ce397cb 577-580
+  s_92f20be60ed08d::t_94165a70b8f934 32,99-103,289-299,472-515,574-576,585-586
+tests/unit/test_resolve_adapters.py
+  s_92f20be60ed08d::t_540044aa6175ae 6-10
+  s_92f20be60ed08d::t_886a428a2ba645 155-186,404-446,485-527
+  s_92f20be60ed08d::t_4c7eee2cec9237 447-484
+tests/policy/test_spdx_normalize.py
+  s_92f20be60ed08d::t_79da9ab947cc6e 14,22-23,74-96
+src/repolens/cli.py
+  s_92f20be60ed08d::t_4e4988f2827dfd 2870,2878-2879,2898-2899,2925-2926,2956-2994
+README.md
+  s_92f20be60ed08d::t_063da89bdf25e9 189-190
+tests/unit/test_resolve_mobile_metadata.py
+  s_92f20be60ed08d::t_9a9230b99f1d68 1-11,16,18-58,60-92,94-180,182-193,195-284
+  s_92f20be60ed08d::t_7a43653766f809 93
+  s_92f20be60ed08d::t_2392adcaa321d4 12-15,17,59,181,194
+tests/unit/test_resolve_stage.py
+  s_92f20be60ed08d::t_902a68cd3c1151 821,834,837-855,857-858,860-875,878-882,884-961,1018,1033,1035-1077,1081
+  s_92f20be60ed08d::t_dfde2dc313fca8 15-19
+  s_92f20be60ed08d::t_d508eb07e87b3f 859
+src/repolens/resolve/mobile_metadata.py
+  s_92f20be60ed08d::t_fa741c917af949 26-29,263-267
+  s_92f20be60ed08d::t_39a53e67483a1c 1-25,34-90,92-114,116-117,125,134-262,268-330
+  s_92f20be60ed08d::t_18d63ed9fd169c 30-33,91,115,118-124,126-133
+tests/integration/test_resolve_cli.py
+  s_92f20be60ed08d::t_5470db93baf658 9-10,256-355
+src/repolens/resolve/ecosystems.py
+  s_92f20be60ed08d::t_cde8a741a3ca8e 41,72,80,90-93
+src/repolens/shortlist/verify.py
+  s_92f20be60ed08d::t_5dd6d973d1322a 11-14,20,81-82,104-109
+  s_92f20be60ed08d::t_d7e8fa848171a6 10
+scripts/m1_fixture_e2e.py
+  s_92f20be60ed08d::t_65856a875f88e1 300-301
+docs/usage.md
+  s_92f20be60ed08d::t_1cdb5e66866f65 402-405,411,419,731-734,846-850
+  s_92f20be60ed08d::t_92123f3db19db0 845
+src/repolens/policy/data/license-policy.default.json
+  s_92f20be60ed08d::t_195ff82b843332 2,46,84,136-137
+tests/unit/test_cli_run.py
+  s_92f20be60ed08d::t_757a5c76127dfc 806-853,858-861
+  s_92f20be60ed08d::t_cf9bced03acbc1 854-857
+  s_92f20be60ed08d::t_c7b7e7c453c125 4
+tests/canaries/security/test_resolve_canaries.py
+  s_92f20be60ed08d::t_ebd3a2d83ded5d 121-131,138-146
+  s_92f20be60ed08d::t_2392adcaa321d4 132,135-137
+  s_92f20be60ed08d::t_e27041dafca267 133-134
+.skills/repolens/reference/evidence-lookup.md
+  s_92f20be60ed08d::t_ac9c762083221b 45-52
+tests/unit/test_supported_ecosystems_docs.py
+  s_92f20be60ed08d::t_a733cc0a775981 10,44,46
+src/repolens/resolve/adapters.py
+  s_92f20be60ed08d::t_18d63ed9fd169c 30
+  s_92f20be60ed08d::t_c3062360993cca 86-87,89,92,148-158,160
+  s_92f20be60ed08d::t_679bef24330d81 28-29,133-139,214,218
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "f4ecb481b7ae0346cb0cb99000bb6e21af79f25e",
+  "prompts": {},
+  "sessions": {
+    "s_92f20be60ed08d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e97fd-658f-7643-8cfe-9584edca894e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
