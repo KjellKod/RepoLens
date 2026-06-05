@@ -631,8 +631,8 @@ uses the checked repo list and resolves the checked repos that already have scan
 SBOMs. Checked repos without SBOMs are skipped with a warning so stale approval
 files do not block available scan output. If discover artifacts are absent,
 mismatched, or none of the checked repos have SBOMs, `resolve` falls back to
-every available SBOM under `<WORK>/work/`. Use `--repo-ref <REPO_REF>` only when
-you intentionally want to resolve a single repo artifact directory.
+every available SBOM under `<WORK>/work/`. Use one or more `--repo-ref <REPO_REF>` flags
+only when you intentionally want to resolve selected repo artifact directories.
 
 That normal form preserves the API-layer behavior: Syft-declared licenses and
 verified metadata API evidence are written to `resolved.ndjson`; unresolved records
@@ -667,7 +667,13 @@ repolens flag --work-root <WORK>
 
 This reuses the same repo list and existing SBOM/source snapshot artifacts, rewrites
 `resolved.ndjson` only for affected repos, and leaves normal `run` resume behavior
-unchanged. Add `--repo-ref <REPO_REF>` to narrow the retry to one repo.
+unchanged. Add one or more `--repo-ref <REPO_REF>` flags to narrow the retry to selected
+repos:
+
+```bash
+repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME>
+repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>
+```
 
 Native mobile enrichment is opt-in and remains off by default even when mobile markers
 are present:
@@ -722,6 +728,12 @@ are not runtime-configurable through local config today.
 and `shortlist.md` that `flag` produced, renders a grouped review surface, and settles only
 the items a human approved or rejected:
 
+If you later retry resolution and rerun `flag`, RepoLens first ingests any pending
+`shortlist.md` checkbox decisions and then preserves approved/rejected decisions for
+matching `component_ref` rows. New or materially changed findings stay open, so a ScanCode
+or resolver retry should not erase completed human review while still forcing review of
+different evidence.
+
 1. **Ingest human decisions.** Any item whose checkbox you ticked in `shortlist.md`
    (`[x]` approve, `[r]` reject) is recorded with `status`, `decided_by` (from
    `--identity`, a runtime input — never an owner/repo literal), a UTC `decided_at`, and
@@ -770,6 +782,21 @@ repolens shortlist --work-root <WORK> --emit-contexts <WORK>/shortlist.contexts.
 # <WORK>/shortlist.proposals.json plus <WORK>/shortlist.review.md
 repolens shortlist --work-root <WORK> --proposals <WORK>/shortlist.proposals.json
 ```
+
+If any open rows came from `unresolved:scancode_tool_unavailable`, the console also prints
+the deterministic retry path first:
+
+```bash
+repolens resolve --work-root <WORK> --retry-scancode
+repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME>
+repolens resolve --work-root <WORK> --retry-scancode --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>
+repolens flag --work-root <WORK>
+```
+
+Use the all-repos form when you can afford it, or the repeated `--repo-ref` form to retry
+only selected repos before rerunning `flag`. `flag` preserves matching approved/rejected
+shortlist decisions when it rebuilds the shortlist, and keeps new or materially changed
+findings open.
 
 Use this when the open rows include `UNKNOWN`, abstained, low-confidence, or stale evidence
 items that public package metadata might clarify. After proposal ingestion, review

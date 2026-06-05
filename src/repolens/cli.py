@@ -113,6 +113,50 @@ def _stage_epilog(before: str, example: str, output: str, next_step: str) -> str
     )
 
 
+_RESOLVE_EPILOG = """\
+Before:
+  Run scan first. Resolve reads SBOMs from:
+    <WORK>/work/*/sbom.syft.json
+
+Default:
+  Resolve checked discover repos that have SBOMs.
+  If no checked SBOMs are present, resolve every scanned SBOM under <WORK>/work/.
+
+Examples:
+  Resolve all selected/scanned repos:
+    repolens resolve --work-root <WORK>
+
+  Resolve one repo:
+    repolens resolve --work-root <WORK> --repo-ref <REPO_NAME>
+
+  Resolve selected repos:
+    repolens resolve --work-root <WORK> --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>
+
+  Retry ScanCode only where prior resolve recorded tool unavailable:
+    repolens resolve --work-root <WORK> --retry-scancode
+
+  Retry ScanCode for selected repos only:
+    repolens resolve --work-root <WORK> --retry-scancode \\
+      --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>
+
+Output:
+  <WORK>/work/<repo_ref>/resolved.ndjson
+  Contains license, evidence, and tags per dependency.
+  Unresolved records stay schema-valid.
+
+Next:
+  repolens flag --work-root <WORK>
+
+Notes:
+  --source-root is read-only source input for mobile markers
+  and scoped ScanCode fallback.
+  --source-root supports exactly one repo, so pass one --repo-ref with it.
+  After retrying ScanCode, rerun flag.
+  flag preserves matching approved/rejected shortlist decisions.
+  `repolens run --work-root <WORK> --owner <OWNER>` drives the pipeline end-to-end.
+"""
+
+
 # Per-stage help, shown in `repolens --help` and each stage's own --help.
 _STAGE_HELP = {
     "discover": StageHelp(
@@ -149,20 +193,7 @@ _STAGE_HELP = {
         description=(
             "Stage 3/6 — determine each dependency's license, cheapest trusted source first."
         ),
-        epilog=_stage_epilog(
-            "Syft SBOMs from scan at <WORK>/work/*/sbom.syft.json. By default, "
-            "resolve uses checked discover repos with SBOMs, then falls back to "
-            "available scanned SBOMs when no checked SBOM is present; --repo-ref "
-            "narrows resolve to one repo artifact directory; "
-            "--source-root may point at a read-only checkout for mobile markers and "
-            "package-local ScanCode fallback; --retry-scancode reruns only repos whose "
-            "prior resolved.ndjson contains unresolved:scancode_tool_unavailable.",
-            "repolens resolve --work-root <WORK>",
-            "<WORK>/work/<repo_ref>/resolved.ndjson (license + evidence + tags per "
-            "dependency; unresolved records stay schema-valid).",
-            "`repolens flag --work-root <WORK>`. After fixing ScanCode, use "
-            "`repolens resolve --work-root <WORK> --retry-scancode`, then rerun flag.",
-        ),
+        epilog=_RESOLVE_EPILOG,
     ),
     "flag": StageHelp(
         help="Apply the license policy and flag risky or unresolved licenses.",
@@ -630,10 +661,10 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
     )
     subparser.add_argument(
         "--repo-ref",
-        metavar="REPO_REF",
+        action="append",
+        metavar="REPO_NAME",
         help=(
-            "Optional runtime repository reference used for one work/<repo-ref>/ "
-            "artifact dir; omit to resolve checked scan output."
+            "Resolve a selected repo; repeat for several repos."
         ),
     )
     subparser.add_argument(
@@ -641,8 +672,7 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         type=Path,
         metavar="PATH",
         help=(
-            "Optional read-only source checkout for mobile marker detection and scoped "
-            "ScanCode fallback."
+            "Read-only source checkout for mobile markers and scoped ScanCode."
         ),
     )
     subparser.add_argument(
@@ -654,17 +684,14 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         "--detect-conflicts",
         action="store_true",
         help=(
-            "Cross-check all API adapters and write CONFLICT when verified sources disagree "
-            "(slower; default stops at the first verified API source)."
+            "Cross-check all API adapters and write CONFLICT on disagreement."
         ),
     )
     subparser.add_argument(
         "--retry-scancode",
         action="store_true",
         help=(
-            "Rerun only repos whose existing resolved.ndjson contains "
-            "unresolved:scancode_tool_unavailable; use after fixing the pinned ScanCode tool, "
-            "then rerun flag."
+            "Retry only repos with prior unresolved:scancode_tool_unavailable."
         ),
     )
     subparser.set_defaults(handler=_resolve_stage)
@@ -2341,9 +2368,9 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.resolve import run_resolve
 
     repo_refs = _resolve_repo_refs(args.work_root, args.repo_ref)
-    if args.source_root is not None and args.repo_ref is None and len(repo_refs) > 1:
+    if args.source_root is not None and len(repo_refs) > 1:
         raise InputError(
-            "resolve --source-root requires --repo-ref when multiple scanned repos exist"
+            "resolve --source-root supports exactly one repo; pass one --repo-ref"
         )
     retry_scancode = bool(getattr(args, "retry_scancode", False))
     if retry_scancode:
@@ -2503,9 +2530,10 @@ class _ResolveProgressPrinter:
         print(text, end="", file=self._stream, flush=True)
 
 
-def _resolve_repo_refs(work_root: Path, repo_ref: str | None) -> tuple[str, ...]:
-    if repo_ref:
-        return (repo_ref,)
+def _resolve_repo_refs(work_root: Path, repo_ref: str | Sequence[str] | None) -> tuple[str, ...]:
+    requested_refs = _requested_repo_refs(repo_ref)
+    if requested_refs:
+        return requested_refs
     work_dir = Path(work_root) / "work"
     command = f"repolens scan --work-root {shlex.quote(str(work_root))}"
     approval_error = None
@@ -2553,6 +2581,14 @@ def _resolve_repo_refs(work_root: Path, repo_ref: str | None) -> tuple[str, ...]
     if approval_error is not None:
         _warn_ignored_discover_approval_error(approval_error)
     return repo_refs
+
+
+def _requested_repo_refs(repo_ref: str | Sequence[str] | None) -> tuple[str, ...]:
+    if repo_ref is None:
+        return ()
+    if isinstance(repo_ref, str):
+        return (repo_ref,)
+    return tuple(str(ref) for ref in repo_ref if str(ref))
 
 
 _SCANCODE_TOOL_UNAVAILABLE_ANCHOR = "unresolved:scancode_tool_unavailable"
@@ -2655,6 +2691,8 @@ def _flag_stage(args: argparse.Namespace) -> CommandResult:
         f"component(s); wrote {result.inventory_path.name}, "
         f"{result.shortlist_json_path.name}, {result.shortlist_md_path.name}"
     )
+    if result.preserved_decision_count:
+        summary = f"{summary}; preserved {result.preserved_decision_count} prior decision(s)"
     shortlist_command = f"repolens shortlist --work-root {shlex.quote(str(args.work_root))}"
     summary = f"{summary}\nNext CLI stage: {shortlist_command}"
     if result.open_count > 0:
@@ -2720,12 +2758,17 @@ def _shortlist_open_guidance(
         f"--proposals {shlex.quote(str(proposals))}"
     )
     rerun_command = f"repolens shortlist --work-root {work_root_arg}"
+    scancode_retry_hint = _shortlist_scancode_retry_hint(work_root)
 
     if args.proposals is not None:
-        return "\n".join(
+        sections = [
+            "Manual step: proposals were ingested, but some items remain open.",
+            "",
+        ]
+        if scancode_retry_hint:
+            sections.extend((scancode_retry_hint, ""))
+        sections.extend(
             (
-                "Manual step: proposals were ingested, but some items remain open.",
-                "",
                 "Human review:",
                 f"  Open: {shortlist_md_path}",
                 "  Mark remaining rows or groups with [x] to accept or [r] to reject.",
@@ -2734,11 +2777,16 @@ def _shortlist_open_guidance(
                 f"  {rerun_command}",
             )
         )
+        return "\n".join(sections)
     if contexts_path is not None:
-        return "\n".join(
+        sections = [
+            "Manual step: contexts are ready for AI-assisted shortlist review.",
+            "",
+        ]
+        if scancode_retry_hint:
+            sections.extend((scancode_retry_hint, ""))
+        sections.extend(
             (
-                "Manual step: contexts are ready for AI-assisted shortlist review.",
-                "",
                 "Ask Codex/Claude:",
                 "  $repolens review every row in:",
                 f"    {contexts}",
@@ -2755,10 +2803,15 @@ def _shortlist_open_guidance(
                 f"  {rerun_command}",
             )
         )
-    return "\n".join(
+        return "\n".join(sections)
+    sections = [
+        "Manual step: resolve open shortlist items before report.",
+        "",
+    ]
+    if scancode_retry_hint:
+        sections.extend((scancode_retry_hint, ""))
+    sections.extend(
         (
-            "Manual step: resolve open shortlist items before report.",
-            "",
             "AI-assisted pass for UNKNOWNs/stale evidence:",
             "  Emit contexts:",
             f"    {emit_command}",
@@ -2781,6 +2834,50 @@ def _shortlist_open_guidance(
             f"  {rerun_command}",
         )
     )
+    return "\n".join(sections)
+
+
+def _shortlist_scancode_retry_hint(work_root: Path) -> str:
+    retry_refs = _repo_refs_with_scancode_unavailable(work_root)
+    if not retry_refs:
+        return ""
+    work_root_arg = shlex.quote(str(work_root))
+    preview = ", ".join(retry_refs[:5])
+    suffix = "" if len(retry_refs) <= 5 else ", ..."
+    selected_args = " ".join(f"--repo-ref {shlex.quote(repo_ref)}" for repo_ref in retry_refs[:2])
+    return "\n".join(
+        (
+            "Tool retry for ScanCode-backed UNKNOWNs:",
+            (
+                f"  {len(retry_refs)} repo(s) still contain "
+                f"{_SCANCODE_TOOL_UNAVAILABLE_ANCHOR}: {preview}{suffix}"
+            ),
+            "  After fixing or bootstrapping ScanCode, retry all affected repos:",
+            f"    repolens resolve --work-root {work_root_arg} --retry-scancode",
+            "  Or retry only selected repos; repeat --repo-ref for several:",
+            (
+                f"    repolens resolve --work-root {work_root_arg} "
+                f"--retry-scancode {selected_args}"
+            ),
+            f"    repolens flag --work-root {work_root_arg}",
+            (
+                "  `flag` preserves matching approved/rejected shortlist decisions and "
+                "keeps changed findings open."
+            ),
+        )
+    )
+
+
+def _repo_refs_with_scancode_unavailable(work_root: Path) -> tuple[str, ...]:
+    work_dir = Path(work_root) / "work"
+    if not work_dir.is_dir():
+        return ()
+    repo_refs = tuple(
+        unquote(path.name)
+        for path in sorted(work_dir.iterdir(), key=lambda item: item.name.casefold())
+        if path.is_dir() and (path / "resolved.ndjson").is_file()
+    )
+    return _repo_refs_needing_scancode_retry(Path(work_root), repo_refs)
 
 
 def _report(args: argparse.Namespace) -> CommandResult:

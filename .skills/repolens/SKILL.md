@@ -70,9 +70,19 @@ Before writing proposals, load these references from the RepoLens repository roo
   `src/repolens/data/schemas/shortlist_proposals.schema.json` for the output contract.
 - `.skills/repolens/reference/triage-cheatsheet.md` when judging distribution/scope risk.
 
-Write `work/shortlist.proposals.json` as a JSON array with one entry per context row. Also
-write `work/shortlist.review.md` with a compact human-readable note for each row:
+Prefer the bundled deterministic helper
+`.skills/repolens/scripts/generate_shortlist_proposals.py` over hand-written Python/jq:
+
+```bash
+PYTHONPATH=src python3 .skills/repolens/scripts/generate_shortlist_proposals.py \
+  --work-root work
+```
+
+It writes `work/shortlist.proposals.json` as a JSON array with one entry per context row
+and `work/shortlist.review.md` with a compact human-readable note for each row:
 `proposed`, `confirmed-needs-review`, or `abstained`, the evidence checked, and the reason.
+For one-off evidence debugging, use
+`.skills/repolens/scripts/inspect_evidence.py` with exact allowlisted evidence URLs.
 
 Run a BLOCK sanity pass before writing the file:
 

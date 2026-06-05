@@ -4,6 +4,7 @@ from repolens.data import store
 from repolens.flag.dedup import build_group_outcomes
 from repolens.flag.stage import run_flag
 from repolens.policy import load_default_policy
+from repolens.shortlist.render import render_shortlist_markdown
 
 
 def _outcome(collected_records):
@@ -138,3 +139,115 @@ def test_mixed_runtime_and_build_group_remains_visible_for_review(make_record, c
     assert outcome.component.scope == "unknown"
     assert outcome.component.distribution == "unknown"
     assert outcome.decision.tier.value == "UNKNOWN"
+
+
+def test_flag_rerun_carries_forward_ingested_human_decisions(tmp_path, make_record) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="acme-unknown",
+                spdx_id=None,
+                declared_license_raw=None,
+                url=None,
+                anchor="unresolved:no_candidate",
+            )
+        ],
+    )
+    run_flag(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    item = dict(shortlist["items"][0])
+    item["status"] = "approved"
+    item["decided_by"] = "reviewer-sentinel"
+    item["decided_at"] = "2026-06-05T12:00:00Z"
+    item["decided_via"] = "item"
+    store.write_shortlist(
+        tmp_path,
+        {
+            **shortlist,
+            "open_count": 0,
+            "items": [item],
+        },
+    )
+
+    result = run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    assert result.open_count == 0
+    assert result.preserved_decision_count == 1
+    assert rerun["open_count"] == 0
+    assert rerun["items"][0]["component_ref"] == "acme-unknown|UNKNOWN"
+    assert rerun["items"][0]["status"] == "approved"
+    assert rerun["items"][0]["decided_by"] == "reviewer-sentinel"
+    assert rerun["items"][0]["decided_at"] == "2026-06-05T12:00:00Z"
+
+
+def test_flag_rerun_ingests_pending_shortlist_markdown_ticks(tmp_path, make_record) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="acme-unknown",
+                spdx_id=None,
+                declared_license_raw=None,
+                url=None,
+                anchor="unresolved:no_candidate",
+            )
+        ],
+    )
+    run_flag(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    markdown = render_shortlist_markdown(shortlist["items"]).replace(
+        "- [ ] `acme-unknown|UNKNOWN`",
+        "- [x] `acme-unknown|UNKNOWN`",
+        1,
+    )
+    (tmp_path / "shortlist.md").write_text(markdown, encoding="utf-8")
+
+    result = run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    assert result.preserved_decision_count == 1
+    assert rerun["open_count"] == 0
+    assert rerun["items"][0]["status"] == "approved"
+    assert rerun["items"][0]["decided_by"] is None
+    assert rerun["items"][0]["decided_at"]
+
+
+def test_flag_rerun_does_not_carry_decision_to_changed_component_ref(tmp_path, make_record) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="acme-lib",
+                spdx_id=None,
+                declared_license_raw=None,
+                url=None,
+                anchor="unresolved:no_candidate",
+            )
+        ],
+    )
+    run_flag(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    item = dict(shortlist["items"][0])
+    item["status"] = "approved"
+    item["decided_by"] = "reviewer-sentinel"
+    item["decided_at"] = "2026-06-05T12:00:00Z"
+    item["decided_via"] = "item"
+    store.write_shortlist(tmp_path, {**shortlist, "open_count": 0, "items": [item]})
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [make_record(name="acme-lib", spdx_id="GPL-3.0-only", anchor="GPL-3.0-only")],
+    )
+
+    run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    assert rerun["open_count"] == 1
+    assert rerun["items"][0]["component_ref"] == "acme-lib|GPL-3.0-only"
+    assert rerun["items"][0]["status"] == "open"
+    assert rerun["items"][0]["decided_by"] is None

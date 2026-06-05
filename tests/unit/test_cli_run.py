@@ -451,6 +451,71 @@ def test_resolve_retry_scancode_only_reruns_matching_repos(
     assert "repolens flag --work-root" in result.message
 
 
+def test_resolve_retry_scancode_can_target_several_repo_refs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    sbom: dict[str, object],
+    resolved_record: dict[str, object],
+) -> None:
+    for repo_ref in ("sentinel-alpha", "sentinel-beta", "sentinel-gamma"):
+        store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
+        store.write_resolved(
+            tmp_path,
+            repo_ref,
+            [
+                {
+                    **resolved_record,
+                    "repo": repo_ref,
+                    "evidence": {
+                        "source_layer": "scancode",
+                        "anchor": "unresolved:scancode_tool_unavailable",
+                    },
+                }
+            ],
+        )
+
+    calls: list[str] = []
+
+    def fake_resolve(work_root: Path, repo_ref: str, **_kwargs: object) -> Path:
+        calls.append(repo_ref)
+        store.write_resolved(work_root, repo_ref, [{**resolved_record, "repo": repo_ref}])
+        return store.repo_dir(work_root, repo_ref) / "resolved.ndjson"
+
+    monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
+
+    result = cli._resolve_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            repo_ref=["sentinel-alpha", "sentinel-gamma"],
+            source_root=None,
+            enable_mobile_native=False,
+            detect_conflicts=False,
+            retry_scancode=True,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.SUCCESS
+    assert calls == ["sentinel-alpha", "sentinel-gamma"]
+    assert "retried ScanCode for 2 repos: sentinel-alpha, sentinel-gamma" in result.message
+
+
+def test_resolve_parser_accepts_repeated_repo_ref(tmp_path: Path) -> None:
+    args = cli.build_parser().parse_args(
+        [
+            "resolve",
+            "--work-root",
+            str(tmp_path),
+            "--repo-ref",
+            "sentinel-alpha",
+            "--repo-ref",
+            "sentinel-gamma",
+            "--retry-scancode",
+        ]
+    )
+
+    assert args.repo_ref == ["sentinel-alpha", "sentinel-gamma"]
+
+
 def test_resolve_retry_scancode_noops_when_no_prior_tool_failure(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -546,6 +611,110 @@ def test_shortlist_open_after_context_emit_points_to_skill_next(
     assert "$repolens review every row" in result.message
     assert str(contexts_path) in result.message
     assert f"--proposals {tmp_path / 'shortlist.proposals.json'}" in result.message
+
+
+def test_shortlist_context_emit_still_mentions_selected_scancode_retry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    resolved_record: dict[str, object],
+) -> None:
+    contexts_path = tmp_path / "shortlist.contexts.json"
+    for repo_ref in ("sentinel-alpha", "sentinel-beta"):
+        store.write_resolved(
+            tmp_path,
+            repo_ref,
+            [
+                {
+                    **resolved_record,
+                    "repo": repo_ref,
+                    "evidence": {
+                        "source_layer": "scancode",
+                        "anchor": "unresolved:scancode_tool_unavailable",
+                    },
+                }
+            ],
+        )
+
+    def fake_shortlist(_work_root: Path, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            shortlist_json_path=tmp_path / "shortlist.json",
+            shortlist_md_path=tmp_path / "shortlist.md",
+            open_count=3,
+            item_count=5,
+            contexts_path=contexts_path,
+        )
+
+    monkeypatch.setattr("repolens.shortlist.run_shortlist", fake_shortlist)
+
+    result = cli._shortlist_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            identity=None,
+            emit_contexts=contexts_path,
+            proposals=None,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.FINDINGS_OPEN
+    assert "contexts are ready" in result.message
+    assert "repeat --repo-ref for several" in result.message
+    assert (
+        f"repolens resolve --work-root {tmp_path} --retry-scancode "
+        "--repo-ref sentinel-alpha --repo-ref sentinel-beta"
+    ) in result.message
+
+
+def test_shortlist_open_message_mentions_scancode_retry_when_needed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    resolved_record: dict[str, object],
+) -> None:
+    repo_ref = "sentinel-alpha"
+    store.write_resolved(
+        tmp_path,
+        repo_ref,
+        [
+            {
+                **resolved_record,
+                "repo": repo_ref,
+                "evidence": {
+                    "source_layer": "scancode",
+                    "anchor": "unresolved:scancode_tool_unavailable",
+                },
+            }
+        ],
+    )
+
+    def fake_shortlist(_work_root: Path, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            shortlist_json_path=tmp_path / "shortlist.json",
+            shortlist_md_path=tmp_path / "shortlist.md",
+            open_count=3,
+            item_count=5,
+            contexts_path=None,
+        )
+
+    monkeypatch.setattr("repolens.shortlist.run_shortlist", fake_shortlist)
+
+    result = cli._shortlist_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            identity=None,
+            emit_contexts=None,
+            proposals=None,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.FINDINGS_OPEN
+    assert "Tool retry for ScanCode-backed UNKNOWNs" in result.message
+    assert "unresolved:scancode_tool_unavailable" in result.message
+    assert f"repolens resolve --work-root {tmp_path} --retry-scancode" in result.message
+    assert (
+        f"repolens resolve --work-root {tmp_path} --retry-scancode --repo-ref {repo_ref}"
+        in result.message
+    )
+    assert f"repolens flag --work-root {tmp_path}" in result.message
+    assert "preserves matching approved/rejected shortlist decisions" in result.message
 
 
 def test_resume_with_scan_artifact_does_not_regenerate_candidates(

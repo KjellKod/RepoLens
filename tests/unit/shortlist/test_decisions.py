@@ -108,6 +108,14 @@ def test_reject_mark_recovered() -> None:
     assert decisions["acme-lib|MIT"].status == "rejected"
 
 
+def test_empty_tiers_explain_when_they_fill() -> None:
+    markdown = render_shortlist_markdown([])
+
+    assert "this fills after RepoLens verifies low-risk allow proposals" in markdown
+    assert "this fills for review/block items with enough evidence" in markdown
+    assert "no unresolved, abstained, failed-verification" in markdown
+
+
 def test_garbled_key_yields_no_decision() -> None:
     markdown = render_shortlist_markdown(_items())
     ticked = _tick(markdown, "acme-lib|MIT", "x")

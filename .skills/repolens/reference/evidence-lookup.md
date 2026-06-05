@@ -3,6 +3,19 @@
 Use this reference when producing `shortlist.proposals.json` from
 `shortlist.contexts.json`.
 
+Prefer running the deterministic helper from the repository root:
+
+```bash
+PYTHONPATH=src python3 .skills/repolens/scripts/generate_shortlist_proposals.py \
+  --work-root <WORK>
+```
+
+For debugging an individual metadata URL and seeing what RepoLens extracts, run:
+
+```bash
+PYTHONPATH=src python3 .skills/repolens/scripts/inspect_evidence.py <URL> [...]
+```
+
 ## Goal
 
 For every context row, choose exactly one outcome:

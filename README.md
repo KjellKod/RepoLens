@@ -183,6 +183,8 @@ repolens scan --work-root work
 repolens resolve --work-root work
 # after fixing ScanCode availability, retry only repos that previously hit it:
 # repolens resolve --work-root work --retry-scancode
+# or retry selected affected repos:
+# repolens resolve --work-root work --retry-scancode --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>
 repolens flag --work-root work
 repolens shortlist --work-root work --emit-contexts work/shortlist.contexts.json
 #   ↳ run the bundled repolens skill to review every row, look up verifiable
@@ -192,6 +194,9 @@ repolens shortlist --work-root work --proposals work/shortlist.proposals.json
 #      then rerun repolens shortlist --work-root work until open_count is zero
 repolens report --work-root work
 ```
+
+If you retry resolution and rerun `flag`, RepoLens preserves approved/rejected decisions
+for matching shortlist rows and keeps new or changed findings open.
 
 The AI step is the same seam in both modes — and it's optional. RepoLens itself never
 calls a model; it only emits the questions and verifies the answers. Drive it with the

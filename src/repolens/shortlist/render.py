@@ -39,6 +39,19 @@ REF_PREFIX = "<!-- rpl:ref="
 REF_SUFFIX = " -->"
 GROUP_PREFIX = "<!-- rpl:group="
 GROUP_SUFFIX = " -->"
+_EMPTY_TIER_HINTS = {
+    "ACCEPT-RECOMMENDED": (
+        "_none yet - this fills after RepoLens verifies low-risk allow proposals from "
+        "`--proposals`._"
+    ),
+    "NEEDS-JUDGMENT": (
+        "_none yet - this fills for review/block items with enough evidence for group "
+        "judgment. Unresolved or abstained UNKNOWNs usually appear below._"
+    ),
+    "LOW-CONFIDENCE / CONFLICT": (
+        "_none - no unresolved, abstained, failed-verification, or low-confidence items._"
+    ),
+}
 
 
 def encode_component_ref(component_ref: str) -> str:
@@ -84,7 +97,7 @@ def render_shortlist_markdown(
         lines.append("")
         tier_groups = by_tier.get(tier, [])
         if not tier_groups:
-            lines.append("_none_")
+            lines.append(_EMPTY_TIER_HINTS.get(tier, "_none_"))
         else:
             for group in tier_groups:
                 lines.extend(_render_group(group))
