@@ -61,20 +61,35 @@ that RepoLens cannot verify today in `shortlist.evidence.json` with a short labe
 `LICENSE`, `podspec`, `Package.swift`, `PyPI metadata`, `GitHub license API`, or
 `vendor license page`.
 
+## Browser/Human Evidence
+
+For npm packages, always also check the npmjs package page:
+
+- `https://www.npmjs.com/package/<package>`
+
+Use this page to cross-check package identity, current package metadata, repository links,
+readme license claims, deprecation state, ownership hints, and whether a name appears to
+be public or local/private. Do not put npmjs package-page URLs in
+`shortlist.proposals.json` because RepoLens does not verify them as proposal evidence.
+Record useful npmjs findings in `shortlist.evidence.json` and `shortlist.review.md` when
+registry/API evidence is sparse, ambiguous, contradictory, or absent.
+
 ## Per-Item Process
 
 1. Extract package name, ecosystem, version, current license, distribution, scope, and
    source/evidence hints from the context row.
 2. Check the exact package/version through the preferred metadata source for that ecosystem.
-3. Inspect the fetched response for a target-package license field, not dependency or
+3. For npm packages, also inspect `https://www.npmjs.com/package/<package>` as
+   browser/human evidence even when a registry/API lookup succeeds.
+4. Inspect the fetched response for a target-package license field, not dependency or
    repository-neighbor text.
-4. If the fetched evidence clearly anchors one allow SPDX id or supported expression for
+5. If the fetched evidence clearly anchors one allow SPDX id or supported expression for
    that exact version, write a proposal and a `machine_verified` evidence row.
-5. If evidence is useful but unsupported by the verifier, write a
+6. If evidence is useful but unsupported by the verifier, write a
    `pending_verifier_support` evidence row with direct browser links.
-6. If evidence confirms risky shipped/copyleft or source-available terms, write a
+7. If evidence confirms risky shipped/copyleft or source-available terms, write a
    `legal_or_vendor_review` evidence row and no allow proposal.
-7. If evidence is missing, versionless, contradictory, or only supports a different major
+8. If evidence is missing, versionless, contradictory, or only supports a different major
    package/version, write `no_public_evidence` or `conflict` with lookup trails or URLs.
 
 ## URL Patterns
