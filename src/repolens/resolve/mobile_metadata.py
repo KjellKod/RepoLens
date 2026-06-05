@@ -184,11 +184,7 @@ def _discover_lockfiles(root: Path, filename: str, *, limits: SecurityLimits) ->
         visited_dirs += 1
         if visited_dirs > MAX_DISCOVERY_DIRS:
             return ()
-        dirnames[:] = [
-            dirname
-            for dirname in dirnames
-            if not (current_dir / dirname).is_symlink()
-        ]
+        dirnames[:] = [dirname for dirname in dirnames if not (current_dir / dirname).is_symlink()]
         for item in filenames:
             visited_files += 1
             if visited_files > MAX_DISCOVERY_FILES:

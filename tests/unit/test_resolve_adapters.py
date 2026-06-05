@@ -153,9 +153,7 @@ def test_python_adapter_resolves_zpl_from_pypi_metadata() -> None:
 
 
 def test_adapter_reads_structured_github_license_spdx_id() -> None:
-    assert target_license_candidates(b'{"license":{"spdx_id":"Apache-2.0"}}') == (
-        "Apache-2.0",
-    )
+    assert target_license_candidates(b'{"license":{"spdx_id":"Apache-2.0"}}') == ("Apache-2.0",)
 
 
 def test_python_adapter_reads_exact_license_expression_field() -> None:

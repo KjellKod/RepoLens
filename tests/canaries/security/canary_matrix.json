@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 58,
+    "expected_active_count": 59,
     "markers": [
         "offline",
         "security",
@@ -240,6 +240,12 @@
             "status": "active",
             "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_p3b_mobile_missing_sandbox_is_non_fatal",
             "guardrail": "mobile_missing_sandbox_non_fatal"
+        },
+        {
+            "id": "mobile_metadata_host_surface_exact",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_resolve_canaries.py::test_mobile_metadata_host_surface_is_exact",
+            "guardrail": "mobile_metadata_host_allowlist"
         },
         {
             "id": "p3b_scancode_scoped_targets",

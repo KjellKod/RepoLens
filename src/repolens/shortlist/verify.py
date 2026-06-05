@@ -105,9 +105,7 @@ def _proposal_evidence_url_allowed(url: str) -> bool:
     parsed = urlparse(url)
     if parsed.hostname != "raw.githubusercontent.com":
         return True
-    return parsed.path.startswith("/CocoaPods/Specs/") and parsed.path.endswith(
-        ".podspec.json"
-    )
+    return parsed.path.startswith("/CocoaPods/Specs/") and parsed.path.endswith(".podspec.json")
 
 
 __all__ = ["VerifyOutcome", "verify_agent_resolution"]

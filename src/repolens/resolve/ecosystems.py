@@ -88,8 +88,7 @@ def _supported_ecosystems() -> tuple[EcosystemSupport, ...]:
             key,
             cataloged=True,
             api_resolved=(
-                key in RESOLVER_SUPPORTED_PUBLIC_ECOSYSTEMS
-                or key in MOBILE_METADATA_ECOSYSTEMS
+                key in RESOLVER_SUPPORTED_PUBLIC_ECOSYSTEMS or key in MOBILE_METADATA_ECOSYSTEMS
             ),
             notes=_ECOSYSTEM_NOTES[key],
         )

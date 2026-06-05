@@ -818,9 +818,7 @@ def test_shortlist_open_message_explains_non_retry_unresolved_buckets(
                     },
                     {
                         "status": "open",
-                        "evidence": {
-                            "anchor": "unresolved:no_supported_catalog_license_api"
-                        },
+                        "evidence": {"anchor": "unresolved:no_supported_catalog_license_api"},
                     },
                 ],
             }
@@ -852,8 +850,7 @@ def test_shortlist_open_message_explains_non_retry_unresolved_buckets(
     assert "Open UNKNOWN bucket summary" in result.message
     assert "unresolved:scancode_no_target" in result.message
     assert (
-        "Bootstrapping ScanCode or --retry-scancode does not change this selector"
-        in result.message
+        "Bootstrapping ScanCode or --retry-scancode does not change this selector" in result.message
     )
     assert "unresolved:no_supported_catalog_license_api" in result.message
     assert "exact supported public metadata" in result.message
