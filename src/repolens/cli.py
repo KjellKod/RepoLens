@@ -2879,10 +2879,11 @@ def _shortlist_open_guidance(
             sections.extend((bucket_hint, ""))
         if scancode_retry_hint:
             sections.extend((scancode_retry_hint, ""))
+        sections.extend(_shortlist_review_notes_guidance(work_root, args.proposals))
         sections.extend(
             (
                 "Human review:",
-                f"  Open: {shortlist_md_path}",
+                f"  Open and edit decisions: {shortlist_md_path}",
                 "  Mark remaining rows or groups with [x] to accept or [r] to reject.",
                 "",
                 "Then rerun:",
@@ -2911,8 +2912,12 @@ def _shortlist_open_guidance(
                 "Then ingest verified proposals:",
                 f"  {ingest_command}",
                 "",
+                "Evidence notes:",
+                f"  Review notes will be written to: {review_notes}",
+                "  Use them as supporting evidence after proposal ingestion.",
+                "",
                 "Human review:",
-                f"  Open: {shortlist_md_path}",
+                f"  Open and edit decisions: {shortlist_md_path}",
                 "  Approve/reject remaining items, then rerun:",
                 f"  {rerun_command}",
             )
@@ -2926,6 +2931,7 @@ def _shortlist_open_guidance(
         sections.extend((bucket_hint, ""))
     if scancode_retry_hint:
         sections.extend((scancode_retry_hint, ""))
+    sections.extend(_shortlist_review_notes_guidance(work_root, None))
     sections.extend(
         (
             "AI-assisted pass for UNKNOWNs/stale evidence:",
@@ -2943,7 +2949,7 @@ def _shortlist_open_guidance(
             f"    {ingest_command}",
             "",
             "Human review:",
-            f"  Open: {shortlist_md_path}",
+            f"  Open and edit decisions: {shortlist_md_path}",
             "  Mark remaining rows or groups with [x] to accept or [r] to reject.",
             "",
             "Then rerun:",
@@ -2951,6 +2957,39 @@ def _shortlist_open_guidance(
         )
     )
     return "\n".join(sections)
+
+
+def _shortlist_review_notes_guidance(
+    work_root: Path, proposals_arg: object | None
+) -> tuple[str, ...]:
+    review_notes = _shortlist_existing_review_notes_path(work_root, proposals_arg)
+    if review_notes is None:
+        return ()
+    return (
+        "Evidence notes:",
+        f"  Read supporting evidence: {review_notes}",
+        "  Use this for proposal rationale and browser-evidence breadcrumbs; edit decisions "
+        "only in shortlist.md.",
+        "",
+    )
+
+
+def _shortlist_existing_review_notes_path(
+    work_root: Path, proposals_arg: object | None
+) -> Path | None:
+    candidates: list[Path] = []
+    if proposals_arg is not None:
+        proposals_path = Path(proposals_arg)
+        name = proposals_path.name
+        if name.endswith(".proposals.json"):
+            candidates.append(
+                proposals_path.with_name(f"{name.removesuffix('.proposals.json')}.review.md")
+            )
+    candidates.append(Path(work_root) / "shortlist.review.md")
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
 
 
 def _shortlist_unresolved_bucket_hint(work_root: Path) -> str:

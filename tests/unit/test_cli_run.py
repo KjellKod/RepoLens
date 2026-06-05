@@ -699,6 +699,40 @@ def test_shortlist_open_after_context_emit_points_to_skill_next(
     assert f"--proposals {tmp_path / 'shortlist.proposals.json'}" in result.message
 
 
+def test_shortlist_open_after_proposal_ingest_points_to_review_notes(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    proposals_path = tmp_path / "shortlist.proposals.json"
+    review_notes_path = tmp_path / "shortlist.review.md"
+    review_notes_path.write_text("supporting evidence\n", encoding="utf-8")
+
+    def fake_shortlist(_work_root: Path, **_kwargs: object) -> SimpleNamespace:
+        return SimpleNamespace(
+            shortlist_json_path=tmp_path / "shortlist.json",
+            shortlist_md_path=tmp_path / "shortlist.md",
+            open_count=3,
+            item_count=5,
+            contexts_path=None,
+        )
+
+    monkeypatch.setattr("repolens.shortlist.run_shortlist", fake_shortlist)
+
+    result = cli._shortlist_stage(
+        SimpleNamespace(
+            work_root=tmp_path,
+            identity=None,
+            emit_contexts=None,
+            proposals=proposals_path,
+        )
+    )
+
+    assert result.status == cli.CommandStatus.FINDINGS_OPEN
+    assert "Evidence notes:" in result.message
+    assert f"Read supporting evidence: {review_notes_path}" in result.message
+    assert "browser-evidence breadcrumbs" in result.message
+    assert f"Open and edit decisions: {tmp_path / 'shortlist.md'}" in result.message
+
+
 def test_shortlist_context_emit_still_mentions_selected_scancode_retry(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
