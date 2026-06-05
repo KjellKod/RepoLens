@@ -1,0 +1,27 @@
+tests/unit/shortlist/test_decisions.py
+  s_b94247f2be259a::t_9a05f7ef73b542 5,153-189
+  s_b94247f2be259a::t_48201a252c19a5 136-152,190-191
+src/repolens/shortlist/stage.py
+  s_b94247f2be259a::t_ec86192af3d01d 131-136,195-201
+src/repolens/shortlist/render.py
+  s_b94247f2be259a::t_6336562d38ca81 24,103,110,127,140-145,150,155-158,186-192
+  s_b94247f2be259a::t_356657cebf6509 122-123,179-183
+tests/unit/shortlist/test_stage.py
+  s_b94247f2be259a::t_4019c74562a999 124-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "e422aefec7b9f043d033ee90edbd57e0e3002709",
+  "prompts": {},
+  "sessions": {
+    "s_b94247f2be259a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e97f6-7d4e-79c2-a672-264cae3a1fbe",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
