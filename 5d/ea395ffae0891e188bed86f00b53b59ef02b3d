@@ -1,0 +1,19 @@
+tests/unit/test_cli_config.py
+  s_6815ab4205a20f::t_89ce372b921b10 281,299
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "5dea395ffae0891e188bed86f00b53b59ef02b3d",
+  "prompts": {},
+  "sessions": {
+    "s_6815ab4205a20f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e999a-68de-70d0-821c-dccca878412e",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
