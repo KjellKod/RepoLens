@@ -227,9 +227,9 @@ class ScanBatchError(InternalError):
 def resolve_syft_path(work_root: str | Path) -> Path:
     """Return RepoLens's verified shared-cache Syft path.
 
-    The CLI performs consent-gated acquisition before calling :func:`scan_repos`.
-    This resolver is cache-only and intentionally ignores ``work_root`` so a
-    caller cannot supply a local Syft binary.
+    The CLI auto-acquires RepoLens's pinned Syft before calling :func:`scan_repos`.
+    This resolver is cache-only and intentionally ignores ``work_root`` so a caller
+    cannot supply a local Syft binary.
     """
 
     del work_root
@@ -239,7 +239,7 @@ def resolve_syft_path(work_root: str | Path) -> Path:
     if path is None:
         raise InputError(
             "RepoLens's validated Syft is not in the shared cache; run "
-            "`repolens scan --yes` to acquire and verify it, or run "
+            "`repolens scan` to acquire and verify it, or run "
             "`repolens bootstrap` before offline use. See docs/usage.md#tool-bootstrap."
         )
     return path

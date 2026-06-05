@@ -105,7 +105,7 @@ ${XDG_CACHE_HOME:-~/.cache}/repolens/tools/<version>-<sha256>/syft
 
 The cache key is the RepoLens-owned Syft version plus the pinned release-artifact
 sha256, so a pin bump naturally uses a new directory and stale versions are unused.
-For automation, pass `--yes`; for offline runs, pre-seed the cache:
+For offline runs, pre-seed the cache:
 
 ```
 repolens bootstrap
@@ -127,7 +127,7 @@ Validate the manifest offline, no downloads:
 python3 -m repolens.bootstrap --dry-run
 ```
 
-`repolens bootstrap` and `scan --yes` verify Syft **fail-closed**: they check the
+`repolens bootstrap` and `scan` verify Syft **fail-closed**: they check the
 release artifact's sha256, verify the cosign-signed checksums file, then cross-check that
 the pinned digest matches the signed entry — all **before** the Syft executable is exposed
 from the cache. `repolens bootstrap --work-root <WORK>` prepares an isolated
@@ -546,8 +546,8 @@ produces one SBOM per repo. It does **not** re-run discovery and is independentl
 rerunnable.
 
 ```
-repolens scan --work-root work [--timeout SECONDS] [--clone-timeout SECONDS] [--yes] [--offline] [--quiet]
-repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [--clone-timeout SECONDS] [--yes] [--quiet]
+repolens scan --work-root work [--timeout SECONDS] [--clone-timeout SECONDS] [--offline] [--quiet]
+repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [--clone-timeout SECONDS] [--quiet]
 ```
 
 - `--work-root` — the pipeline work root. Per-repo artifacts land under
@@ -564,8 +564,6 @@ repolens scan --work-root work --repos approved-repos.json [--timeout SECONDS] [
 - `--timeout` — per-repo wall-clock budget for the Syft inventory scan.
 - `--clone-timeout` — per-repo wall-clock budget for hardened Git clone. Defaults to 300
   seconds and can also be set in local config as `scan.clone_timeout_seconds`.
-- `--yes` / `-y` — pre-consent for automation. If the verified cache is empty, scan
-  downloads RepoLens's pinned Syft, verifies it, caches it, and continues.
 - `--offline` — require the verified shared cache. Scan never downloads or prompts; if the
   cache is absent or stale, it exits with a usage error and tells you to run
   `repolens bootstrap`.

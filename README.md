@@ -95,9 +95,8 @@ For one-repo dogfood:
 repolens run --work-root /tmp/repolens-dogfood --owner <OWNER> --repos "<REPO>"
 ```
 
-For automation, pass `--yes`. It proceeds past the discover gate and tool-consent prompts,
-but it **never** approves shortlist items: if any remain open, `run` exits non-zero before
-writing reports.
+For automation, pass `--yes`. It proceeds past the discover gate, but it **never**
+approves shortlist items: if any remain open, `run` exits non-zero before writing reports.
 
 ```
 repolens run --work-root work --owner <OWNER> --yes

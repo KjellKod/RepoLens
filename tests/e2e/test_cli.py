@@ -1142,7 +1142,7 @@ class ScanCliTests(unittest.TestCase):
         self.assertIn("still cloning acme-alpha (31s)…", output)
         self.assertIn("[1/1] acme-alpha ✓ 1 deps", output)
 
-    def test_scan_missing_syft_binary_exits_two(self) -> None:
+    def test_scan_cache_miss_fetches_before_scan(self) -> None:
         self._use_real_syft_ensure()
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work-root"
@@ -1158,19 +1158,34 @@ class ScanCliTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            pin = cli.load_syft_pin()
+            syft_path = work_root / "tools" / "syft"
+
+            def fake_runner(argv, *, timeout):
+                return subprocess.CompletedProcess(
+                    list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
+                )
+
             stderr = io.StringIO()
             with (
                 mock.patch("repolens.cli.cached_syft_path", return_value=None),
-                mock.patch("repolens.cli.ensure_syft_cached") as ensure,
+                mock.patch(
+                    "repolens.cli.ensure_syft_cached",
+                    return_value=SimpleNamespace(path=syft_path, pin=pin, acquired=True),
+                ) as ensure,
+                mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
+                mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
                 redirect_stderr(stderr),
             ):
                 code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
-            self.assertEqual(code, 2)
-            ensure.assert_not_called()
-            self.assertIn("--yes", stderr.getvalue())
+
+            self.assertEqual(code, 0)
+            ensure.assert_called_once()
+            self.assertEqual(stderr.getvalue().count("First run:"), 1)
+            self.assertIn(f"✓ Syft {pin.version} ready", stderr.getvalue())
             self.assertNotIn("Download and install", stderr.getvalue())
 
-    def test_scan_interactive_yes_fetches_and_proceeds(self) -> None:
+    def test_scan_interactive_cache_miss_fetches_without_prompt(self) -> None:
         self._use_real_syft_ensure()
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work-root"
@@ -1193,7 +1208,7 @@ class ScanCliTests(unittest.TestCase):
                     "repolens.cli.ensure_syft_cached",
                     return_value=SimpleNamespace(path=syft_path, pin=pin, acquired=True),
                 ) as ensure,
-                mock.patch("sys.stdin", _TtyStringIO("y\n")),
+                mock.patch("sys.stdin", _TtyStringIO("")),
                 mock.patch("sys.stderr", stderr),
                 mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
                 mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
@@ -1204,34 +1219,11 @@ class ScanCliTests(unittest.TestCase):
             ensure.assert_called_once()
             prompt = stderr.getvalue()
             self.assertIn(f"Syft {pin.version}", prompt)
-            self.assertIn(pin.short_sha256, prompt)
-            self.assertIn("docs/usage.md#tool-bootstrap", prompt)
-            self.assertIn("Download and install RepoLens's validated Syft now? [y/N]", prompt)
+            self.assertNotIn("Download and install", prompt)
             self.assertEqual(prompt.count("First run:"), 1)
             self.assertIn(f"✓ Syft {pin.version} ready", prompt)
 
-    def test_scan_interactive_no_exits_without_fetch(self) -> None:
-        self._use_real_syft_ensure()
-        with tempfile.TemporaryDirectory() as tmp:
-            work_root = Path(tmp) / "work-root"
-            repos_path = self._scaffold(
-                work_root,
-                [{"repo_ref": "acme-alpha", "clone_url": "https://example.invalid/acme-alpha"}],
-            )
-            stderr = _TtyStringIO()
-            with (
-                mock.patch("repolens.cli.cached_syft_path", return_value=None),
-                mock.patch("repolens.cli.ensure_syft_cached") as ensure,
-                mock.patch("sys.stdin", _TtyStringIO("\n")),
-                mock.patch("sys.stderr", stderr),
-            ):
-                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
-
-            self.assertEqual(code, 2)
-            ensure.assert_not_called()
-            self.assertIn("Nothing was downloaded", stderr.getvalue())
-
-    def test_scan_noninteractive_yes_fetches(self) -> None:
+    def test_scan_noninteractive_cache_miss_fetches(self) -> None:
         self._use_real_syft_ensure()
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work-root"
@@ -1258,9 +1250,7 @@ class ScanCliTests(unittest.TestCase):
                 mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
                 redirect_stderr(stderr),
             ):
-                code = cli.main(
-                    ["scan", "--work-root", str(work_root), "--repos", str(repos_path), "--yes"]
-                )
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
             self.assertEqual(code, 0)
             ensure.assert_called_once()
@@ -1268,7 +1258,7 @@ class ScanCliTests(unittest.TestCase):
             self.assertIn(f"✓ Syft {pin.version} ready", stderr.getvalue())
             self.assertNotIn("Download and install", stderr.getvalue())
 
-    def test_scan_noninteractive_yes_prints_acquire_phases_in_order(self) -> None:
+    def test_scan_noninteractive_cache_miss_prints_acquire_phases_in_order(self) -> None:
         self._use_real_syft_ensure()
         with tempfile.TemporaryDirectory() as tmp:
             work_root = Path(tmp) / "work-root"
@@ -1303,9 +1293,7 @@ class ScanCliTests(unittest.TestCase):
                 mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
                 redirect_stderr(stderr),
             ):
-                code = cli.main(
-                    ["scan", "--work-root", str(work_root), "--repos", str(repos_path), "--yes"]
-                )
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
             self.assertEqual(code, 0)
             output = stderr.getvalue()
@@ -1363,7 +1351,6 @@ class ScanCliTests(unittest.TestCase):
                         str(work_root),
                         "--repos",
                         str(repos_path),
-                        "--yes",
                         "--quiet",
                     ]
                 )
@@ -1390,9 +1377,7 @@ class ScanCliTests(unittest.TestCase):
                 ),
                 redirect_stderr(stderr),
             ):
-                code = cli.main(
-                    ["scan", "--work-root", str(work_root), "--repos", str(repos_path), "--yes"]
-                )
+                code = cli.main(["scan", "--work-root", str(work_root), "--repos", str(repos_path)])
 
             self.assertEqual(code, 1)
             self.assertIn(
