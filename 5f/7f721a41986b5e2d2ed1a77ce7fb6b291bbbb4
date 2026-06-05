@@ -1,0 +1,61 @@
+src/repolens/scan/runner.py
+  s_4e8f4c1d1e7793::t_ff864c71c3dd62 1196,1226
+  s_4e8f4c1d1e7793::t_268327c0532c59 555
+  s_4e8f4c1d1e7793::t_f9f9d4e20fdaa9 107-142,165-166,179,184-195,459-523,529-549,552,556-593
+  s_4e8f4c1d1e7793::t_519762f3748e28 524-528
+  s_4e8f4c1d1e7793::t_9e826718162d85 550-551,553-554
+  s_4e8f4c1d1e7793::t_2336cd4d8989c6 796,848-850,877-885
+  s_4e8f4c1d1e7793::t_e008e4aff1de5b 816-819
+  s_4e8f4c1d1e7793::t_c23a6343f3ff54 42
+tests/unit/scan/test_runner.py
+  s_4e8f4c1d1e7793::t_ef2e53dffeb8bd 17,106-224,264-303
+  s_4e8f4c1d1e7793::t_33ddfca55aff62 225-263
+tests/fixtures/synthetic/fixture_manifest.json
+  s_4e8f4c1d1e7793::t_e5dcc746e45cd1 33-52
+tests/integration/test_resolve_cli.py
+  s_4e8f4c1d1e7793::t_cf947f2f01c1ba 99-119
+scripts/m1_fixture_e2e.py
+  s_4e8f4c1d1e7793::t_519762f3748e28 220-223
+  s_4e8f4c1d1e7793::t_419926f5ebedcd 320,322,327-335,347-360,365,375-384
+tests/unit/test_cli_run.py
+  s_4e8f4c1d1e7793::t_94ccc3ddfde06f 222,369
+  s_4e8f4c1d1e7793::t_6f0765e324c76f 261-294,298-302
+  s_4e8f4c1d1e7793::t_519762f3748e28 295-297
+src/repolens/resolve/stage.py
+  s_4e8f4c1d1e7793::t_90351c17243d1f 6,38,69-95,122,144-148,166,273,275,328,379,384-392,402-410,418-424,431-435,438-446,479,482-485,487,491-534
+tests/unit/test_cli_scan_summary.py
+  s_4e8f4c1d1e7793::t_81523ccc344afe 7,9,29-60
+tests/unit/test_resolve_stage.py
+  s_4e8f4c1d1e7793::t_91bcd1d2903eb0 11,101-119,221-347
+src/repolens/cli.py
+  s_4e8f4c1d1e7793::t_257f1d1d3f0203 2275-2277,2279
+  s_4e8f4c1d1e7793::t_6f8ac08279caa3 1526-1527,1535-1538,2473,2477,2506-2515,2518,2533-2536,2546-2551,2616-2617,2620,2622,2626,2628,2630
+  s_4e8f4c1d1e7793::t_519762f3748e28 2539-2542
+  s_4e8f4c1d1e7793::t_32c45aba765e81 1515,2449
+.gitignore
+  s_4e8f4c1d1e7793::t_3cb7ab7c5d98fd 11
+docs/usage.md
+  s_4e8f4c1d1e7793::t_36486f1970969e 590-600,604-607,669-676
+src/repolens/data/schemas/sbom.schema.json
+  s_4e8f4c1d1e7793::t_3cb7ab7c5d98fd 32-33
+tests/integration/test_m1_fixture_e2e.py
+  s_4e8f4c1d1e7793::t_ce150dd5bb1738 33-37,39-41,43-50
+tests/fixtures/synthetic/acme_node_monorepo/package.json
+  s_4e8f4c1d1e7793::t_e5dcc746e45cd1 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "5f7f721a41986b5e2d2ed1a77ce7fb6b291bbbb4",
+  "prompts": {},
+  "sessions": {
+    "s_4e8f4c1d1e7793": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e97dc-eb1d-7db3-9796-7b89fee13986",
+        "model": "gpt-5.5"
+      },
+      "human_author": null
+    }
+  }
+}
