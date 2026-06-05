@@ -11,12 +11,12 @@ markers = [
 ]
 
 [build-system]
-requires = ["setuptools>=69"]
+requires = ["setuptools>=69", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "repolens"
-version = "0.1.0"
+dynamic = ["version"]
 description = "CLI foundation for a license disclosure orchestrator."
 requires-python = ">=3.13"
 dependencies = [
@@ -43,6 +43,12 @@ where = ["src"]
 "repolens.data" = ["schemas/*.json"]
 "repolens.policy.data" = ["*.json"]
 "repolens.bootstrap" = ["pins.toml", "scancode.requirements.txt"]
+
+[tool.setuptools_scm]
+tag_regex = "^(?P<version>\\d+\\.\\d+\\.\\d+)$"
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
+version_file = "src/repolens/_version.py"
 
 [tool.ruff]
 line-length = 100
