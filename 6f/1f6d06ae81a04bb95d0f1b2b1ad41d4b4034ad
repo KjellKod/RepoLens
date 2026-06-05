@@ -1,0 +1,110 @@
+src/repolens/shortlist/research.py
+  s_e748be7d650870::t_271cc42cbc0499 1-8,10-13,15-119,124-290,293-329,333,337-340,348-355,357-417,420-444
+  s_e748be7d650870::t_95e029e96646b7 9,14,291-292,330-332,334-336,341-347,418-419
+  s_e748be7d650870::t_c4b7fa8a53e9fa 120-123
+  s_e748be7d650870::t_06f474318276e2 356
+docs/data-model.md
+  s_e748be7d650870::t_0eead829e20e3e 14,33-36,45-47,84
+tests/unit/shortlist/test_proposals.py
+  s_e748be7d650870::t_903dfc027cfaf0 47-71,175-233
+src/repolens/shortlist/contexts.py
+  s_e748be7d650870::t_65a88c3736b77e 11,48-71,77,125,138,142,145-146,165-169,205-292,294-295,298-309,334-342,344,350
+  s_e748be7d650870::t_dd4d001f159978 12,293,296-297
+src/repolens/data/schemas/shortlist.schema.json
+  s_e748be7d650870::t_ea53a7a1a64580 91-131,133-168
+  s_e748be7d650870::t_f7325ea453112a 132
+tests/unit/shortlist/test_contexts.py
+  s_e748be7d650870::t_7532d4992b0981 67-87,123-126
+src/repolens/shortlist/render.py
+  s_e748be7d650870::t_95e029e96646b7 24,150-154,282-286,295
+  s_e748be7d650870::t_4caebf38363493 140-143,145,159-165,218-281,287-294,296-303
+.skills/repolens/reference/proposal-schema.md
+  s_e748be7d650870::t_7d38d83d9917cb 3-5,37-62,73-75
+tests/unit/shortlist/test_render_evidence.py
+  s_e748be7d650870::t_012f9ad09e5e97 1-126
+src/repolens/data/schemas/shortlist_evidence.schema.json
+  s_e748be7d650870::t_ea53a7a1a64580 1-46,48-84
+  s_e748be7d650870::t_f7325ea453112a 47
+docs/usage.md
+  s_e748be7d650870::t_b051f5bb65b860 220-221
+  s_e748be7d650870::t_0eead829e20e3e 343-345,371-373,440-449
+  s_e748be7d650870::t_0692f70924aec1 797-800,806-810,813-820,839-846
+tests/conftest.py
+  s_e748be7d650870::t_4c1d10c3893b58 192-220
+src/repolens/shortlist/verify.py
+  s_e748be7d650870::t_4408434f476920 20,78-79,122-130
+  s_e748be7d650870::t_a4dbed8cdcc986 36-37,57,80-85,131-172
+README.md
+  s_e748be7d650870::t_0eead829e20e3e 142-147,149-150,198-206,215-217,219-222
+src/repolens/resolve/adapters.py
+  s_e748be7d650870::t_06f474318276e2 29,223
+tests/unit/shortlist/test_evidence.py
+  s_e748be7d650870::t_012f9ad09e5e97 1-8,10,12,14-37,48-66,110-145,156-205,209-269
+  s_e748be7d650870::t_abd59da97862eb 9,11,13,38-47,88-108,146-155,270-286,289-308
+  s_e748be7d650870::t_f4dcff80f37695 67-75,77,79-87,109
+  s_e748be7d650870::t_78804277115626 76
+  s_e748be7d650870::t_384c8d3422971c 78
+  s_e748be7d650870::t_95e029e96646b7 206-208
+  s_e748be7d650870::t_4ab47fa0f4c60c 287-288
+tests/unit/test_schema_validation.py
+  s_e748be7d650870::t_0ee05b9a372fb4 19,104-131
+.skills/repolens/reference/evidence-lookup.md
+  s_e748be7d650870::t_b051f5bb65b860 3-4,6,9-13,24,26-34,36-38,52,55,71-78,87-90,119
+tests/unit/shortlist/test_research.py
+  s_e748be7d650870::t_012f9ad09e5e97 1-3,5,9,11-109
+  s_e748be7d650870::t_fbe25488d4ae7f 4,6-8,10,110-117
+src/repolens/cli.py
+  s_e748be7d650870::t_d61156f7d14300 749-754,756-802,1592,1611,1699,1709,1711-1716,1731,1736-1738,1742-1750,1752,1773,1779,1781-1782,1784-1785
+  s_e748be7d650870::t_95e029e96646b7 1719-1723
+  s_e748be7d650870::t_332b84f4de8964 2904-2905,2944,2951-2957,2965,3029-3031,3037,3040,3095-3116
+  s_e748be7d650870::t_806aa828bf87ab 2912,2923-2925
+  s_e748be7d650870::t_f1426db8d9611a 2963
+  s_e748be7d650870::t_4733d4f563ee3e 2985,2999,3002-3005
+  s_e748be7d650870::t_4cc6d72c03d0fa 3025
+src/repolens/shortlist/stage.py
+  s_e748be7d650870::t_1acab7d6d03a47 47,92,126-131,140-144,147
+  s_e748be7d650870::t_6bf56cc5e0b331 122
+  s_e748be7d650870::t_f4dcff80f37695 146
+tests/unit/shortlist/test_verify.py
+  s_e748be7d650870::t_a17db8c880f06e 150-166,168-173,225-242
+  s_e748be7d650870::t_4a94f5d3c149e8 167,174-224
+src/repolens/shortlist/__init__.py
+  s_e748be7d650870::t_153a34eb855bcb 10,13
+src/repolens/shortlist/proposals.py
+  s_e748be7d650870::t_232c9e04da243b 19,82,101,113,138,164-176
+.skills/repolens/SKILL.md
+  s_e748be7d650870::t_7d38d83d9917cb 58,65,71,74,77-81,84-89,105,108-110,113-116,153-155
+src/repolens/shortlist/grouping.py
+  s_e748be7d650870::t_ebe7f60d0107c4 173-180
+tests/unit/test_cli_run.py
+  s_e748be7d650870::t_a339449ef815cd 1413,1416,1439
+  s_e748be7d650870::t_a17db8c880f06e 1480,1484,1495-1523,1533,1537,1550-1552
+tests/unit/test_cli_shortlist_research.py
+  s_e748be7d650870::t_012f9ad09e5e97 1-27,51-70,80-87
+  s_e748be7d650870::t_67647a32d3e4bb 28-50
+  s_e748be7d650870::t_95e029e96646b7 71-79
+src/repolens/data/validation.py
+  s_e748be7d650870::t_ea53a7a1a64580 19
+.agents/skills/repolens/SKILL.md
+  s_e748be7d650870::t_7d38d83d9917cb 3,8-9
+src/repolens/shortlist/evidence.py
+  s_e748be7d650870::t_bae2da1a536191 1-10,12-16,18-195,197-198,202-244,247-341,345-375,377-403
+  s_e748be7d650870::t_95e029e96646b7 11,245-246,342-344,376
+  s_e748be7d650870::t_1d5125d507b816 17,196,199-201
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "6f1f6d06ae81a04bb95d0f1b2b1ad41d4b4034ad",
+  "prompts": {},
+  "sessions": {
+    "s_e748be7d650870": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9861-9ea1-7c70-ac6f-32bed2031d11",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
