@@ -121,6 +121,37 @@ def test_abstain_routes_to_human(tmp_path: Path) -> None:
     assert item["note"] == "agent:abstained"
 
 
+def test_bare_rerun_preserves_verified_candidate_waiting_for_human(tmp_path: Path) -> None:
+    _write_shortlist(
+        tmp_path,
+        [
+            _item(
+                "acme-lib|UNKNOWN",
+                candidate_spdx="MIT",
+                evidence={"source_layer": "agent", "url": _DEPS_DEV_URL, "anchor": "MIT"},
+                note="agent:verified_awaiting_human",
+            )
+        ],
+    )
+    agent = _FakeAgent(Abstain())
+
+    result = run_shortlist(
+        tmp_path,
+        agent_client=agent,
+        fetcher=_fetcher(b"{}"),
+        evidence_resolver=_public_resolver,
+        content_loader=lambda item: ItemContent(license_text=""),
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert agent.calls == []
+    assert result.open_count == 1
+    assert item["status"] == "open"
+    assert item["candidate_spdx"] == "MIT"
+    assert item["note"] == "agent:verified_awaiting_human"
+    assert item["evidence"]["source_layer"] == "agent"
+
+
 def test_bad_anchor_keeps_item_open(tmp_path: Path) -> None:
     _write_shortlist(tmp_path, [_item("acme-lib|MIT")])
     agent = _FakeAgent(Resolution("MIT", _DEPS_DEV_URL, "MIT"))

@@ -21,7 +21,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from repolens.security.sanitize import markdown_link, render_code_span, sanitize_markdown
-from repolens.shortlist.contexts import ShortlistMetadata
+from repolens.shortlist.contexts import ShortlistMetadata, triage_for_item
 from repolens.shortlist.grouping import (
     LOW_CONFIDENCE,
     TIER_ORDER,
@@ -100,14 +100,14 @@ def render_shortlist_markdown(
             lines.append(_EMPTY_TIER_HINTS.get(tier, "_none_"))
         else:
             for group in tier_groups:
-                lines.extend(_render_group(group))
+                lines.extend(_render_group(group, metadata=resolved_metadata))
                 lines.append("")
         lines.append("")
 
     return sanitize_markdown("\n".join(lines).rstrip() + "\n")
 
 
-def _render_group(group: ShortlistGroup) -> list[str]:
+def _render_group(group: ShortlistGroup, *, metadata: ShortlistMetadata) -> list[str]:
     label = (
         f"{group.key.spdx_family} / {group.key.distribution} / {group.key.scope} "
         f"({_group_count_label(group.items)})"
@@ -119,11 +119,12 @@ def _render_group(group: ShortlistGroup) -> list[str]:
     lines: list[str] = []
     has_group_decision = group.tier != LOW_CONFIDENCE
     if has_group_decision:
-        lines.append(f"- [ ] **{label}** — found in {render_code_span(found_in)} {marker}")
+        checkbox = _group_checkbox_for_status(group.items)
+        lines.append(f"- {checkbox} **{label}** — found in {render_code_span(found_in)} {marker}")
     else:
         lines.append(f"### {label} — found in {render_code_span(found_in)}")
     indent = "  " if has_group_decision else ""
-    lines.extend(_render_item(item, indent=indent) for item in group.items)
+    lines.extend(_render_item(item, indent=indent, metadata=metadata) for item in group.items)
     return lines
 
 
@@ -136,16 +137,25 @@ def _group_count_label(items: Sequence[Mapping[str, Any]]) -> str:
     return f"{open_count} open / {total_count} total item{'s' if total_count != 1 else ''}"
 
 
-def _render_item(item: Mapping[str, Any], *, indent: str = "") -> str:
+def _render_item(
+    item: Mapping[str, Any],
+    *,
+    indent: str = "",
+    metadata: ShortlistMetadata,
+) -> str:
     component_ref = str(item["component_ref"])
     label = _component_label(component_ref, item)
     note = item.get("note") or str(item["reason"])
     evidence = item["evidence"] if isinstance(item.get("evidence"), Mapping) else {}
+    found_in = _item_found_in_cell(item, metadata)
     key = f"{REF_PREFIX}{encode_component_ref(component_ref)}{REF_SUFFIX}"
     status = str(item.get("status") or "open")
     checkbox = _checkbox_for_status(status)
     decided = _decided_suffix(item)
-    return f"{indent}- {checkbox} {label} — {note} — {_evidence_cell(evidence)}{decided} {key}"
+    return (
+        f"{indent}- {checkbox} {label} — found in {found_in} — {note} — "
+        f"{_evidence_cell(evidence)}{decided} {key}"
+    )
 
 
 def _component_label(component_ref: str, item: Mapping[str, Any]) -> str:
@@ -164,6 +174,22 @@ def _checkbox_for_status(status: str) -> str:
     if status == "rejected":
         return "[r]"
     return "[ ]"
+
+
+def _group_checkbox_for_status(items: Sequence[Mapping[str, Any]]) -> str:
+    statuses = {str(item.get("status") or "open") for item in items}
+    if statuses == {"approved"}:
+        return "[x]"
+    if statuses == {"rejected"}:
+        return "[r]"
+    return "[ ]"
+
+
+def _item_found_in_cell(item: Mapping[str, Any], metadata: ShortlistMetadata) -> str:
+    repos = triage_for_item(item, metadata).found_in
+    if not repos:
+        return render_code_span("unknown repo")
+    return render_code_span(", ".join(repos))
 
 
 def _decided_suffix(item: Mapping[str, Any]) -> str:

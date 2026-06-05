@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from repolens.shortlist.contexts import ShortlistMetadata
+from repolens.shortlist.contexts import ShortlistMetadata, TriageMetadata
 from repolens.shortlist.decisions import (
     apply_decisions,
     parse_checkbox_decisions,
@@ -131,6 +131,62 @@ def test_group_label_distinguishes_open_from_total_items() -> None:
     assert "(1 open / 2 total items)" in markdown
     assert "- [ ] `acme-tool|GPL-3.0-only`" in markdown
     assert "- [x] `acme-core|GPL-3.0-or-later`" in markdown
+
+
+def test_group_header_reflects_settled_members() -> None:
+    approved_items = [
+        {**item, "status": "approved", "decided_at": "2026-06-05T00:00:00Z"}
+        for item in _needs_judgment_items()
+    ]
+    rejected_items = [
+        {**item, "status": "rejected", "decided_at": "2026-06-05T00:00:00Z"}
+        for item in _needs_judgment_items()
+    ]
+
+    approved_markdown = render_shortlist_markdown(
+        approved_items, metadata=ShortlistMetadata(triage_by_ref={})
+    )
+    rejected_markdown = render_shortlist_markdown(
+        rejected_items, metadata=ShortlistMetadata(triage_by_ref={})
+    )
+
+    assert "- [x] **GPL-3.0 / unknown / unknown (0 open / 2 total items)**" in approved_markdown
+    assert "- [r] **GPL-3.0 / unknown / unknown (0 open / 2 total items)**" in rejected_markdown
+
+
+def test_item_rows_include_repo_provenance() -> None:
+    item = {
+        "component_ref": "zope-site|UNKNOWN",
+        "reason": "UNKNOWN",
+        "evidence": {
+            "source_layer": "agent",
+            "url": "https://pypi.org/pypi/zope-site/6.0/json",
+            "anchor": "ZPL-2.1",
+        },
+        "candidate_spdx": "ZPL-2.1",
+        "status": "open",
+        "decided_by": None,
+        "decided_at": None,
+        "note": "agent:verified_awaiting_human",
+    }
+    metadata = ShortlistMetadata(
+        triage_by_ref={
+            "zope-site|UNKNOWN": TriageMetadata(
+                spdx_id="UNKNOWN",
+                tier="UNKNOWN",
+                origin="third-party-oss",
+                scope="runtime",
+                distribution="server",
+                evidence_url="pkg:pypi/zope-site@6.0",
+                evidence_anchor="unresolved:scancode_no_target",
+                found_in=("platform-sol", "web"),
+            )
+        }
+    )
+
+    markdown = render_shortlist_markdown([item], metadata=metadata)
+
+    assert "`zope-site|UNKNOWN` -&gt; `ZPL-2.1` — found in `platform-sol, web`" in markdown
 
 
 def test_verified_candidate_displays_correction_without_changing_ref_key() -> None:

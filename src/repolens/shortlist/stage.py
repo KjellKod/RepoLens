@@ -128,7 +128,12 @@ def run_shortlist(
     agent_invocations = 0
     for item in settled_items:
         record = dict(item)
-        if emit_contexts_path is None and proposals_path is None and record.get("status") == "open":
+        if (
+            emit_contexts_path is None
+            and proposals_path is None
+            and record.get("status") == "open"
+            and not _has_verified_candidate(record)
+        ):
             agent_invocations += _resolve_open_item(
                 record,
                 agent_client=agent_client,
@@ -184,6 +189,16 @@ def _ingest_human_decisions(
         now=now,
         group_decisions=parsed.group_decisions,
         group_membership=memberships,
+    )
+
+
+def _has_verified_candidate(record: Mapping[str, Any]) -> bool:
+    evidence = record.get("evidence") if isinstance(record.get("evidence"), Mapping) else {}
+    candidate = _optional_str(record.get("candidate_spdx"))
+    return (
+        candidate is not None
+        and record.get("note") == "agent:verified_awaiting_human"
+        and evidence.get("source_layer") == "agent"
     )
 
 
