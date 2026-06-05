@@ -22,7 +22,7 @@
             "properties": {
               "source_layer": {
                 "type": "string",
-                "enum": ["syft", "api", "mobile", "scancode", "agent"]
+                "enum": ["syft", "api", "mobile", "scancode", "agent", "research_evidence"]
               },
               "url": {"type": "string"},
               "anchor": {"type": "string"},
@@ -81,6 +81,33 @@
               "confidence": {"type": ["string", "number", "null"]},
               "rationale": {"type": ["string", "null"]},
               "sanity_check": {"type": ["string", "null"]},
+              "evidence_kind": {"type": ["string", "null"]},
+              "source_repo": {
+                "type": ["object", "null"],
+                "required": [
+                  "host",
+                  "owner",
+                  "repo",
+                  "ref",
+                  "provenance",
+                  "provenance_detail",
+                  "bound_to_package"
+                ],
+                "properties": {
+                  "host": {"type": "string", "enum": ["github.com"]},
+                  "owner": {"type": "string", "minLength": 1},
+                  "repo": {"type": "string", "minLength": 1},
+                  "ref": {"type": "string", "minLength": 1},
+                  "ref_kind": {
+                    "type": ["string", "null"],
+                    "enum": ["version", "commit", "unknown", null]
+                  },
+                  "provenance": {"type": "string", "enum": ["package_metadata"]},
+                  "provenance_detail": {"type": "string", "minLength": 1},
+                  "bound_to_package": {"type": "boolean"}
+                },
+                "additionalProperties": false
+              },
               "abstain": {"type": "boolean"},
               "reason": {"type": ["string", "null"]},
               "invalid_reason": {"type": ["string", "null"]}
@@ -131,6 +158,7 @@
               },
               "lookups_attempted": {"type": "array", "items": {"type": "string"}},
               "likely_spdx": {"type": ["string", "null"]},
+              "human_candidate_spdx": {"type": ["string", "null"]},
               "confidence": {"type": ["string", "number", "null"]},
               "browser_evidence": {
                 "type": "array",
@@ -160,6 +188,36 @@
                   },
                   "additionalProperties": false
                 }
+              },
+              "source_repo": {
+                "type": "object",
+                "required": [
+                  "host",
+                  "owner",
+                  "repo",
+                  "provenance",
+                  "provenance_detail",
+                  "bound_to_package"
+                ],
+                "properties": {
+                  "host": {"type": "string", "enum": ["github.com"]},
+                  "owner": {"type": "string", "minLength": 1},
+                  "repo": {"type": "string", "minLength": 1},
+                  "ref": {"type": ["string", "null"]},
+                  "ref_kind": {
+                    "type": ["string", "null"],
+                    "enum": ["version", "commit", "default_branch", "unknown", null]
+                  },
+                  "provenance": {
+                    "type": "string",
+                    "enum": ["package_metadata", "external_candidate"]
+                  },
+                  "provenance_detail": {"type": "string", "minLength": 1},
+                  "bound_to_package": {"type": "boolean"},
+                  "fetch_url": {"type": ["string", "null"]},
+                  "display_url": {"type": ["string", "null"]}
+                },
+                "additionalProperties": false
               },
               "rationale": {"type": ["string", "null"]},
               "review_note": {"type": ["string", "null"]}

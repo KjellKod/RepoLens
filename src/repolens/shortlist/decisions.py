@@ -134,11 +134,19 @@ def apply_decisions(
         if decision is None and membership is not None:
             decision = groups.get(membership.key)
             decided_via = "group"
+            if (
+                decision is not None
+                and decision.status == "approved"
+                and _has_human_candidate(record)
+            ):
+                decision = None
         if decision is not None and record.get("status") == "open":
             record["status"] = decision.status
             record["decided_by"] = reviewer
             record["decided_at"] = now
             record["decided_via"] = decided_via
+            if decision.status == "approved" and decided_via == "item":
+                _promote_human_candidate(record)
             if decided_via == "group" and membership is not None:
                 record["decision_provenance"] = {
                     "component_refs": list(membership.component_refs),
@@ -153,6 +161,43 @@ def apply_decisions(
                 record.pop("decision_provenance", None)
         updated.append(record)
     return updated
+
+
+def _promote_human_candidate(record: dict[str, Any]) -> None:
+    research = record.get("research_evidence")
+    if not isinstance(research, Mapping):
+        return
+    candidate = _non_empty(research.get("human_candidate_spdx"))
+    if candidate is None:
+        return
+    source_repo = research.get("source_repo")
+    if not isinstance(source_repo, Mapping):
+        return
+    if _non_empty(source_repo.get("provenance")) != "external_candidate":
+        return
+    if source_repo.get("bound_to_package") is True:
+        return
+    record["candidate_spdx"] = candidate
+    evidence = dict(record.get("evidence") or {})
+    evidence["source_layer"] = "research_evidence"
+    browser_evidence = research.get("browser_evidence")
+    if isinstance(browser_evidence, list) and browser_evidence:
+        first = browser_evidence[0]
+        if isinstance(first, Mapping):
+            url = _non_empty(first.get("url"))
+            anchor = _non_empty(first.get("anchor")) or candidate
+            if url is not None:
+                evidence["url"] = url
+            evidence["anchor"] = anchor
+    record["evidence"] = evidence
+    record["note"] = "human_candidate:accepted"
+
+
+def _has_human_candidate(record: Mapping[str, Any]) -> bool:
+    research = record.get("research_evidence")
+    if not isinstance(research, Mapping):
+        return False
+    return _non_empty(research.get("human_candidate_spdx")) is not None
 
 
 def _reviewer_identity(identity: str | None) -> str:

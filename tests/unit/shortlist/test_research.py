@@ -31,6 +31,15 @@ def _fetcher(responses: dict[str, bytes]):
     return fetch
 
 
+def _tracking_fetcher(responses: dict[str, bytes], fetched: list[str]):
+    def fetch(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        fetched.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=responses.get(url, b"{}"))
+
+    return fetch
+
+
 def test_research_prefers_pypi_metadata_when_verified() -> None:
     url = "https://pypi.org/pypi/acme-lib/1.2.3/json"
     record, proposal = research_context(
@@ -100,6 +109,197 @@ def test_swiftpm_default_branch_license_is_not_machine_verified() -> None:
     assert record.outcome == "pending_verifier_support"
     assert record.machine_verification == "pending_verifier_support"
     assert proposal is None
+
+
+def test_swiftpm_purl_derives_exact_github_license_api_proposal() -> None:
+    url = "https://api.github.com/repos/pointfreeco/xctest-dynamic-overlay/license?ref=1.9.0"
+    record, proposal = research_context(
+        _context(
+            component_ref="xctest-dynamic-overlay|UNKNOWN",
+            ecosystem="swift",
+            package="github.com/pointfreeco/xctest-dynamic-overlay/xctest-dynamic-overlay",
+            version="1.9.0",
+            purl=(
+                "pkg:swift/github.com/pointfreeco/xctest-dynamic-overlay/"
+                "xctest-dynamic-overlay@1.9.0"
+            ),
+            triage={
+                "found_in": ["ios-driver"],
+                "spdx_id": "UNKNOWN",
+                "evidence_url": (
+                    "pkg:swift/github.com/pointfreeco/xctest-dynamic-overlay/"
+                    "xctest-dynamic-overlay@1.9.0"
+                ),
+            },
+        ),
+        fetcher=_fetcher({url: json.dumps({"license": {"spdx_id": "MIT"}}).encode()}),
+    )
+
+    assert record.outcome == "machine_verified"
+    assert record.machine_verification == "verified"
+    assert record.likely_spdx == "MIT"
+    assert record.browser_evidence[0].url == url
+    assert record.source_repo is not None
+    assert record.source_repo.provenance == "package_metadata"
+    assert proposal is not None
+    assert proposal["spdx_id"] == "MIT"
+    assert proposal["evidence_url"] == url
+
+
+def test_swiftpm_purl_tries_bounded_v_tag_variant() -> None:
+    first = "https://api.github.com/repos/pointfreeco/xctest-dynamic-overlay/license?ref=1.9.0"
+    second = "https://api.github.com/repos/pointfreeco/xctest-dynamic-overlay/license?ref=v1.9.0"
+    fetched: list[str] = []
+
+    record, proposal = research_context(
+        _context(
+            ecosystem="swiftpm",
+            package="github.com/pointfreeco/xctest-dynamic-overlay/xctest-dynamic-overlay",
+            version="1.9.0",
+            purl=(
+                "pkg:swift/github.com/pointfreeco/xctest-dynamic-overlay/"
+                "xctest-dynamic-overlay@1.9.0"
+            ),
+        ),
+        fetcher=_tracking_fetcher(
+            {second: json.dumps({"license": {"spdx_id": "MIT"}}).encode()},
+            fetched,
+        ),
+    )
+
+    assert record.outcome == "machine_verified"
+    assert proposal is not None
+    assert proposal["evidence_url"] == second
+    assert fetched == [first, second]
+
+
+def test_swiftpm_github_package_string_derives_repo_without_product_suffix() -> None:
+    url = "https://api.github.com/repos/pointfreeco/xctest-dynamic-overlay/license?ref=1.9.0"
+    fetched: list[str] = []
+
+    record, proposal = research_context(
+        _context(
+            ecosystem="swiftpm",
+            package="github.com/pointfreeco/xctest-dynamic-overlay/xctest-dynamic-overlay",
+            version="1.9.0",
+        ),
+        fetcher=_tracking_fetcher(
+            {url: json.dumps({"license": {"spdx_id": "MIT"}}).encode()},
+            fetched,
+        ),
+    )
+
+    assert record.outcome == "machine_verified"
+    assert proposal is not None
+    assert fetched[0] == url
+
+
+def test_external_github_repo_url_becomes_human_candidate_evidence() -> None:
+    url = "https://api.github.com/repos/Owner/RepoName/license?ref=1.2.3"
+
+    record, proposal = research_context(
+        _context(
+            ecosystem="swiftpm",
+            package="not-github-shaped",
+            version="1.2.3",
+            triage={
+                "found_in": ["sentinel-alpha"],
+                "spdx_id": "UNKNOWN",
+                "evidence_url": "https://GitHub.com/Owner/RepoName",
+            },
+        ),
+        fetcher=_fetcher({url: json.dumps({"license": {"spdx_id": "MIT"}}).encode()}),
+    )
+
+    assert proposal is None
+    assert record.outcome == "pending_verifier_support"
+    assert record.human_candidate_spdx == "MIT"
+    assert record.source_repo is not None
+    assert record.source_repo.provenance == "external_candidate"
+    assert record.source_repo.owner == "Owner"
+    assert record.source_repo.repo == "RepoName"
+
+
+def test_raw_license_fallback_stays_pending_and_renders_blob_url() -> None:
+    api = "https://api.github.com/repos/pointfreeco/xctest-dynamic-overlay/license?ref=1.9.0"
+    raw = "https://raw.githubusercontent.com/pointfreeco/xctest-dynamic-overlay/1.9.0/LICENSE"
+    blob = "https://github.com/pointfreeco/xctest-dynamic-overlay/blob/1.9.0/LICENSE"
+
+    record, proposal = research_context(
+        _context(
+            component_ref="xctest-dynamic-overlay|UNKNOWN",
+            ecosystem="swift",
+            package="github.com/pointfreeco/xctest-dynamic-overlay/xctest-dynamic-overlay",
+            version="1.9.0",
+            purl=(
+                "pkg:swift/github.com/pointfreeco/xctest-dynamic-overlay/"
+                "xctest-dynamic-overlay@1.9.0"
+            ),
+        ),
+        fetcher=_fetcher(
+            {
+                api: b"{}",
+                raw: (
+                    b"MIT License\n\nPermission is hereby granted, free of charge, to any "
+                    b"person obtaining a copy.\n\nTHE SOFTWARE IS PROVIDED AS IS."
+                ),
+            }
+        ),
+    )
+
+    assert proposal is None
+    assert record.outcome == "pending_verifier_support"
+    assert record.machine_verification == "pending_verifier_support"
+    assert record.likely_spdx == "MIT"
+    assert record.browser_evidence[0].url == blob
+
+
+def test_github_blob_license_url_canonicalizes_to_raw_fetch() -> None:
+    api = "https://api.github.com/repos/sentinel/acme-lib/license?ref=1.2.3"
+    raw = "https://raw.githubusercontent.com/sentinel/acme-lib/1.2.3/LICENSE"
+    blob = "https://github.com/sentinel/acme-lib/blob/1.2.3/LICENSE"
+    fetched: list[str] = []
+
+    record, proposal = research_context(
+        _context(
+            ecosystem="swiftpm",
+            package="not-github-shaped",
+            version="1.2.3",
+            triage={
+                "found_in": ["sentinel-alpha"],
+                "spdx_id": "UNKNOWN",
+                "evidence_url": blob,
+            },
+        ),
+        fetcher=_tracking_fetcher(
+            {
+                api: b"{}",
+                raw: (
+                    b"MIT License\n\nPermission is hereby granted, free of charge.\n\n"
+                    b"THE SOFTWARE IS PROVIDED AS IS."
+                ),
+            },
+            fetched,
+        ),
+    )
+
+    assert proposal is None
+    assert raw in fetched
+    assert record.human_candidate_spdx == "MIT"
+    assert record.browser_evidence[0].url == blob
+
+
+def test_bare_package_name_does_not_infer_github_lookup() -> None:
+    fetched: list[str] = []
+
+    record, proposal = research_context(
+        _context(ecosystem="swiftpm", package="xctest-dynamic-overlay", version="1.9.0"),
+        fetcher=_tracking_fetcher({}, fetched),
+    )
+
+    assert record.outcome == "no_public_evidence"
+    assert proposal is None
+    assert fetched == []
 
 
 def test_review_markdown_has_one_row_per_context_row() -> None:

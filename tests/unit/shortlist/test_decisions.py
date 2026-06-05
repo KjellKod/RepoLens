@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from repolens.data.validation import validate_artifact
 from repolens.shortlist.contexts import ShortlistMetadata, TriageMetadata
 from repolens.shortlist.decisions import (
     apply_decisions,
@@ -86,6 +87,50 @@ def _needs_judgment_items() -> list[dict[str, object]]:
             "ai_suggestion": {"disposition": "block", "confidence": 0.95},
         },
     ]
+
+
+def _external_candidate_item() -> dict[str, object]:
+    return {
+        "component_ref": "acme-lib|UNKNOWN",
+        "reason": "UNKNOWN",
+        "evidence": {"source_layer": "api", "anchor": "UNKNOWN"},
+        "candidate_spdx": None,
+        "status": "open",
+        "decided_by": None,
+        "decided_at": None,
+        "note": None,
+        "research_evidence": {
+            "component_ref": "acme-lib|UNKNOWN",
+            "context_fingerprint": "abc123def456",
+            "package": "acme-lib",
+            "version": "1.2.3",
+            "ecosystem": "swiftpm",
+            "found_in": ["sentinel-alpha"],
+            "outcome": "pending_verifier_support",
+            "machine_verification": "pending_verifier_support",
+            "lookups_attempted": ["GitHub license API"],
+            "likely_spdx": "MIT",
+            "human_candidate_spdx": "MIT",
+            "browser_evidence": [
+                {
+                    "label": "GitHub license API",
+                    "url": "https://api.github.com/repos/sentinel/acme-lib/license?ref=1.2.3",
+                    "source_type": "github_license_api",
+                    "anchor": "MIT",
+                }
+            ],
+            "source_repo": {
+                "host": "github.com",
+                "owner": "sentinel",
+                "repo": "acme-lib",
+                "ref": "1.2.3",
+                "ref_kind": "version",
+                "provenance": "external_candidate",
+                "provenance_detail": "triage_evidence_url",
+                "bound_to_package": False,
+            },
+        },
+    }
 
 
 def test_round_trip_recovers_component_ref_through_sanitize() -> None:
@@ -395,3 +440,71 @@ def test_needs_judgment_item_ref_overrides_group_decision() -> None:
     assert by_ref["acme-tool|GPL-3.0-only"]["decided_via"] == "item"
     assert by_ref["acme-core|GPL-3.0-or-later"]["status"] == "approved"
     assert by_ref["acme-core|GPL-3.0-or-later"]["decided_via"] == "group"
+
+
+def test_item_accept_promotes_external_human_candidate() -> None:
+    items = [_external_candidate_item()]
+    markdown = render_shortlist_markdown(items)
+    parsed = parse_review_decisions(_tick(markdown, "acme-lib|UNKNOWN", "x"))
+
+    updated = apply_decisions(
+        items,
+        parsed.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+    )
+
+    item = updated[0]
+    assert item["status"] == "approved"
+    assert item["decided_via"] == "item"
+    assert item["candidate_spdx"] == "MIT"
+    assert item["evidence"]["source_layer"] == "research_evidence"
+    assert item["note"] == "human_candidate:accepted"
+    validate_artifact(
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-06-02T00:00:00Z",
+            "open_count": 0,
+            "items": [item],
+        },
+        "shortlist",
+    )
+
+
+def test_group_accept_does_not_promote_external_human_candidate() -> None:
+    items = [_external_candidate_item()]
+    metadata = ShortlistMetadata(triage_by_ref={})
+    markdown = _tick_first_group(render_shortlist_markdown(items, metadata=metadata), "x")
+    parsed = parse_review_decisions(markdown)
+    groups = build_groups(items, metadata)
+
+    updated = apply_decisions(
+        items,
+        parsed.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+        group_decisions=parsed.group_decisions,
+        group_membership=group_membership_by_ref(groups),
+    )
+
+    item = updated[0]
+    assert item["status"] == "open"
+    assert "decided_via" not in item
+    assert item["candidate_spdx"] is None
+
+
+def test_item_reject_does_not_promote_external_human_candidate() -> None:
+    items = [_external_candidate_item()]
+    parsed = parse_review_decisions(
+        _tick(render_shortlist_markdown(items), "acme-lib|UNKNOWN", "r")
+    )
+
+    updated = apply_decisions(
+        items,
+        parsed.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+    )
+
+    assert updated[0]["status"] == "rejected"
+    assert updated[0]["candidate_spdx"] is None

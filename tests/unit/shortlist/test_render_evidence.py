@@ -124,3 +124,48 @@ def test_render_no_public_evidence_lookup_trail() -> None:
 
     assert "looked up: `PyPI metadata`, `GitHub license API`" in markdown
     assert "machine verification: `no_public_evidence`" in markdown
+
+
+def test_render_external_candidate_as_human_review_correction() -> None:
+    markdown = render_shortlist_markdown(
+        [
+            _item(
+                {
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": "abc123def456",
+                    "package": "acme-lib",
+                    "version": "1.2.3",
+                    "ecosystem": "swiftpm",
+                    "found_in": ["sentinel-alpha"],
+                    "outcome": "pending_verifier_support",
+                    "machine_verification": "pending_verifier_support",
+                    "lookups_attempted": ["GitHub license API"],
+                    "likely_spdx": "MIT",
+                    "human_candidate_spdx": "MIT",
+                    "browser_evidence": [
+                        {
+                            "label": "GitHub license API",
+                            "url": _GITHUB_URL,
+                            "source_type": "github_license_api",
+                            "anchor": "MIT",
+                        }
+                    ],
+                    "source_repo": {
+                        "host": "github.com",
+                        "owner": "sentinel",
+                        "repo": "acme-lib",
+                        "ref": "1.2.3",
+                        "ref_kind": "version",
+                        "provenance": "external_candidate",
+                        "provenance_detail": "triage_evidence_url",
+                        "bound_to_package": False,
+                    },
+                }
+            )
+        ],
+        metadata=_metadata(),
+    )
+
+    assert "`acme-lib|UNKNOWN` -&gt; `MIT`" in markdown
+    assert "external source candidate `sentinel/acme-lib`" in markdown
+    assert "machine verification: `pending_verifier_support`" in markdown

@@ -14,6 +14,33 @@
       "confidence": {"type": ["string", "number"]},
       "rationale": {"type": "string"},
       "sanity_check": {"type": "string"},
+      "evidence_kind": {"type": "string", "enum": ["github_source_repo"]},
+      "source_repo": {
+        "type": "object",
+        "required": [
+          "host",
+          "owner",
+          "repo",
+          "ref",
+          "provenance",
+          "provenance_detail",
+          "bound_to_package"
+        ],
+        "properties": {
+          "host": {"type": "string", "enum": ["github.com"]},
+          "owner": {"type": "string", "minLength": 1},
+          "repo": {"type": "string", "minLength": 1},
+          "ref": {"type": "string", "minLength": 1},
+          "ref_kind": {
+            "type": ["string", "null"],
+            "enum": ["version", "commit", "unknown", null]
+          },
+          "provenance": {"type": "string", "enum": ["package_metadata"]},
+          "provenance_detail": {"type": "string", "minLength": 1},
+          "bound_to_package": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      },
       "abstain": {"type": "boolean"},
       "reason": {"type": "string"}
     },
