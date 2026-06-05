@@ -228,8 +228,7 @@ def research_context(
 
     human_candidate_spdx = (
         result.spdx_id
-        if result.source_repo is not None
-        and result.source_repo.provenance == "external_candidate"
+        if result.source_repo is not None and result.source_repo.provenance == "external_candidate"
         else None
     )
     return (
@@ -661,8 +660,7 @@ def _github_source_repo_lookups(source_repo: _SourceRepoIdentity) -> tuple[_Look
 
 def _github_license_api_url(owner: str, repo: str, ref: str | None) -> str:
     base = (
-        f"https://{_GITHUB_API_HOST}/repos/"
-        f"{quote(owner, safe='')}/{quote(repo, safe='')}/license"
+        f"https://{_GITHUB_API_HOST}/repos/{quote(owner, safe='')}/{quote(repo, safe='')}/license"
     )
     if ref is None:
         return base
