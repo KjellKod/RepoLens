@@ -8,7 +8,7 @@ from repolens.exit_codes import InputError
 from repolens.resolve.adapters import API_ALLOWED_HOSTS
 from repolens.resolve.mobile import MobileEnrichmentOutcome
 from repolens.resolve.models import ApiCandidate, PackageFact, ResolveAdapter
-from repolens.resolve.stage import run_resolve
+from repolens.resolve.stage import ResolveCacheStats, run_resolve
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import FetchResult, HttpFetchOptions
 
@@ -94,6 +94,25 @@ def write_single_artifact_sbom(
             "tool": {"name": "syft", "version": "1.0.0"},
             "source": "https://example.invalid/sentinel-source",
             "artifacts": [artifact],
+        },
+    )
+
+
+def write_artifact_sbom(
+    tmp_path: Path,
+    repo_ref: str,
+    artifacts: list[dict[str, object]],
+) -> None:
+    write_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "schema_version": "1.0",
+            "repo": repo_ref,
+            "generated_at": "2026-01-01T00:00:00Z",
+            "tool": {"name": "syft", "version": "1.0.0"},
+            "source": "https://example.invalid/sentinel-source",
+            "artifacts": artifacts,
         },
     )
 
@@ -197,6 +216,135 @@ def test_api_candidate_requires_validated_matching_evidence(tmp_path: Path, repo
     assert record["spdx_id"] == "MIT"
     assert record["evidence"]["source_layer"] == "api"
     assert record["evidence"]["anchor"] == "MIT"
+
+
+def test_duplicate_api_resolution_reuses_lookup_but_rebuilds_records(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        [
+            {
+                "name": "acme-lib",
+                "version": "1.2.3",
+                "type": "python",
+                "purl": "pkg:pypi/acme-lib@1.2.3",
+                "licenses": [],
+                "locations": ["requirements.txt"],
+            },
+            {
+                "name": "acme-lib",
+                "version": "1.2.3",
+                "type": "python",
+                "purl": "pkg:pypi/acme-lib@1.2.3",
+                "licenses": [],
+                "locations": ["requirements-dev.txt"],
+            },
+        ],
+    )
+    adapter = CandidateAdapter(
+        ApiCandidate(
+            spdx_id="MIT",
+            evidence_url="https://api.deps.dev/v3alpha/systems/pypi/packages/acme-lib/versions/1.2.3",
+            evidence_anchor="MIT",
+        )
+    )
+    fetch_calls: list[str] = []
+
+    def fetch(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        fetch_calls.append(url)
+        return FetchResult(url=url, status=200, headers=(), body=b'{"licenses":["MIT"]}')
+
+    stats = ResolveCacheStats()
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        adapters=[adapter],
+        fetcher=fetch,
+        evidence_resolver=public_resolver,
+        cache_stats=stats,
+    )
+
+    records = list(iter_resolved(tmp_path / "work" / repo_ref / "resolved.ndjson"))
+    assert adapter.calls == 1
+    assert len(fetch_calls) == 1
+    assert stats.api_hits == 1
+    assert [record["spdx_id"] for record in records] == ["MIT", "MIT"]
+    assert records[0]["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "runtime",
+        "distribution": "server",
+    }
+    assert records[1]["tags"] == {
+        "origin": "third-party-oss",
+        "scope": "build",
+        "distribution": "not-distributed",
+    }
+    assert [record["repo"] for record in records] == [repo_ref, repo_ref]
+    assert [record["purl"] for record in records] == [
+        "pkg:pypi/acme-lib@1.2.3",
+        "pkg:pypi/acme-lib@1.2.3",
+    ]
+
+
+def test_api_miss_cache_does_not_skip_scancode_when_source_root_available(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        [
+            {
+                "name": "acme-lib",
+                "version": "1.2.3",
+                "type": "python",
+                "purl": "pkg:pypi/acme-lib@1.2.3",
+                "licenses": [],
+                "locations": ["vendor/acme-lib/package.py"],
+            },
+            {
+                "name": "acme-lib",
+                "version": "1.2.3",
+                "type": "python",
+                "purl": "pkg:pypi/acme-lib@1.2.3",
+                "licenses": [],
+                "locations": ["vendor/acme-lib/package.py"],
+            },
+        ],
+    )
+    source_root = tmp_path / "source"
+    package_dir = source_root / "vendor" / "acme-lib"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.py").write_text("print('fixture')\n", encoding="utf-8")
+    (package_dir / "LICENSE").write_text("Apache-2.0\n", encoding="utf-8")
+    scancode_calls: list[list[str]] = []
+
+    def runner(argv: list[str], *, timeout: float):
+        del timeout
+        scancode_calls.append(list(argv))
+        return type(
+            "Completed",
+            (),
+            {"returncode": 0, "stdout": '{"files":[{"license_expression_spdx":"Apache-2.0"}]}'},
+        )()
+
+    stats = ResolveCacheStats()
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        source_root=source_root,
+        adapters=[],
+        scancode_runner=runner,
+        scancode_executable_provider=lambda work_root: Path(work_root) / "tools" / "scancode",
+        cache_stats=stats,
+    )
+
+    records = list(iter_resolved(tmp_path / "work" / repo_ref / "resolved.ndjson"))
+    assert stats.api_hits == 1
+    assert len(scancode_calls) == 2
+    assert [record["spdx_id"] for record in records] == ["Apache-2.0", "Apache-2.0"]
 
 
 def test_api_candidate_accepts_equivalent_compound_expression_evidence(

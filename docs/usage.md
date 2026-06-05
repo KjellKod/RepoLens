@@ -587,10 +587,24 @@ a rerun **skip** that repo. Every successful SBOM is persisted even within a mix
 any repo fails the process exits `1` after the rest finish. Token redaction is applied to
 both the SBOM and `scan.status.json` before they are written.
 
+Large monorepos often repeat the same registry dependency graph in multiple lockfiles.
+`scan` keeps Syft's full extraction pass and source snapshot intact, then automatically
+collapses exact duplicate registry dependency artifacts before persisting RepoLens's
+`sbom.syft.json`. Collapse requires the same ecosystem/type, normalized package identity,
+version, purl, and declared-license tuple, and all locations must be dependency graph
+manifest or lockfile paths. The persisted artifact carries deterministic merged locations
+and `repolens_occurrence_count` when more than one occurrence was collapsed. Package-local
+or source-like locations stay separate so location-sensitive ScanCode fallback can still
+inspect the right target later. When this optimization applies, non-quiet scan progress
+shows the persisted dependency count and the raw Syft artifact count.
+
 Default scan exclusions remove artifacts located only under clearly non-shipped paths:
 `tests/fixtures/`, `test/fixtures/`, `tests/bootstrap/fixtures/`, and `.git/`.
 Top-level `fixtures/` and `vendor/` are not excluded by default. A local config can replace
-the default list when a repository has local non-shipped sample or generated paths:
+the default list when a repository has local non-shipped sample or generated paths.
+Use `scan.exclude_paths` for generated, vendor, build, or fixture directories that should
+not be scanned at all; it is not needed for repeated lockfile dependency graphs because
+that dedupe happens automatically after Syft extraction:
 
 ```json
 {
@@ -651,6 +665,15 @@ only when you intentionally want to resolve selected repo artifact directories.
 That normal form preserves the API-layer behavior: Syft-declared licenses and
 verified metadata API evidence are written to `resolved.ndjson`; unresolved records
 remain schema-valid.
+
+Within each run, `resolve` reuses declared-license normalization and verified API
+resolution outcomes for duplicate package/version/purl/declared-license rows that remain
+in older or non-deduped SBOMs. Each output row is still rebuilt from the current SBOM
+artifact, so repo, purl, version, first-party tags, build/runtime tags, and declared-version
+markers remain specific to that occurrence. ScanCode remains source-location-sensitive:
+RepoLens does not broadly reuse ScanCode outcomes across different package locations or
+source roots. When duplicate rows are reused, non-quiet `resolve` and `run` output reports
+the cached resolution count.
 
 P3b adds an optional source checkout boundary for mobile marker detection and scoped
 ScanCode fallback:

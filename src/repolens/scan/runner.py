@@ -39,6 +39,7 @@ from repolens.githost import (
     private_repo_needs_auth_message,
     rate_limited_message,
 )
+from repolens.resolve.purl import package_identity
 from repolens.scan.first_party import collect_first_party_names
 from repolens.security.clone import (
     CloneCredential,
@@ -103,6 +104,42 @@ _CLONE_ELAPSED_BUDGET_FACTOR = float(CLONE_RETRY_MAX_ATTEMPTS)
 _MAX_SOURCE_SNAPSHOT_FILES = 256
 _MAX_SOURCE_SNAPSHOT_TOTAL_BYTES = 4 * 1024 * 1024
 _MAX_SOURCE_SNAPSHOT_FILE_BYTES = 512 * 1024
+_DEPENDENCY_GRAPH_FILENAMES = frozenset(
+    {
+        "package-lock.json",
+        "npm-shrinkwrap.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "pipfile.lock",
+        "poetry.lock",
+        "pyproject.toml",
+        "cargo.lock",
+        "go.sum",
+        "gradle.lockfile",
+        "build.gradle",
+        "build.gradle.kts",
+        "pom.xml",
+        "gemfile.lock",
+        "packages.lock.json",
+        "package.resolved",
+        "podfile.lock",
+    }
+)
+_PACKAGE_LOCAL_ROOTS = frozenset(
+    {
+        ".git",
+        "__pycache__",
+        "build",
+        "dist",
+        "node_modules",
+        "packages",
+        "site-packages",
+        "src",
+        "source",
+        "target",
+        "vendor",
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -125,6 +162,8 @@ class RepoScanOutcome:
     tool_version: str | None = None
     error: str | None = None
     skipped_reason: str | None = None
+    deps_count: int | None = None
+    raw_deps_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -137,8 +176,21 @@ class ScanProgressEvent:
     repo_ref: str
     status: str | None = None
     deps_count: int | None = None
+    raw_deps_count: int | None = None
     elapsed_seconds: float | None = None
     error: str | None = None
+
+
+@dataclass(frozen=True)
+class SbomDedupeStats:
+    """Counts from post-Syft SBOM dedupe."""
+
+    raw_artifact_count: int
+    persisted_artifact_count: int
+
+    @property
+    def deduped(self) -> bool:
+        return self.raw_artifact_count > self.persisted_artifact_count
 
 
 @dataclass(frozen=True)
@@ -404,6 +456,143 @@ def _append_new_artifacts(
         seen[identity] = candidate
 
 
+def _dedupe_registry_dependency_artifacts(
+    artifacts: Sequence[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], SbomDedupeStats]:
+    """Collapse exact registry dependency graph duplicates conservatively."""
+
+    out: list[dict[str, Any]] = []
+    eligible_by_key: dict[tuple[str, str, str | None, str, tuple[str, ...]], dict[str, Any]] = {}
+    occurrence_counts: dict[int, int] = {}
+
+    for artifact in artifacts:
+        key = _registry_dependency_dedupe_key(artifact)
+        if key is None:
+            out.append(dict(artifact))
+            continue
+        existing = eligible_by_key.get(key)
+        if existing is None:
+            copy = dict(artifact)
+            out.append(copy)
+            eligible_by_key[key] = copy
+            occurrence_counts[id(copy)] = _artifact_occurrence_count(artifact)
+            continue
+        _merge_registry_duplicate(existing, artifact)
+        occurrence_counts[id(existing)] += _artifact_occurrence_count(artifact)
+
+    for artifact in out:
+        occurrence_count = occurrence_counts.get(id(artifact), _artifact_occurrence_count(artifact))
+        if occurrence_count > 1:
+            artifact["repolens_occurrence_count"] = occurrence_count
+        else:
+            artifact.pop("repolens_occurrence_count", None)
+
+    return out, SbomDedupeStats(
+        raw_artifact_count=len(artifacts),
+        persisted_artifact_count=len(out),
+    )
+
+
+def _registry_dependency_dedupe_key(
+    artifact: dict[str, Any],
+) -> tuple[str, str, str | None, str, tuple[str, ...]] | None:
+    purl = str(artifact.get("purl") or "").strip()
+    if not purl:
+        return None
+    locations = artifact.get("locations")
+    if not isinstance(locations, list) or not locations:
+        return None
+    if not all(_is_dependency_graph_location(location) for location in locations):
+        return None
+
+    artifact_type = str(artifact.get("type") or "").strip()
+    name = str(artifact.get("name") or "").strip()
+    if not artifact_type or not name:
+        return None
+    ecosystem, identity = package_identity(artifact_type, name, purl)
+    ecosystem = ecosystem.strip().lower()
+    identity = _normalize_registry_identity(ecosystem, identity)
+    if not ecosystem or not identity:
+        return None
+    version = artifact.get("version")
+    normalized_version = str(version).strip() if version is not None else None
+    normalized_purl = purl.strip()
+    licenses = artifact.get("licenses")
+    declared_license_tuple: tuple[str, ...] = ()
+    if isinstance(licenses, list):
+        declared_license_tuple = tuple(
+            sorted(
+                str(license_value).strip()
+                for license_value in licenses
+                if str(license_value).strip()
+            )
+        )
+    return ecosystem, identity, normalized_version, normalized_purl, declared_license_tuple
+
+
+def _normalize_registry_identity(ecosystem: str, identity: str) -> str:
+    value = identity.strip()
+    if ecosystem in {"python", "pypi"}:
+        return _normalize_pypi_name(value)
+    return value.lower()
+
+
+def _is_dependency_graph_location(location: object) -> bool:
+    normalized = _normalized_location_for_dedupe(location)
+    if normalized is None:
+        return False
+    parts = normalized.parts
+    lowered_parts = tuple(part.lower() for part in parts)
+    filename = lowered_parts[-1]
+    if filename.startswith("requirements") and filename.endswith(".txt"):
+        return True
+    if filename == "package.json":
+        if any(part in _PACKAGE_LOCAL_ROOTS for part in lowered_parts[:-1]):
+            return False
+        return len(parts) <= 2 and lowered_parts[0] not in _PACKAGE_LOCAL_ROOTS
+    if filename not in _DEPENDENCY_GRAPH_FILENAMES:
+        return False
+    return not any(part in _PACKAGE_LOCAL_ROOTS - {"packages"} for part in lowered_parts[:-1])
+
+
+def _normalized_location_for_dedupe(location: object) -> PurePosixPath | None:
+    normalized = _normalized_location(location)
+    if normalized is None:
+        return None
+    path_text = normalized.split("#", 1)[0]
+    if not path_text:
+        return None
+    return PurePosixPath(path_text)
+
+
+def _merge_registry_duplicate(target: dict[str, Any], source: dict[str, Any]) -> None:
+    target["locations"] = _sorted_unique_locations(
+        [
+            *list(target.get("locations") if isinstance(target.get("locations"), list) else []),
+            *list(source.get("locations") if isinstance(source.get("locations"), list) else []),
+        ]
+    )
+
+
+def _sorted_unique_locations(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    by_normalized: dict[str, str] = {}
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            continue
+        normalized = _normalized_location(item) or item.strip()
+        by_normalized.setdefault(normalized, item.strip())
+    return [by_normalized[key] for key in sorted(by_normalized)]
+
+
+def _artifact_occurrence_count(artifact: dict[str, Any]) -> int:
+    value = artifact.get("repolens_occurrence_count")
+    if isinstance(value, int) and value > 0:
+        return value
+    return 1
+
+
 def _merge_artifact_metadata(target: dict[str, Any], source: dict[str, Any]) -> None:
     locations = target.setdefault("locations", [])
     if not isinstance(locations, list):
@@ -604,7 +793,7 @@ def _scan_one(
     sleep: Callable[[float], None],
     monotonic: Callable[[], float],
     clone_limits: SecurityLimits,
-) -> tuple[RepoScanOutcome, int | None]:
+) -> tuple[RepoScanOutcome, int | None, int | None]:
     repo_dir = repo_dir_fn(work_root, repo.repo_ref)
     repo_dir.mkdir(parents=True, exist_ok=True)
     workdir = Path(tempfile.mkdtemp(prefix=".scan-", dir=repo_dir))
@@ -625,6 +814,7 @@ def _scan_one(
                     message=credential_miss_message
                     or private_repo_needs_auth_message(repo.repo_ref),
                 ),
+                None,
                 None,
             )
 
@@ -655,6 +845,7 @@ def _scan_one(
             sbom["artifacts"],
             exclude_paths,
         )
+        sbom["artifacts"], dedupe_stats = _dedupe_registry_dependency_artifacts(sbom["artifacts"])
         # Redact before persisting. write_sbom redacts + schema-validates; the
         # status file is written via atomic_write_json, which does NOT redact, so
         # we apply the single redaction discipline here for both paths.
@@ -681,8 +872,15 @@ def _scan_one(
             generated_at=sbom["generated_at"],
         )
         return (
-            RepoScanOutcome(repo.repo_ref, "scanned", tool_version=tool_version),
-            len(sbom["artifacts"]),
+            RepoScanOutcome(
+                repo.repo_ref,
+                "scanned",
+                tool_version=tool_version,
+                deps_count=dedupe_stats.persisted_artifact_count,
+                raw_deps_count=dedupe_stats.raw_artifact_count,
+            ),
+            dedupe_stats.persisted_artifact_count,
+            dedupe_stats.raw_artifact_count,
         )
     except (CloneSecurityError, SyftScanError, ArtifactError) as exc:
         # Per-repo isolation boundary for EXPECTED failures only. One untrusted
@@ -698,6 +896,7 @@ def _scan_one(
                 clock,
                 message=_failure_message(repo, exc),
             ),
+            None,
             None,
         )
     finally:
@@ -992,7 +1191,7 @@ def scan_repos(
                     )
                 )
             continue
-        outcome, deps_count = _scan_one(
+        outcome, deps_count, raw_deps_count = _scan_one(
             repo,
             work_root=work_root,
             syft_path=syft,
@@ -1022,6 +1221,7 @@ def scan_repos(
                     repo.repo_ref,
                     status=outcome.status,
                     deps_count=deps_count,
+                    raw_deps_count=raw_deps_count,
                     elapsed_seconds=_elapsed_seconds(progress_start),
                     error=outcome.error,
                 )

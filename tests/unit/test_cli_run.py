@@ -219,7 +219,7 @@ def test_run_resolve_stage_resolves_every_scanned_repo(
         store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
     calls: list[str] = []
 
-    def fake_resolve(work_root: Path, repo_ref: str) -> Path:
+    def fake_resolve(work_root: Path, repo_ref: str, **_kwargs: object) -> Path:
         calls.append(repo_ref)
         store.write_resolved(
             work_root,
@@ -256,6 +256,48 @@ def test_run_resolve_stage_resolves_every_scanned_repo(
 
     assert resolved == {"sentinel-alpha", "sentinel-beta"}
     assert calls == ["sentinel-alpha", "sentinel-beta"]
+
+
+def test_run_resolve_stage_reports_cache_reuse(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sbom: dict[str, object]
+) -> None:
+    repo_ref = "sentinel-alpha"
+    store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
+    stderr = io.StringIO()
+
+    def fake_resolve(work_root: Path, current_repo_ref: str, **kwargs: object) -> Path:
+        cache_stats = kwargs["cache_stats"]
+        cache_stats.api_hits = 2
+        store.write_resolved(
+            work_root,
+            current_repo_ref,
+            [
+                {
+                    "name": "sentinel-lib",
+                    "version": "1.0.0",
+                    "repo": current_repo_ref,
+                    "spdx_id": "MIT",
+                    "evidence": {"source_layer": "api", "anchor": "MIT"},
+                    "tags": {
+                        "origin": "third-party-oss",
+                        "scope": "runtime",
+                        "distribution": "server",
+                    },
+                    "modified": "unknown",
+                }
+            ],
+        )
+        return store.repo_dir(work_root, current_repo_ref) / "resolved.ndjson"
+
+    monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
+    monkeypatch.setattr("sys.stderr", stderr)
+
+    resolved = cli._run_resolve_stage(
+        SimpleNamespace(work_root=tmp_path, quiet=False), cli.RunSummary()
+    )
+
+    assert resolved == {repo_ref}
+    assert "reused 2 cached resolution(s)" in stderr.getvalue()
 
 
 def test_run_resolve_stage_writes_scancode_record_from_stored_snapshot(
@@ -324,7 +366,7 @@ def test_run_resolve_stage_prints_scancode_retry_notice(
     repo_ref = "sentinel-alpha"
     store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
 
-    def fake_resolve(work_root: Path, current_repo_ref: str) -> Path:
+    def fake_resolve(work_root: Path, current_repo_ref: str, **_kwargs: object) -> Path:
         store.write_resolved(
             work_root,
             current_repo_ref,

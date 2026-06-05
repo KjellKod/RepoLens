@@ -352,6 +352,11 @@ def _stub_flag_json_writers(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
 
     monkeypatch.setattr(flag_stage.store, "write_inventory", write_inventory)
     monkeypatch.setattr(flag_stage.store, "write_shortlist", write_shortlist)
+    monkeypatch.setattr(
+        flag_stage,
+        "_load_existing_metadata",
+        lambda root: flag_stage.ShortlistMetadata(triage_by_ref={}),
+    )
 
 
 def _report_config(include: tuple[str, ...] | None = None) -> Config:

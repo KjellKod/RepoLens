@@ -29,7 +29,8 @@
           "type": {"type": "string", "minLength": 1},
           "purl": {"type": "string"},
           "licenses": {"type": "array", "items": {"type": "string"}},
-          "locations": {"type": "array", "items": {"type": "string"}}
+          "locations": {"type": "array", "items": {"type": "string"}},
+          "repolens_occurrence_count": {"type": "integer", "minimum": 2}
         },
         "additionalProperties": true
       }

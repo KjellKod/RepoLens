@@ -64,8 +64,7 @@ def resolve_scancode_path(work_root: str | Path) -> Path:
         raise InputError("tool_versions.json is not valid JSON.") from exc
     if not isinstance(payload, dict) or payload.get("schema") != VERSIONS_SCHEMA:
         raise InputError(
-            "tool_versions.json does not use the supported tool-versions schema; "
-            f"{repair_hint}"
+            f"tool_versions.json does not use the supported tool-versions schema; {repair_hint}"
         )
     tools = payload.get("tools") if isinstance(payload, dict) else None
     scancode = tools.get("scancode") if isinstance(tools, dict) else None
@@ -76,20 +75,17 @@ def resolve_scancode_path(work_root: str | Path) -> Path:
     source = scancode.get("source")
     if not isinstance(version, str) or not version.strip():
         raise InputError(
-            "tool_versions.json does not record a pinned ScanCode version; "
-            f"{repair_hint}"
+            f"tool_versions.json does not record a pinned ScanCode version; {repair_hint}"
         )
     if not isinstance(digest, str) or not _SHA256_RE.fullmatch(digest):
         raise InputError(
-            "tool_versions.json does not record a valid ScanCode digest; "
-            f"{repair_hint}"
+            f"tool_versions.json does not record a valid ScanCode digest; {repair_hint}"
         )
     if not isinstance(source, str):
         raise InputError(f"tool_versions.json does not record a ScanCode source; {repair_hint}")
     if not path.is_file():
         raise InputError(
-            "ScanCode wrapper not found under <work-root>/tools/scancode; "
-            f"{repair_hint}"
+            f"ScanCode wrapper not found under <work-root>/tools/scancode; {repair_hint}"
         )
     try:
         wrapper = path.read_text(encoding="utf-8")
@@ -115,8 +111,7 @@ def resolve_scancode_path(work_root: str | Path) -> Path:
         raise InputError(f"tool_versions.json records unsupported ScanCode source; {repair_hint}")
     if wrapper != expected_wrapper:
         raise InputError(
-            "ScanCode wrapper does not match the recorded bootstrap proof; "
-            f"{repair_hint}"
+            f"ScanCode wrapper does not match the recorded bootstrap proof; {repair_hint}"
         )
     if not os.access(path, os.X_OK):
         raise InputError(f"ScanCode wrapper is not executable; {repair_hint}")
