@@ -1,0 +1,63 @@
+src/repolens/report/__init__.py
+  s_11ee0ae2d41c29::t_249ba2c4ccda21 14,37
+src/repolens/cli.py
+  s_11ee0ae2d41c29::t_e72a29313d770d 71,233,614,805,2034
+  s_11ee0ae2d41c29::t_56c6e30c59176c 1968
+docs/roadmap/rpl_requirements.md
+  s_11ee0ae2d41c29::t_e4db998ecd929c 42-43
+docs/roadmap/archive/rpl_roadmap.md
+  s_11ee0ae2d41c29::t_9faa656af06024 182
+tests/canaries/security/test_token_canaries.py
+  s_11ee0ae2d41c29::t_61c10c4b043464 73
+docs/usage.md
+  s_11ee0ae2d41c29::t_d492719dd89c86 926-927
+  s_11ee0ae2d41c29::t_6cd4ebb33c965b 936-938
+  s_11ee0ae2d41c29::t_8584640e1f9ff7 349,376-378,426,884,890-892,941,966-967,980-983
+tests/unit/test_report_main.py
+  s_11ee0ae2d41c29::t_8cb085f6abcf25 463-466
+  s_11ee0ae2d41c29::t_5efcb037ef5cc8 34,51,438-462,467-472,500,525
+  s_11ee0ae2d41c29::t_4158a191279d78 206-250,816-839
+scripts/m1_fixture_e2e.py
+  s_11ee0ae2d41c29::t_2b98c4ae8cf678 393
+src/repolens/report/docx.py
+  s_11ee0ae2d41c29::t_3f903c42402bdb 148-149
+  s_11ee0ae2d41c29::t_addbcdeaf30afd 19-36,68-70,74-76,78,80,84-97,100-113,116-131,135-147
+tests/e2e/test_cli.py
+  s_11ee0ae2d41c29::t_a52f0c3fbc91ac 463,560
+tests/unit/test_report_docx.py
+  s_11ee0ae2d41c29::t_072de62c805716 86-130
+tests/integration/test_m1_fixture_e2e.py
+  s_11ee0ae2d41c29::t_335060cce378b6 53
+tests/unit/test_cli_run.py
+  s_11ee0ae2d41c29::t_ea7d24bd3384d8 143,216
+  s_11ee0ae2d41c29::t_86d9d7d1b9deea 39,1289,1292
+  s_11ee0ae2d41c29::t_6a7575cece7f19 1618,1621,1629
+tests/canaries/security/test_output_canaries.py
+  s_11ee0ae2d41c29::t_66e10e517d4c49 135
+  s_11ee0ae2d41c29::t_f5c2b3d4e40365 112-134,136-141
+src/repolens/report/main.py
+  s_11ee0ae2d41c29::t_10abfc369fb1e9 12,105,191,203,207,210,266,533-541,543-589,594,598-602,605-611,614-622,687-693,695-707,721-725
+  s_11ee0ae2d41c29::t_c5417c8ab9281c 54
+  s_11ee0ae2d41c29::t_46ab48916024fe 694,708-720
+  s_11ee0ae2d41c29::t_e903704fd7a178 9,592-593,596-597
+  s_11ee0ae2d41c29::t_3aade728d8b54c 184,380-412
+  s_11ee0ae2d41c29::t_498df5ce18f26e 542,590-591,595,603-604,612-613
+README.md
+  s_11ee0ae2d41c29::t_ef8eb4024ba04e 42-44,225
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "25fb0a5cd9d9063cd3a89e108a53264f9b36491b",
+  "prompts": {},
+  "sessions": {
+    "s_11ee0ae2d41c29": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9a12-f3c1-7ff3-b180-44dee1fd1dc7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
