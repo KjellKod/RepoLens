@@ -105,8 +105,7 @@ def verify_agent_resolution(
     )
     _expected = _clean_ref(expected_ref)
     _ref_is_pinned = _ref is not None and (
-        _is_immutable_sha(_ref)
-        or (_expected is not None and _ref in _acceptable_refs(_expected))
+        _is_immutable_sha(_ref) or (_expected is not None and _ref in _acceptable_refs(_expected))
     )
     # ``ref_pinned``/the distinct default-branch reason are meaningful ONLY for the
     # ``api.github.com`` license host accepted via the ``allow_default_branch`` relaxation
@@ -114,9 +113,7 @@ def verify_agent_resolution(
     # github ref, a non-github evidence URL (deps.dev, CocoaPods) — keeps the legacy
     # ``ref_pinned=True`` / ``verify:exact_anchor`` (revision 3).
     _is_github_license = _is_github_license_url(parsed_url)
-    is_github_default_branch = (
-        allow_default_branch and _is_github_license and not _ref_is_pinned
-    )
+    is_github_default_branch = allow_default_branch and _is_github_license and not _ref_is_pinned
     ref_pinned = not is_github_default_branch
 
     candidate = ApiCandidate(
