@@ -118,6 +118,10 @@ def test_review_collapses_identical_disclosure_choices_and_renders_links(tmp_pat
     assert payload["open_count"] == 1
     assert len(payload["items"]) == 1
     assert payload["items"][0]["components"] == ["acme-lib-a", "acme-lib-b"]
+    assert "### package: `acme-lib-a` + 1 more package (2 total), version: `1.2.3`" in markdown
+    assert "- grouping reason: `same detected SPDX, same version set, and same policy tier`" in markdown
+    assert "_review id: `license-review-group:MIT OR Apache-2.0|1.2.3|ALLOW`_" in markdown
+    assert "### `license-review-group:" not in markdown
     assert "acme-lib-a" in markdown
     assert "acme-lib-b" in markdown
     assert "source links:" in markdown
@@ -146,6 +150,7 @@ def test_report_review_suggests_keep_full_for_non_branch_expression(tmp_path: Pa
     run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
 
     markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "### package: `acme-lib`, version: `1.2.3`" in markdown
     assert "suggested choice: `Keep full expression: MIT AND Apache-2.0`" in markdown
     assert "not a simple OR branch choice" in markdown
 

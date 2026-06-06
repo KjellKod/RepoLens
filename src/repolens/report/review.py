@@ -224,11 +224,14 @@ def render_review_markdown(items: Sequence[ReviewItem]) -> str:
             [
                 f"## {render_code_span(item.raw_spdx)}",
                 "",
-                f"### {render_code_span(item.review_id)} {marker}",
+                f"### {_review_item_heading(item)}",
+                "",
+                f"_review id: {render_code_span(item.review_id)}_ {marker}",
                 "",
                 f"- components: {_components_cell(item)}",
                 "- versions: "
                 f"{render_code_span('; '.join(_strings(item.component_key['versions'])))}",
+                *_grouping_reason_lines(item),
                 f"- found in: {render_code_span('; '.join(item.found_in))}",
                 f"- source links: {_source_urls_cell(item)}",
                 f"- current policy tier: {render_code_span(item.policy_tier)}",
@@ -820,6 +823,34 @@ def _components_cell(item: ReviewItem) -> str:
     if len(components) > limit:
         rendered = f"{rendered}, ... ({len(components)} total)"
     return rendered or render_code_span("unknown")
+
+
+def _review_item_heading(item: ReviewItem) -> str:
+    components = item.components or (str(item.component_key["name"]),)
+    versions = _strings(item.component_key["versions"])
+    component_label = "package"
+    if len(components) == 1:
+        component_text = render_code_span(components[0])
+    else:
+        remaining = len(components) - 1
+        package_word = "package" if remaining == 1 else "packages"
+        component_text = (
+            f"{render_code_span(components[0])} + {remaining} more {package_word} "
+            f"({len(components)} total)"
+        )
+    version_label = "version" if len(versions) == 1 else "versions"
+    version_text = render_code_span("; ".join(versions) or "unknown")
+    return f"{component_label}: {component_text}, {version_label}: {version_text}"
+
+
+def _grouping_reason_lines(item: ReviewItem) -> tuple[str, ...]:
+    components = item.components or (str(item.component_key["name"]),)
+    if len(components) <= 1:
+        return ()
+    return (
+        "- grouping reason: "
+        f"{render_code_span('same detected SPDX, same version set, and same policy tier')}",
+    )
 
 
 def _source_urls_cell(item: ReviewItem) -> str:
