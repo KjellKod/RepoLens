@@ -1,0 +1,82 @@
+tests/canaries/security/test_output_canaries.py
+  s_df0b4725c2c530::t_1ee090feaa4449 172-211
+  s_c64c3d993fa0f5::t_9da59c86a19a8d 139
+src/repolens/report/docx.py
+  s_df0b4725c2c530::t_63ecfa35414934 27-28,31,37,39,51-72,91-94,96-105,107,111,114-115
+  s_c64c3d993fa0f5::t_9da59c86a19a8d 106,146
+src/repolens/report/main.py
+  s_df0b4725c2c530::t_63ecfa35414934 61,114-118,268-271,284-288
+  s_c64c3d993fa0f5::t_9da59c86a19a8d 401,553,581,726
+tests/unit/test_report_main.py
+  s_df0b4725c2c530::t_e2532bdb534dd5 36-43,61-64
+  s_c64c3d993fa0f5::t_9da59c86a19a8d 506,612-614
+  s_df0b4725c2c530::t_553113f342754c 450-473,539-546,548,567-568,570,574-579,609,617-618,660,662,665
+src/repolens/security/sanitize.py
+  s_3073ea6fd0069a::t_790d284d9fb7e5 142
+  s_df0b4725c2c530::t_2ce475fa3d4227 52
+  s_3073ea6fd0069a::t_a0ce6aae45a9ab 53,138-141
+  s_df0b4725c2c530::t_63ecfa35414934 66-70
+docs/usage.md
+  s_df0b4725c2c530::t_c5cbd01b51ca40 349-350,377-393,464,888,897-901,903-906,944,955-956,961-966,984-986,1001-1004
+tests/canaries/security/canary_matrix.json
+  s_df0b4725c2c530::t_443bb9e44d0529 3,34-44
+tests/unit/security/test_sanitize.py
+  s_df0b4725c2c530::t_e2532bdb534dd5 70-82
+  s_3073ea6fd0069a::t_f27a719e961fd1 83-92
+  s_3073ea6fd0069a::t_c3cc074240c579 93-107
+src/repolens/cli.py
+  s_c64c3d993fa0f5::t_9da59c86a19a8d 1754
+  s_df0b4725c2c530::t_8d241880b6d8d4 74-83,237-241,246-247,628,819,2033-2037,2104-2111,2114,2130,2135-2138,2201,2226
+src/repolens/report/__init__.py
+  s_df0b4725c2c530::t_63ecfa35414934 18-29,38,41,43-44,56-61
+tests/unit/test_cli_run.py
+  s_df0b4725c2c530::t_6a0c4d0d832f19 1349-1357
+  s_df0b4725c2c530::t_bd0a571012dceb 42-44
+  s_df0b4725c2c530::t_7a32a42ae62967 1245-1253
+  s_df0b4725c2c530::t_e86d1401951512 148-150,224-226,228
+  s_c64c3d993fa0f5::t_9da59c86a19a8d 41
+  s_df0b4725c2c530::t_52593f5893bf38 220
+  s_df0b4725c2c530::t_466482db644705 1312-1314,1337-1348,1358-1380
+  s_df0b4725c2c530::t_60a0b0ecf930cd 1726
+tests/unit/test_report_presentation.py
+  s_3073ea6fd0069a::t_1d50f3896ca6ea 80-92
+  s_df0b4725c2c530::t_ed34821ec5c2f4 1-79,93-182
+src/repolens/report/presentation.py
+  s_df0b4725c2c530::t_63ecfa35414934 1-48,50-116,118-172,174-277,279-297,301-328,330-334,337-338,341-374,376-385
+  s_3073ea6fd0069a::t_0f1ac418b04cbd 49,117,173,278,329,335-336,339-340
+  s_c64c3d993fa0f5::t_9da59c86a19a8d 298-300,375
+tests/e2e/test_cli.py
+  s_df0b4725c2c530::t_421a28f5b8c3fc 465-468,529,562,566-568,570
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "b988503c8ea2d1883e77acdce1462794a55d7fd9",
+  "prompts": {},
+  "sessions": {
+    "s_3073ea6fd0069a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9aa5-10b3-7d31-a790-88ca22eb7b42",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_c64c3d993fa0f5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019e9ab9-68b0-7540-99aa-b57abdb4f125",
+        "model": "unknown"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_df0b4725c2c530": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9ab9-68b0-7540-99aa-b57abdb4f125",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
