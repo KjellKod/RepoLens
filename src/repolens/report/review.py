@@ -43,9 +43,7 @@ _ITEM_MARKER_RE = re.compile(r"&lt;!-- rpl:license-review-item=([A-Za-z0-9_-]+) 
 _OPTION_MARKER_RE = re.compile(
     r"&lt;!-- rpl:license-review=([A-Za-z0-9_-]+) option=([A-Za-z0-9_-]+) --&gt;"
 )
-_SHORT_OPTION_MARKER_RE = re.compile(
-    r"&lt;!-- rpl:license-review-option=([A-Za-z0-9_-]+) --&gt;"
-)
+_SHORT_OPTION_MARKER_RE = re.compile(r"&lt;!-- rpl:license-review-option=([A-Za-z0-9_-]+) --&gt;")
 _CHECKBOX_RE = re.compile(r"^\s*[-*]\s*\[(?P<mark>[^\]])\]")
 _PRESENTATION_TEXT_HEADING = "## Presentation Text"
 _PRESENTATION_HEADER_HEADING = "Presentation Header:"
@@ -165,9 +163,9 @@ def run_report_review(
     store.atomic_write_bytes(json_path, _checked_review_json_bytes(json_path, redacted))
     store.atomic_write_bytes(
         md_path,
-        redact_tokens(
-            render_review_markdown(items, presentation_text=presentation_text)
-        ).encode("utf-8"),
+        redact_tokens(render_review_markdown(items, presentation_text=presentation_text)).encode(
+            "utf-8"
+        ),
     )
     return ReportReviewResult(
         markdown_path=md_path,
@@ -954,11 +952,7 @@ def _suggested_choice(item: ReviewItem) -> tuple[ReviewOption, str] | None:
 
 
 def _high_attention_section(items: Sequence[ReviewItem]) -> list[str]:
-    rows = [
-        f"- ⚠️ {_high_attention_summary(item)}"
-        for item in items
-        if _high_attention_notes(item)
-    ]
+    rows = [f"- ⚠️ {_high_attention_summary(item)}" for item in items if _high_attention_notes(item)]
     if not rows:
         return []
     return [

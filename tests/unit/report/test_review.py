@@ -264,8 +264,7 @@ def test_report_review_suggests_keep_full_when_lowest_risk_branch_ties(tmp_path:
         in markdown
     )
     assert (
-        "Apache-2.0 and MIT have policy tier ALLOW; "
-        "lower risk than LGPL-2.1-or-later (REVIEW)"
+        "Apache-2.0 and MIT have policy tier ALLOW; lower risk than LGPL-2.1-or-later (REVIEW)"
     ) in markdown
     assert "LGPL-2.1-or-later is policy tier REVIEW" in markdown
 
