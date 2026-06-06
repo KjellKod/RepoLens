@@ -1,0 +1,47 @@
+tests/unit/report/test_review.py
+  s_c68e1e0d04d3fb::t_15c0abf61e6c87 103-122,125,128-130,151-152
+  s_c68e1e0d04d3fb::t_4b9f67ef4dfe45 123-124
+  s_c68e1e0d04d3fb::t_f0ad9701f040a7 207-208,220-221
+  s_c68e1e0d04d3fb::t_842fc94cb0d1a0 126-127,131-150
+src/repolens/report/review.py
+  s_c68e1e0d04d3fb::t_86775e6dec82e9 685-688
+  s_c68e1e0d04d3fb::t_fc4562032dbdf4 8,25,38-40,66-69,170,175-180,229,251,291-333,335-345,475-482,706-709,811-812,816-838,840-841,850-851
+  s_c68e1e0d04d3fb::t_d4fc4a3fcb71c4 22,238-242,766-799
+  s_c68e1e0d04d3fb::t_ac0f8561b3b601 233,839
+  s_c68e1e0d04d3fb::t_fd1f09e9330b41 146,652-653
+  s_c68e1e0d04d3fb::t_b63db5e92040b3 334
+docs/roadmap/rpl_github-license-api-download-url.md
+  s_c68e1e0d04d3fb::t_4e8b640b7a28fe 1-57
+tests/unit/test_cli_run.py
+  s_c68e1e0d04d3fb::t_5744ed1592ddd0 1709,1724-1725
+src/repolens/data/schemas/report_review.schema.json
+  s_c68e1e0d04d3fb::t_a8f0efd6a03161 51-66
+docs/roadmap/rpl_README.md
+  s_c68e1e0d04d3fb::t_f66f08efb3d8e0 40
+docs/usage.md
+  s_c68e1e0d04d3fb::t_9f550966df8104 825-877
+tests/e2e/test_cli.py
+  s_c68e1e0d04d3fb::t_41b1790738f378 615-618,620-621
+  s_c68e1e0d04d3fb::t_cb7bd5c7c7ab0f 619
+  s_c68e1e0d04d3fb::t_55c65d5df7cceb 601-612
+src/repolens/cli.py
+  s_c68e1e0d04d3fb::t_d5fd3d79bb39a2 3276,3278,3284,3289-3307,3309-3332
+  s_c68e1e0d04d3fb::t_06454bd42edf81 3308
+  s_c68e1e0d04d3fb::t_a5999a99782e81 99,1459,2216-2222,2258-2261,3390
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "a4d2a51eb3dc9a34b5e56d2bc396dbef01628402",
+  "prompts": {},
+  "sessions": {
+    "s_c68e1e0d04d3fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9ca8-f4fb-7671-83ea-1f5f8252a218",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
