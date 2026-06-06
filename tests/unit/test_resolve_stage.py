@@ -59,6 +59,7 @@ def write_test_sbom(
     licenses: list[str] | None,
     version: str | None = "1.2.3",
     locations: list[str] | None = None,
+    description: object | None = None,
 ) -> None:
     artifact: dict[str, object] = {
         "name": "acme-lib",
@@ -70,6 +71,8 @@ def write_test_sbom(
     }
     if version is None:
         artifact["version"] = None
+    if description is not None:
+        artifact["description"] = description
     write_sbom(
         tmp_path,
         repo_ref,
@@ -136,6 +139,45 @@ def test_declared_spdx_license_writes_syft_resolved_record(tmp_path: Path, repo_
     assert record["spdx_id"] == "MIT"
     assert record["declared_license_raw"] == "MIT"
     assert record["evidence"]["source_layer"] == "syft"
+
+
+def test_declared_spdx_license_writes_brief_description_from_sbom(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_test_sbom(
+        tmp_path,
+        repo_ref,
+        licenses=["MIT"],
+        description="  A compact package description.\n",
+    )
+
+    run_resolve(tmp_path, repo_ref, adapters=[FailingAdapter()])
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["description"] == "A compact package description."
+
+
+def test_declared_spdx_license_enriches_brief_description_from_registry(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=["MIT"])
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        seen.append(url)
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=b'{"info":{"summary":"Brief registry summary."}}',
+        )
+
+    run_resolve(tmp_path, repo_ref, fetcher=fetcher)
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["description"] == "Brief registry summary."
+    assert seen == ["https://pypi.org/pypi/acme-lib/1.2.3/json"]
 
 
 def test_first_party_name_gets_origin_first_party(tmp_path: Path, repo_ref: str) -> None:
@@ -206,6 +248,7 @@ def test_api_candidate_requires_validated_matching_evidence(tmp_path: Path, repo
             spdx_id="MIT",
             evidence_url="https://api.deps.dev/v3alpha/systems/pypi/packages/acme-lib/versions/1.2.3",
             evidence_anchor="MIT",
+            description="Brief API package summary",
         )
     )
 
@@ -221,6 +264,39 @@ def test_api_candidate_requires_validated_matching_evidence(tmp_path: Path, repo
     assert record["spdx_id"] == "MIT"
     assert record["evidence"]["source_layer"] == "api"
     assert record["evidence"]["anchor"] == "MIT"
+    assert record["description"] == "Brief API package summary"
+
+
+def test_api_resolution_uses_registry_description_when_first_license_api_has_none(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_test_sbom(tmp_path, repo_ref, licenses=[])
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        seen.append(url)
+        if url == "https://pypi.org/pypi/acme-lib/1.2.3/json":
+            body = b'{"info":{"summary":"Brief registry summary.","license":"MIT"}}'
+        else:
+            body = b'{"license":"MIT"}'
+        return FetchResult(url=url, status=200, headers=(), body=body)
+
+    run_resolve(
+        tmp_path,
+        repo_ref,
+        fetcher=fetcher,
+        evidence_resolver=public_resolver,
+    )
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["spdx_id"] == "MIT"
+    assert record["description"] == "Brief registry summary."
+    assert seen == [
+        "https://pypi.org/pypi/acme-lib/1.2.3/json",
+        "https://api.deps.dev/v3alpha/systems/pypi/packages/acme-lib/versions/1.2.3",
+        "https://api.deps.dev/v3alpha/systems/pypi/packages/acme-lib/versions/1.2.3",
+    ]
 
 
 def test_duplicate_api_resolution_reuses_lookup_but_rebuilds_records(
@@ -697,6 +773,7 @@ def test_run_resolve_reports_progress_for_each_package(tmp_path: Path, repo_ref:
     run_resolve(
         tmp_path,
         repo_ref,
+        adapters=[FailingAdapter()],
         progress=lambda index, total, package_name: events.append((index, total, package_name)),
     )
 
@@ -813,6 +890,7 @@ def test_unversioned_pypi_package_resolves_from_package_metadata(
     assert record["evidence"]["source_layer"] == "api"
     assert record["evidence"]["url"] == "https://pypi.org/pypi/sentinel-runtime/json"
     assert seen == [
+        "https://pypi.org/pypi/sentinel-runtime/json",
         "https://pypi.org/pypi/sentinel-runtime/json",
         "https://pypi.org/pypi/sentinel-runtime/json",
     ]
@@ -1518,6 +1596,11 @@ def test_resolver_coverage_fixture_moves_targets_from_no_candidate_to_resolved(
             b'{"license":"Apache-2.0 AND LGPL-3.0-or-later"}'
         ),
     }
+    expected_description_urls = {
+        "https://crates.io/api/v1/crates/anyhow",
+        "https://crates.io/api/v1/crates/either",
+        "https://registry.npmjs.org/@img%2Fsharp-win32-x64/0.33.5",
+    }
     seen: list[str] = []
 
     def fetch(url: str, options: HttpFetchOptions) -> FetchResult:
@@ -1543,7 +1626,7 @@ def test_resolver_coverage_fixture_moves_targets_from_no_candidate_to_resolved(
     assert all(
         record["evidence"]["anchor"] != "unresolved:no_candidate" for record in records.values()
     )
-    assert set(seen) == set(expected_payloads)
+    assert set(seen) == set(expected_payloads) | expected_description_urls
 
 
 def test_p3b_scancode_runs_only_for_unresolved_package_with_locations(

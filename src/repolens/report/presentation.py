@@ -27,15 +27,11 @@ PRESENTATION_COLUMNS = (
     "description",
     "version",
     "source url",
-    "found_id",
     "evidence source",
 )
-DATA_LIMITATION_NOTE = (
-    "Description and found_id are not durable resolved-report fields today; "
-    "presentation rows show this as not available rather than inventing values."
-)
+DATA_LIMITATION_NOTE = "Description is shown when present in resolved metadata; otherwise n/a."
 UNAVAILABLE = "n/a"
-_HTML_COLUMN_WIDTHS = (15, 12, 21, 10, 27, 8, 7)
+_HTML_COLUMN_WIDTHS = (16, 14, 24, 10, 28, 8)
 
 
 @dataclass(frozen=True)
@@ -47,7 +43,6 @@ class PresentationRow:
     description: str
     version: str
     source_urls: tuple[str, ...]
-    found_id: str
     evidence_source: str
 
 
@@ -112,10 +107,9 @@ def presentation_rows_from_disclosure(rows: Sequence[DisclosureRow]) -> tuple[Pr
                 PresentationRow(
                     name=row.name,
                     spdx_id=row.spdx_id,
-                    description=UNAVAILABLE,
+                    description=_description(row.descriptions),
                     version=_join(row.versions),
                     source_urls=tuple(row.source_urls),
-                    found_id=UNAVAILABLE,
                     evidence_source=_join(row.evidence_source_layers),
                 )
                 for row in rows
@@ -171,7 +165,6 @@ def render_presentation_markdown(rows: Sequence[PresentationRow]) -> str:
                         _markdown_cell(row.description),
                         _markdown_cell(row.version),
                         _markdown_cell(_markdown_source_urls(row.source_urls)),
-                        _markdown_cell(row.found_id),
                         _markdown_cell(row.evidence_source),
                     )
                 )
@@ -276,7 +269,6 @@ def _html_group_section(
                 f"<td>{_html_text(row.description)}</td>",
                 f"<td>{_html_text(row.version)}</td>",
                 f"<td>{_html_source_urls(row.source_urls)}</td>",
-                f"<td>{_html_text(row.found_id)}</td>",
                 f"<td>{_html_text(row.evidence_source)}</td>",
             )
         )
@@ -327,7 +319,6 @@ def _row_values(row: PresentationRow) -> tuple[str, ...]:
         row.description,
         row.version,
         _join(row.source_urls),
-        row.found_id,
         row.evidence_source,
     )
 
@@ -383,3 +374,7 @@ def _html_text(value: object) -> str:
 
 def _join(values: Sequence[str]) -> str:
     return "; ".join(values)
+
+
+def _description(values: Sequence[str]) -> str:
+    return values[0] if values else UNAVAILABLE

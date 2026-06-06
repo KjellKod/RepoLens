@@ -79,6 +79,7 @@ class DisclosureRow:
     found_in: tuple[str, ...]
     evidence_source_layers: tuple[str, ...]
     coverage_gaps: tuple[str, ...]
+    descriptions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,7 @@ class _DisclosureAccumulator:
     spdx_id: str
     versions: set[str] = field(default_factory=set)
     source_urls: set[str] = field(default_factory=set)
+    descriptions: set[str] = field(default_factory=set)
     modified: set[str] = field(default_factory=set)
     origins: set[str] = field(default_factory=set)
     scopes: set[str] = field(default_factory=set)
@@ -147,6 +149,7 @@ class _DisclosureAccumulator:
             spdx_id=self.spdx_id,
             versions=_sorted_values(self.versions),
             source_urls=_sorted_values(self.source_urls),
+            descriptions=_sorted_values(self.descriptions),
             modified=_sorted_values(self.modified),
             origins=_sorted_values(self.origins),
             scopes=_sorted_values(self.scopes),
@@ -450,6 +453,9 @@ def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[Dis
             group.coverage_gaps.add("missing_version")
         group.found_in.add(str(record["repo"]))
         group.modified.add(_modified_value(record["modified"]))
+        description = _optional_text(record.get("description"))
+        if description is not None:
+            group.descriptions.add(description)
 
         evidence = _object_mapping(record["evidence"], "evidence")
         group.evidence_source_layers.add(str(evidence["source_layer"]))

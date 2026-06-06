@@ -6,6 +6,8 @@ from repolens.policy import load_default_policy
 from repolens.resolve.adapters import (
     API_ALLOWED_HOSTS,
     build_default_adapters,
+    package_description,
+    target_description_candidates,
     target_license_candidates,
 )
 from repolens.resolve.license_expression import license_resolution_id
@@ -156,6 +158,41 @@ def test_adapter_reads_structured_github_license_spdx_id() -> None:
     assert target_license_candidates(b'{"license":{"spdx_id":"Apache-2.0"}}') == ("Apache-2.0",)
 
 
+def test_adapter_reads_target_description_fields() -> None:
+    assert target_description_candidates(
+        b'{"info":{"summary":"Brief PyPI summary"},"description":"Fallback"}'
+    ) == ("Fallback", "Brief PyPI summary")
+
+
+def test_package_description_reads_official_registry_metadata() -> None:
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        assert options.allowed_hosts == API_ALLOWED_HOSTS
+        seen.append(url)
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=b'{"info":{"summary":"Brief PyPI summary"}}',
+        )
+
+    description = package_description(
+        PackageFact(
+            name="acme-lib",
+            version="1.2.3",
+            package_type="python",
+            repo="acme-alpha",
+            purl="pkg:pypi/acme-lib@1.2.3",
+            declared_license_raw=None,
+        ),
+        fetcher=fetcher,
+    )
+
+    assert description == "Brief PyPI summary"
+    assert seen == ["https://pypi.org/pypi/acme-lib/1.2.3/json"]
+
+
 def test_python_adapter_reads_exact_license_expression_field() -> None:
     def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
         del options
@@ -180,6 +217,32 @@ def test_python_adapter_reads_exact_license_expression_field() -> None:
     assert candidate is not None
     assert candidate.spdx_id == "MIT OR Apache-2.0"
     assert candidate.evidence_anchor == "MIT OR Apache-2.0"
+    assert candidate.description is None
+
+
+def test_python_adapter_carries_brief_description() -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=b'{"info":{"license":"MIT","summary":"A useful package summary.\\n"}}',
+        )
+
+    candidate = build_default_adapters(fetcher)[1].resolve(
+        PackageFact(
+            name="sentinel-runtime",
+            version="1.0.0",
+            package_type="python",
+            repo="acme-alpha",
+            purl="pkg:pypi/sentinel-runtime@1.0.0",
+            declared_license_raw=None,
+        )
+    )
+
+    assert candidate is not None
+    assert candidate.description == "A useful package summary."
 
 
 def test_adapter_carries_known_with_exception_candidate() -> None:

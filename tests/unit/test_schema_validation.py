@@ -77,6 +77,14 @@ def test_resolved_accepts_declared_unpinned_status(
     validate_artifact(resolved_record, "resolved")
 
 
+def test_resolved_accepts_brief_description(
+    resolved_record: dict[str, object],
+) -> None:
+    resolved_record["description"] = "Brief package summary"
+
+    validate_artifact(resolved_record, "resolved")
+
+
 def test_resolved_rejects_unknown_declared_version_status(
     resolved_record: dict[str, object],
 ) -> None:

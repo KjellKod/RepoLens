@@ -34,7 +34,6 @@ _COLUMN_WIDTHS_DXA = {
     "scope": 850,
     "distribution": 1000,
     "found_in": 1200,
-    "found_id": 1400,
     "evidence_source_layer": 1000,
     "evidence source": 1200,
     "coverage_gaps": 1628,

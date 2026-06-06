@@ -960,10 +960,11 @@ optional `.docx`; excluded third-party categories go to `report.appendix.<catego
 
 The main markdown and CSV keep the frozen P6a columns. The presentation report is a
 sibling view of the same gated main row set: Markdown, HTML, and DOCX group by exact SPDX
-expression/value, while CSV stays flat and sorted by SPDX, name, then version. Current
-resolved records do not durably model `description` or `found_id`, so presentation output
-marks those cells as unavailable rather than inventing schema fields. Category is used
-only for routing, appendix filenames, and appendix headings. If a resolved repo cannot be joined to
+expression/value, while CSV stays flat and sorted by SPDX, name, then version. Presentation
+rows include a brief `description` when the resolve stage captured one from Syft artifact
+metadata or official package registry metadata; older work roots need `resolve` (or the full
+`run`) to be rerun before report output can show newly supported descriptions. Category is
+used only for routing, appendix filenames, and appendix headings. If a resolved repo cannot be joined to
 `discovered.json` by exact trimmed `name` or `name_with_owner`, it uses
 `discover.taxonomy.default_category` or `uncategorized` and the row records a
 `missing_category` coverage gap.

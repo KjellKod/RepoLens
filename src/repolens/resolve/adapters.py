@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from urllib.parse import quote
 
 from repolens.policy.config import Policy, load_default_policy
+from repolens.resolve.descriptions import first_brief_description
 from repolens.resolve.ecosystems import ECOSYSTEM_TO_DEPS_DEV, RESOLVER_SUPPORTED_ECOSYSTEMS
 from repolens.resolve.license_expression import license_resolution_id
 from repolens.resolve.models import ApiCandidate, FetchFunction, PackageFact, ResolveAdapter
@@ -145,6 +146,41 @@ def _native_registry_url(ecosystem: str, package_name: str, version: str) -> str
     return None
 
 
+def package_description(package: PackageFact, fetcher: FetchFunction = fetch_url) -> str | None:
+    """Return a brief package description from official registry metadata."""
+
+    ecosystem, package_name = package_identity(package.package_type, package.name, package.purl)
+    url = _description_registry_url(ecosystem, package_name, package.version)
+    if url is None:
+        return None
+    try:
+        result = fetcher(url, _FETCH_OPTIONS)
+    except Exception:
+        return None
+    return _description_from_body(result.body)
+
+
+def _description_registry_url(ecosystem: str, package_name: str, version: str) -> str | None:
+    if ecosystem in {"python", "pypi"}:
+        if version == _UNKNOWN_VERSION:
+            return f"https://pypi.org/pypi/{quote(package_name, safe='')}/json"
+        return (
+            f"https://pypi.org/pypi/{quote(package_name, safe='')}/{quote(version, safe='')}/json"
+        )
+    if ecosystem == "npm":
+        if version == _UNKNOWN_VERSION:
+            return f"https://registry.npmjs.org/{_quote_npm_package(package_name)}"
+        return (
+            f"https://registry.npmjs.org/{_quote_npm_package(package_name)}/"
+            f"{quote(version, safe='')}"
+        )
+    if ecosystem in {"cargo", "rust"}:
+        return f"https://crates.io/api/v1/crates/{quote(package_name, safe='')}"
+    if ecosystem in {"gem", "ruby", "rubygems"}:
+        return f"https://rubygems.org/api/v1/gems/{quote(package_name, safe='')}.json"
+    return None
+
+
 def _clearly_defined_coordinates(ecosystem: str) -> tuple[str, str] | None:
     if ecosystem == "npm":
         return ("npm", "npm")
@@ -167,6 +203,7 @@ def _candidate_from_url(fetcher: FetchFunction, url: str) -> ApiCandidate | None
     except FetchSecurityError:
         return None
     policy = load_default_policy()
+    description = _description_from_body(result.body)
     for license_text in target_license_candidates(result.body):
         spdx_id = _license_resolution_id(license_text, policy)
         if spdx_id is not None:
@@ -174,6 +211,7 @@ def _candidate_from_url(fetcher: FetchFunction, url: str) -> ApiCandidate | None
                 spdx_id=spdx_id,
                 evidence_url=result.url,
                 evidence_anchor=license_text,
+                description=description,
             )
     return None
 
@@ -209,6 +247,27 @@ def target_license_candidates(body: bytes) -> tuple[str, ...]:
     return tuple(dict.fromkeys(found))
 
 
+def target_description_candidates(body: bytes) -> tuple[str, ...]:
+    """Return target-package description strings from known metadata fields."""
+
+    text = body.decode("utf-8", errors="replace")
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError:
+        return ()
+    if not isinstance(payload, dict):
+        return ()
+
+    found: list[str] = []
+    for path in _TARGET_DESCRIPTION_PATHS:
+        found.extend(_description_strings_at_path(payload, path))
+    return tuple(dict.fromkeys(found))
+
+
+def _description_from_body(body: bytes) -> str | None:
+    return first_brief_description(target_description_candidates(body))
+
+
 _TARGET_LICENSE_PATHS = (
     ("license",),
     ("license", "spdx_id"),
@@ -224,6 +283,34 @@ _TARGET_LICENSE_PATHS = (
     ("licensed", "declared"),
     ("licensed", "facets", "core", "attribution", "parties", "0", "license"),
 )
+
+_TARGET_DESCRIPTION_PATHS = (
+    ("description",),
+    ("summary",),
+    ("info",),
+    ("info", "summary"),
+    ("info", "description"),
+    ("version", "description"),
+    ("crate", "description"),
+    ("package", "description"),
+)
+
+
+def _description_strings_at_path(
+    payload: dict[str, object], path: tuple[str, ...]
+) -> tuple[str, ...]:
+    current: object = payload
+    for segment in path:
+        if isinstance(current, dict):
+            current = current.get(segment)
+        elif isinstance(current, list) and segment.isdigit():
+            index = int(segment)
+            current = current[index] if index < len(current) else None
+        else:
+            return ()
+    if isinstance(current, str) and current.strip():
+        return (current.strip(),)
+    return ()
 
 
 def _strings_at_path(payload: dict[str, object], path: tuple[str, ...]) -> tuple[str, ...]:

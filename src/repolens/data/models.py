@@ -24,6 +24,7 @@ class ResolvedItem:
     tags: dict[str, str]
     spdx_id: str | None = None
     purl: str | None = None
+    description: str | None = None
     declared_license_raw: str | None = None
     modified: Modified = "unknown"
     declared_version_status: DeclaredVersionStatus | None = None

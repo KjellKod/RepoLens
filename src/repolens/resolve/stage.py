@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -15,7 +15,9 @@ from repolens.policy.spdx import normalize_license
 from repolens.resolve.adapters import (
     API_ALLOWED_HOSTS,
     build_default_adapters,
+    package_description,
 )
+from repolens.resolve.descriptions import first_brief_description
 from repolens.resolve.ecosystems import is_cataloging_only_package, is_ci_only_package
 from repolens.resolve.evidence import (
     UNKNOWN_VERSION,
@@ -90,6 +92,7 @@ class _ResolutionOutcome:
     source_layer: str
     anchor: str
     url: str | None = None
+    description: str | None = None
 
 
 @dataclass
@@ -101,6 +104,7 @@ class _ResolveCache:
         | tuple[str, str, str, str | None, str | None, bool, bool, tuple[str, ...]],
         _ResolutionOutcome | None,
     ]
+    descriptions: dict[tuple[str, str, str, str | None], str | None]
 
 
 def run_resolve(
@@ -155,8 +159,15 @@ def run_resolve(
         stats=cache_stats or ResolveCacheStats(),
         declared={},
         api={},
+        descriptions={},
     )
     for index, package in enumerate(packages, start=1):
+        package = _package_with_description(
+            package,
+            fetcher=fetcher,
+            cache=cache,
+            lookup_enabled=adapters is None,
+        )
         record = _resolved_dict(
             _resolve_package(
                 package,
@@ -253,6 +264,7 @@ def _package_facts(sbom: dict[str, object], repo_ref: str) -> tuple[PackageFact,
                 declared_version_status=_declared_version_status(
                     artifact.get("declared_version_status")
                 ),
+                description=_description_from_artifact(artifact),
             )
         )
     return tuple(facts)
@@ -428,6 +440,7 @@ def _resolve_api_package(
                         source_layer="api",
                         url=verified.evidence_url,
                         anchor=verified.evidence_anchor,
+                        description=verified.description,
                     ),
                     package,
                 )
@@ -464,6 +477,7 @@ def _resolve_api_package(
             source_layer="api",
             url=verified.evidence_url,
             anchor=verified.evidence_anchor,
+            description=verified.description,
         ),
         package,
     )
@@ -508,6 +522,7 @@ def _resolve_mobile_metadata_package(
             source_layer="api",
             url=verified.evidence_url,
             anchor=verified.evidence_anchor,
+            description=verified.description,
         ),
         package,
     )
@@ -580,6 +595,34 @@ def _mobile_metadata_cache_key(
     )
 
 
+def _description_cache_key(package: PackageFact) -> tuple[str, str, str, str | None]:
+    ecosystem, identity = package_identity(package.package_type, package.name, package.purl)
+    return (
+        ecosystem.lower(),
+        identity.lower(),
+        package.version,
+        package.purl,
+    )
+
+
+def _package_with_description(
+    package: PackageFact,
+    *,
+    fetcher: FetchFunction,
+    cache: _ResolveCache,
+    lookup_enabled: bool,
+) -> PackageFact:
+    if package.description is not None or not lookup_enabled:
+        return package
+    cache_key = _description_cache_key(package)
+    if cache_key not in cache.descriptions:
+        cache.descriptions[cache_key] = package_description(package, fetcher=fetcher)
+    description = cache.descriptions[cache_key]
+    if description is None:
+        return package
+    return replace(package, description=description)
+
+
 def _record_cached_api(
     cache: _ResolveCache,
     cache_key: tuple[str, str, str, str | None, str | None, bool, bool]
@@ -606,6 +649,7 @@ def _record_from_outcome(
         source_layer=outcome.source_layer,
         url=outcome.url,
         anchor=outcome.anchor,
+        description=outcome.description,
     )
 
 
@@ -633,6 +677,7 @@ def _verify_api_candidate(
         spdx_id=spdx_id,
         evidence_url=result.url,
         evidence_anchor=candidate.evidence_anchor,
+        description=candidate.description,
     )
 
 
@@ -652,6 +697,7 @@ def _record(
     source_layer: str,
     anchor: str,
     url: str | None = None,
+    description: str | None = None,
 ) -> ResolvedItem:
     evidence = {
         "source_layer": source_layer,
@@ -666,6 +712,7 @@ def _record(
         version=package.version,
         repo=package.repo,
         purl=package.purl,
+        description=description or package.description,
         declared_license_raw=package.declared_license_raw,
         spdx_id=spdx_id,
         evidence=evidence,
@@ -705,6 +752,20 @@ def _declared_version_status(value: object) -> str | None:
     if value == DECLARED_UNPINNED_STATUS:
         return DECLARED_UNPINNED_STATUS
     return None
+
+
+def _description_from_artifact(artifact: dict[str, object]) -> str | None:
+    candidates: list[object] = [artifact.get("description")]
+    metadata = artifact.get("metadata")
+    if isinstance(metadata, dict):
+        candidates.extend(
+            (
+                metadata.get("description"),
+                metadata.get("summary"),
+                metadata.get("packageDescription"),
+            )
+        )
+    return first_brief_description(candidates)
 
 
 def _validated_source_root(source_root: str | Path | None) -> Path | None:

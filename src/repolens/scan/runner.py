@@ -572,6 +572,7 @@ def _merge_registry_duplicate(target: dict[str, Any], source: dict[str, Any]) ->
             *list(source.get("locations") if isinstance(source.get("locations"), list) else []),
         ]
     )
+    _merge_description_if_missing(target, source)
 
 
 def _sorted_unique_locations(value: object) -> list[str]:
@@ -603,6 +604,15 @@ def _merge_artifact_metadata(target: dict[str, Any], source: dict[str, Any]) -> 
             locations.append(location)
     if source.get("declared_version_status") == DECLARED_UNPINNED_STATUS:
         target["declared_version_status"] = DECLARED_UNPINNED_STATUS
+    _merge_description_if_missing(target, source)
+
+
+def _merge_description_if_missing(target: dict[str, Any], source: dict[str, Any]) -> None:
+    if target.get("description"):
+        return
+    description = source.get("description")
+    if isinstance(description, str) and description.strip():
+        target["description"] = description
 
 
 def _artifact_identity(artifact: dict[str, Any]) -> tuple[str, str, str | None, str | None]:
