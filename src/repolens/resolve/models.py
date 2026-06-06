@@ -22,6 +22,7 @@ class PackageFact:
     declared_license_raw: str | None
     locations: tuple[str, ...] = ()
     declared_version_status: str | None = None
+    description: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,6 +32,7 @@ class ApiCandidate:
     spdx_id: str
     evidence_url: str
     evidence_anchor: str
+    description: str | None = None
 
 
 FetchFunction = Callable[[str, HttpFetchOptions], FetchResult]

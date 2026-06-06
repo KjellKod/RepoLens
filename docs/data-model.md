@@ -24,7 +24,8 @@ Packaged schemas live in `src/repolens/data/schemas/`:
 - `sbom.schema.json` validates the RepoLens-owned subset of Syft output. It is
   intentionally permissive for tool-specific nested properties.
 - `resolved.schema.json` validates each `resolved.ndjson` line. The NDJSON file has no
-  header row; every line is a resolved item and must carry `schema_version`.
+  header row; every line is a resolved item and must carry `schema_version`. Resolved
+  items may include an optional short `description` captured during resolve.
 - `inventory.schema.json` validates the deduped full dataset.
 - `shortlist.schema.json` validates the structured shortlist behind downstream human
   approval and `shortlist.md` rendering.

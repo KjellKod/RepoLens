@@ -34,6 +34,7 @@ def test_presentation_csv_is_flat_and_sorted_by_spdx_name_version() -> None:
     csv_rows = list(csv.reader(io.StringIO(render_presentation_csv(rows))))
 
     assert tuple(csv_rows[0]) == PRESENTATION_COLUMNS
+    assert "found_id" not in csv_rows[0]
     assert [row[0] for row in csv_rows[1:]] == ["alpha-lib", "alpha-lib", "zeta-lib"]
     assert [row[1] for row in csv_rows[1:]] == ["Apache-2.0", "MIT", "MIT"]
     assert all(not row[0].startswith("##") for row in csv_rows[1:])
@@ -42,7 +43,7 @@ def test_presentation_csv_is_flat_and_sorted_by_spdx_name_version() -> None:
 def test_presentation_markdown_groups_by_exact_spdx_and_states_data_limits() -> None:
     rows = presentation_rows_from_disclosure(
         (
-            _row(name="mit-lib", spdx_id="MIT"),
+            _row(name="mit-lib", spdx_id="MIT", descriptions=("Brief package summary",)),
             _row(name="apache-lib", spdx_id="Apache-2.0"),
             _row(name="mit-expression-lib", spdx_id="MIT OR Apache-2.0"),
         )
@@ -55,7 +56,9 @@ def test_presentation_markdown_groups_by_exact_spdx_and_states_data_limits() -> 
     assert "## MIT (1)" in markdown
     assert "## MIT OR Apache-2.0 (1)" in markdown
     assert markdown.index("## Apache-2.0 (1)") < markdown.index("## MIT (1)")
+    assert "Brief package summary" in markdown
     assert " n/a " in markdown
+    assert "found_id" not in markdown
 
 
 def test_presentation_html_uses_grouped_tables_and_neutralizes_unsafe_urls() -> None:
@@ -146,6 +149,7 @@ def _row(
     spdx_id: str = "MIT",
     versions: tuple[str, ...] = ("1.0.0",),
     source_urls: tuple[str, ...] = ("https://example.invalid/license",),
+    descriptions: tuple[str, ...] = (),
 ) -> DisclosureRow:
     return DisclosureRow(
         name=name,
@@ -159,6 +163,7 @@ def _row(
         found_in=("acme-alpha",),
         evidence_source_layers=("syft",),
         coverage_gaps=(),
+        descriptions=descriptions,
     )
 
 
