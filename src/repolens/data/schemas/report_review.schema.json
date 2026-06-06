@@ -8,6 +8,15 @@
     "schema_version": {"const": "1.0"},
     "generated_at": {"type": "string", "minLength": 1},
     "open_count": {"type": "integer", "minimum": 0},
+    "presentation_text": {
+      "type": "object",
+      "required": ["header", "preamble"],
+      "properties": {
+        "header": {"type": "string", "minLength": 1, "maxLength": 200},
+        "preamble": {"type": "string", "minLength": 1, "maxLength": 2000}
+      },
+      "additionalProperties": false
+    },
     "items": {
       "type": "array",
       "items": {
@@ -48,6 +57,22 @@
           },
           "policy_tier": {"type": "string", "minLength": 1},
           "raw_spdx": {"type": "string", "minLength": 1},
+          "row_review_ids": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "component_refs": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "components": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "source_urls": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
           "options": {
             "type": "array",
             "minItems": 2,

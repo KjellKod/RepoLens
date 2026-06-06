@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from repolens.config import Config
 from repolens.data import store
 from repolens.data.errors import LimitExceeded, SchemaValidationError
 from repolens.data.validation import validate_artifact
@@ -100,6 +101,185 @@ def test_review_candidate_selection_matches_main_report_rows(tmp_path: Path) -> 
     assert [item.component_key["name"] for item in items] == ["runtime-lib"]
 
 
+def test_review_collapses_identical_disclosure_choices_and_renders_links(tmp_path: Path) -> None:
+    _write_resolved(
+        tmp_path,
+        _record(name="acme-lib-a", spdx_id="MIT OR Apache-2.0"),
+        _record(name="acme-lib-b", spdx_id="MIT OR Apache-2.0"),
+    )
+
+    items = build_review_items(tmp_path)
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    payload = _review_json(tmp_path)
+
+    assert len(items) == 1
+    assert items[0].components == ("acme-lib-a", "acme-lib-b")
+    assert len(items[0].row_review_ids) == 2
+    assert payload["open_count"] == 1
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["components"] == ["acme-lib-a", "acme-lib-b"]
+    assert "### package: `acme-lib-a` + 1 more package (2 total), version: `1.2.3`" in markdown
+    assert (
+        "- grouping reason: `same detected SPDX, same version set, and same policy tier`"
+        in markdown
+    )
+    assert "_review id: `license-review-group:MIT OR Apache-2.0|1.2.3|ALLOW`_" in markdown
+    assert "### `license-review-group:" not in markdown
+    assert "acme-lib-a" in markdown
+    assert "acme-lib-b" in markdown
+    assert "source links:" in markdown
+    assert "[source1](https://example.invalid/licenses/acme-lib-a)" in markdown
+    assert "https://example.invalid/licenses/acme-lib-a" in markdown
+    assert "- resolved: `no`" in markdown
+    assert "suggested choice: `Keep full expression: MIT OR Apache-2.0`" in markdown
+    assert "avoids an arbitrary branch choice" in markdown
+    assert markdown.count("rpl:license-review-item=") == 1
+    assert "rpl:license-review=" not in markdown
+    assert markdown.count("rpl:license-review-option=") == 4
+
+
+def test_report_review_renders_editable_presentation_text_from_config(
+    tmp_path: Path,
+) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT OR Apache-2.0"))
+
+    run_report_review(
+        tmp_path,
+        config=Config(
+            values={
+                "report": {
+                    "header": {
+                        "org_name": "Acme Legal Notices",
+                        "legal_text": "Prepared for legal review.",
+                    }
+                }
+            },
+            sources=(),
+        ),
+        now="2026-06-06T00:00:00Z",
+    )
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    payload = _review_json(tmp_path)
+    assert "## Presentation Text" in markdown
+    assert markdown.index("Choose exactly one disclosure license option") < markdown.index(
+        "## Presentation Text"
+    )
+    assert "Presentation Header:\n> Acme Legal Notices" in markdown
+    assert "Presentation preamble text:\n> Prepared for legal review." in markdown
+    assert payload["presentation_text"] == {
+        "header": "Acme Legal Notices",
+        "preamble": "Prepared for legal review.",
+    }
+
+
+def test_report_review_presentation_text_edits_round_trip(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT OR Apache-2.0"))
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+    path = tmp_path / "report.review.md"
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(
+        r"Presentation Header:\n> .+",
+        "Presentation Header:\n> Reviewed Third-Party Notices",
+        text,
+        count=1,
+    )
+    text = re.sub(
+        r"Presentation preamble text:\n> .+",
+        "Presentation preamble text:\n> Confirmed by compliance.\n> Publish after final signoff.",
+        text,
+        count=1,
+    )
+    path.write_text(text, encoding="utf-8")
+
+    run_report_review(tmp_path, now="2026-06-06T00:01:00Z")
+
+    payload = _review_json(tmp_path)
+    markdown = path.read_text(encoding="utf-8")
+    assert payload["presentation_text"] == {
+        "header": "Reviewed Third-Party Notices",
+        "preamble": "Confirmed by compliance.\nPublish after final signoff.",
+    }
+    assert "Presentation Header:\n> Reviewed Third-Party Notices" in markdown
+    assert (
+        "Presentation preamble text:\n> Confirmed by compliance.\n> Publish after final signoff."
+        in markdown
+    )
+
+
+def test_report_review_suggests_lower_risk_or_branch(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT OR GPL-3.0-only"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "suggested choice: `MIT`" in markdown
+    assert "MIT has policy tier ALLOW; lower risk than GPL-3.0-only (BLOCK)" in markdown
+    assert "## ⚠️ High-Attention License Choices" in markdown
+    assert "High-attention rules come from RepoLens policy tiers" in markdown
+    assert (
+        "https://github.com/KjellKod/RepoLens/blob/main/"
+        "src/repolens/policy/data/license-policy.default.json"
+    ) in markdown
+    assert "marking `MIT` or `Unlicense` as high risk belongs in that policy file" in markdown
+    assert (
+        "- ⚠️ `acme-lib` (`MIT OR GPL-3.0-only`): GPL-3.0-only is policy tier BLOCK; "
+        "suggested choice: `MIT`"
+    ) in markdown
+    assert "- ⚠️ high attention: `GPL-3.0-only is policy tier BLOCK`" in markdown
+
+
+def test_report_review_skips_high_attention_section_for_permissive_choices(
+    tmp_path: Path,
+) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT OR Apache-2.0"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "High-Attention License Choices" not in markdown
+    assert "high attention:" not in markdown
+
+
+def test_report_review_suggests_keep_full_for_non_branch_expression(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT AND Apache-2.0"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "### package: `acme-lib`, version: `1.2.3`" in markdown
+    assert "suggested choice: `Keep full expression: MIT AND Apache-2.0`" in markdown
+    assert "not a simple OR branch choice" in markdown
+
+
+def test_report_review_suggests_keep_full_when_lowest_risk_branch_ties(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="Apache-2.0 OR LGPL-2.1-or-later OR MIT"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert (
+        "suggested choice: `Keep full expression: Apache-2.0 OR LGPL-2.1-or-later OR MIT`"
+        in markdown
+    )
+    assert (
+        "Apache-2.0 and MIT have policy tier ALLOW; "
+        "lower risk than LGPL-2.1-or-later (REVIEW)"
+    ) in markdown
+    assert "LGPL-2.1-or-later is policy tier REVIEW" in markdown
+
+
+def test_report_review_marks_non_branch_review_expression_high_attention(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="Unicode-3.0 AND MIT"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "## ⚠️ High-Attention License Choices" in markdown
+    assert "Unicode-3.0 AND MIT is policy tier REVIEW" in markdown
+
+
 def test_checked_branch_records_selected_spdx_and_note(tmp_path: Path) -> None:
     _write_resolved(tmp_path, _record(spdx_id="MIT OR Apache-2.0"))
     run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
@@ -123,6 +303,7 @@ def test_checked_branch_records_selected_spdx_and_note(tmp_path: Path) -> None:
     assert item["review_status"] == "approved"
     assert item["review_note"] == "Using permissive branch for disclosure."
     assert item["decided_by"] == "reviewer-sentinel"
+    assert "- resolved: `yes`" in path.read_text(encoding="utf-8")
 
 
 def test_report_review_markdown_redacts_token_shaped_notes(tmp_path: Path) -> None:
@@ -154,7 +335,8 @@ def test_report_review_markers_do_not_encode_token_shaped_names(tmp_path: Path) 
     payload = _review_json(tmp_path)
     assert token not in markdown
     assert token not in json.dumps(payload)
-    assert REDACTION in payload["items"][0]["review_id"]
+    assert REDACTION not in payload["items"][0]["review_id"]
+    assert REDACTION in payload["items"][0]["row_review_ids"][0]
 
 
 def test_report_review_option_markers_do_not_encode_token_shaped_spdx(tmp_path: Path) -> None:
@@ -166,11 +348,10 @@ def test_report_review_option_markers_do_not_encode_token_shaped_spdx(tmp_path: 
     markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
     payload = _review_json(tmp_path)
     decoded_markers: list[str] = []
-    for review_id, option_id in re.findall(
-        r"rpl:license-review=([A-Za-z0-9_-]+) option=([A-Za-z0-9_-]+)",
+    for option_id in re.findall(
+        r"rpl:license-review-option=([A-Za-z0-9_-]+)",
         markdown,
     ):
-        decoded_markers.append(decode_component_ref(review_id) or "")
         decoded_markers.append(decode_component_ref(option_id) or "")
     assert decoded_markers
     assert token not in markdown
@@ -217,8 +398,14 @@ def test_multiple_checked_options_leave_item_open(tmp_path: Path) -> None:
     item = _review_json(tmp_path)["items"][0]
     assert result.open_count == 1
     assert item["selected_spdx"] is None
+    assert item["decision"] is None
     assert item["review_status"] == "open"
-    assert item["warnings"] == ["multiple checked options; choose exactly one"]
+    assert item["warnings"] == ["2 or more checked options; choose exactly one"]
+    markdown = path.read_text(encoding="utf-8")
+    assert "- resolved: `no`" in markdown
+    assert "- [ ] `MIT`" in markdown
+    assert "- [ ] `Apache-2.0`" in markdown
+    assert "- warning: `2 or more checked options; choose exactly one`" in markdown
 
 
 def test_open_shortlist_overlap_blocks_selected_disclosure(tmp_path: Path) -> None:

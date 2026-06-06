@@ -263,14 +263,17 @@ def render_main_report(
         docx_skipped = True
 
     from repolens.report.presentation import render_presentation_artifacts
-    from repolens.report.review import load_review_state
+    from repolens.report.review import load_presentation_text, load_review_state
 
     review_state = load_review_state(root)
+    presentation_text = load_presentation_text(root)
     presentation = render_presentation_artifacts(
         rows,
         output_dir,
         header=header,
         review_state=review_state,
+        title=presentation_text.header,
+        preamble=presentation_text.preamble,
     )
 
     return ReportResult(

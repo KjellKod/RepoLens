@@ -1706,6 +1706,7 @@ def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: 
         report_rows=2,
         failures=[cli.RunFailure("scan", "sentinel-private", "needs auth")],
         skipped=1,
+        work_root=tmp_path,
         reports_dir=reports_dir,
         report_paths=(main_md, main_csv, main_html),
         appendix_rows_by_label={"build-ci": 1},
@@ -1720,6 +1721,8 @@ def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: 
     assert "Resume skips: 1" in message
     assert "Failures: 1" in message
     assert "Appendix rows: build-ci=1" in message
+    assert "Disclosure-license review:" in message
+    assert f"repolens report review --work-root {tmp_path}" in message
     assert "Main and presentation reports:" in message
     assert f"      - {main_md.resolve()}" in message
     assert f"      - {main_csv.resolve()}" in message
