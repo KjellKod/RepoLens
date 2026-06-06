@@ -7,7 +7,12 @@ import pytest
 
 from repolens.data import store
 from repolens.security.http_client import FetchResult, HttpFetchOptions
-from repolens.shortlist.research import load_context_rows, render_review_markdown, research_context
+from repolens.shortlist.research import (
+    load_context_rows,
+    render_review_markdown,
+    research_context,
+    run_research,
+)
 
 
 def _context(**overrides: object) -> dict[str, object]:
@@ -310,6 +315,37 @@ def test_review_markdown_has_one_row_per_context_row() -> None:
     assert markdown.count("| `acme-lib\\|UNKNOWN` |") == 1
     assert "no_public_evidence: 1" in markdown
     assert "agent:abstained" not in markdown
+
+
+def test_run_research_reports_progress(tmp_path: Path) -> None:
+    contexts_path = tmp_path / "shortlist.contexts.json"
+    proposals_path = tmp_path / "shortlist.proposals.json"
+    evidence_path = tmp_path / "shortlist.evidence.json"
+    review_path = tmp_path / "shortlist.review.md"
+    store.atomic_write_json(contexts_path, [_context()])
+    progress: list[str] = []
+
+    result = run_research(
+        contexts_path=contexts_path,
+        proposals_path=proposals_path,
+        evidence_path=evidence_path,
+        review_path=review_path,
+        fetcher=_fetcher({}),
+        progress=progress.append,
+    )
+
+    assert result.row_count == 1
+    assert result.proposal_count == 0
+    assert progress == [
+        f"Reading shortlist contexts: {contexts_path}",
+        "Loaded 1 shortlist context row(s).",
+        "Researching 1/1: acme-lib|UNKNOWN",
+        "Finished 1/1: no_public_evidence",
+        f"Writing proposals: {proposals_path}",
+        f"Writing evidence: {evidence_path}",
+        f"Writing review notes: {review_path}",
+        "Done: researched 1 row(s); proposals: 0.",
+    ]
 
 
 def test_load_context_rows_rejects_non_object_entries_with_index(tmp_path: Path) -> None:

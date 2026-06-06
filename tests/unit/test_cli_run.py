@@ -1524,6 +1524,12 @@ def test_open_shortlist_noninteractive_prints_instruction_once(
     captured = capsys.readouterr()
     assert code == 1
     assert captured.out.count("Open shipped-license findings: 1") == 1
+    assert "repolens shortlist research --work-root" in captured.out
+    assert "--contexts" in captured.out
+    assert "--review" in captured.out
+    assert "repolens shortlist --work-root" in captured.out
+    assert "--proposals" in captured.out
+    assert "--evidence" in captured.out
     assert "Open shipped-license findings: 1" not in captured.err
 
 
@@ -1596,8 +1602,9 @@ def test_run_shortlist_loop_ingests_proposals_then_human_decisions(
 
     monkeypatch.setattr(cli, "_shortlist_stage", shortlist)
     monkeypatch.setattr(cli, "_shortlist_open_count", lambda _work_root: next(open_counts))
+    stderr = _TtyStringIO()
     monkeypatch.setattr("sys.stdin", _TtyStringIO("\n\n"))
-    monkeypatch.setattr("sys.stderr", _TtyStringIO())
+    monkeypatch.setattr("sys.stderr", stderr)
     args = SimpleNamespace(runtime_config=object(), quiet=True, yes=False, timeout=None)
 
     result = cli._run_shortlist_loop(args, work_root, interactive=True)
@@ -1608,6 +1615,12 @@ def test_run_shortlist_loop_ingests_proposals_then_human_decisions(
         (None, work_root / "shortlist.proposals.json", None),
         (None, None, None),
     ]
+    output = stderr.getvalue()
+    assert "repolens shortlist research --work-root" in output
+    assert f"--contexts {work_root / 'shortlist.contexts.json'}" in output
+    assert f"--proposals {work_root / 'shortlist.proposals.json'}" in output
+    assert f"--evidence {work_root / 'shortlist.evidence.json'}" in output
+    assert f"--review {work_root / 'shortlist.review.md'}" in output
 
 
 def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: Path) -> None:

@@ -1687,6 +1687,7 @@ def _run_shortlist_loop(
     contexts_path = work_root / "shortlist.contexts.json"
     proposals_path = work_root / "shortlist.proposals.json"
     evidence_path = work_root / "shortlist.evidence.json"
+    review_path = work_root / "shortlist.review.md"
 
     while True:
         _shortlist_stage(_stage_args(args, work_root=work_root, emit_contexts_path=contexts_path))
@@ -1723,10 +1724,25 @@ def _run_shortlist_loop(
             return CommandResult(CommandStatus.FINDINGS_OPEN, instruction)
 
         _run_pause(
-            "External research step: run `repolens shortlist research` against "
-            f"{contexts_path} and write optional proposals to {proposals_path} plus "
-            f"evidence to {evidence_path}, then "
-            "press Enter.",
+            "\n".join(
+                (
+                    "External research step: run deterministic model-free research:",
+                    "  "
+                    + _shortlist_research_command(
+                        work_root,
+                        contexts_path,
+                        proposals_path,
+                        evidence_path,
+                        review_path,
+                    ),
+                    "",
+                    "Then ingest verified proposals and browser evidence:",
+                    "  "
+                    + _shortlist_ingest_command(work_root, proposals_path, evidence_path),
+                    "",
+                    "Press Enter after the research command has finished.",
+                )
+            ),
             interactive=True,
         )
         if proposals_path.exists() or evidence_path.exists():
@@ -1762,18 +1778,52 @@ def _shortlist_artifact_instruction(
     proposals_path: Path,
     evidence_path: Path,
 ) -> str:
+    review_path = work_root / "shortlist.review.md"
+    research_command = _shortlist_research_command(
+        work_root,
+        contexts_path,
+        proposals_path,
+        evidence_path,
+        review_path,
+    )
+    ingest_command = _shortlist_ingest_command(work_root, proposals_path, evidence_path)
     return (
         f"Open shipped-license findings: {open_count}; report is halted before disclosure.\n"
         f"Contexts: {contexts_path}\n"
         f"Optional proposals: {proposals_path}\n"
         f"Research evidence: {evidence_path}\n"
         f"Grouped human review: {work_root / 'shortlist.md'}\n"
-        "Next: run deterministic research or create artifacts outside RepoLens if useful, "
-        "then ingest them with "
-        f"`repolens shortlist --work-root {shlex.quote(str(work_root))} "
+        f"Run deterministic model-free research:\n  {research_command}\n"
+        f"Ingest verified proposals and browser evidence:\n  {ingest_command}\n"
+        "Then approve/reject groups or items in shortlist.md and rerun `repolens run`."
+    )
+
+
+def _shortlist_research_command(
+    work_root: Path,
+    contexts_path: Path,
+    proposals_path: Path,
+    evidence_path: Path,
+    review_path: Path,
+) -> str:
+    return (
+        f"repolens shortlist research --work-root {shlex.quote(str(work_root))} "
+        f"--contexts {shlex.quote(str(contexts_path))} "
         f"--proposals {shlex.quote(str(proposals_path))} "
-        f"--evidence {shlex.quote(str(evidence_path))}` and approve/reject groups "
-        "or items in shortlist.md. Rerun `repolens run` after human approval."
+        f"--evidence {shlex.quote(str(evidence_path))} "
+        f"--review {shlex.quote(str(review_path))}"
+    )
+
+
+def _shortlist_ingest_command(
+    work_root: Path,
+    proposals_path: Path,
+    evidence_path: Path,
+) -> str:
+    return (
+        f"repolens shortlist --work-root {shlex.quote(str(work_root))} "
+        f"--proposals {shlex.quote(str(proposals_path))} "
+        f"--evidence {shlex.quote(str(evidence_path))}"
     )
 
 
@@ -3143,6 +3193,7 @@ def _shortlist_research_stage(args: argparse.Namespace) -> CommandResult:
         proposals_path=proposals,
         evidence_path=evidence,
         review_path=review,
+        progress=lambda message: print(message, file=sys.stderr, flush=True),
     )
     return CommandResult(
         CommandStatus.SUCCESS,

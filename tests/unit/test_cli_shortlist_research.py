@@ -50,15 +50,25 @@ def test_shortlist_research_subcommand_parses_after_action() -> None:
 
 def test_shortlist_research_subcommand_defaults_to_work_root_paths(
     monkeypatch,
+    capsys,
     tmp_path: Path,
 ) -> None:
     captured: dict[str, Path] = {}
 
-    def fake_run_research(*, contexts_path, proposals_path, evidence_path, review_path):
+    def fake_run_research(
+        *,
+        contexts_path,
+        proposals_path,
+        evidence_path,
+        review_path,
+        progress=None,
+    ):
         captured["contexts"] = contexts_path
         captured["proposals"] = proposals_path
         captured["evidence"] = evidence_path
         captured["review"] = review_path
+        if progress is not None:
+            progress("sentinel research progress")
         return argparse.Namespace(
             proposals_path=proposals_path,
             evidence_path=evidence_path,
@@ -79,6 +89,7 @@ def test_shortlist_research_subcommand_defaults_to_work_root_paths(
     )
 
     assert result.status == cli.CommandStatus.SUCCESS
+    assert "sentinel research progress" in capsys.readouterr().err
     assert captured == {
         "contexts": tmp_path / "shortlist.contexts.json",
         "proposals": tmp_path / "shortlist.proposals.json",

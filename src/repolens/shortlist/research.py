@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -92,27 +92,46 @@ def run_research(
     evidence_path: Path,
     review_path: Path,
     fetcher: FetchFunction = fetch_url,
+    progress: Callable[[str], None] | None = None,
 ) -> ResearchResult:
     """Research emitted contexts and write proposals, evidence, and review notes."""
 
+    _emit_progress(progress, f"Reading shortlist contexts: {contexts_path}")
     rows = load_context_rows(contexts_path)
+    _emit_progress(progress, f"Loaded {len(rows)} shortlist context row(s).")
     evidence_records: list[EvidenceRecord] = []
     proposals: list[dict[str, Any]] = []
-    for row in rows:
+    for index, row in enumerate(rows, start=1):
+        identity = identity_for_context(row)
+        _emit_progress(
+            progress,
+            f"Researching {index}/{len(rows)}: {identity.component_ref}",
+        )
         record, proposal = research_context(row, fetcher=fetcher)
         evidence_records.append(record)
         if proposal is not None:
             proposals.append(proposal)
+        _emit_progress(
+            progress,
+            f"Finished {index}/{len(rows)}: {record.outcome}",
+        )
 
+    _emit_progress(progress, f"Writing proposals: {proposals_path}")
     store.atomic_write_json(proposals_path, proposals)
+    _emit_progress(progress, f"Writing evidence: {evidence_path}")
     store.atomic_write_json(
         evidence_path,
         [record.to_shortlist_metadata() for record in evidence_records],
     )
     review_path.parent.mkdir(parents=True, exist_ok=True)
+    _emit_progress(progress, f"Writing review notes: {review_path}")
     store.atomic_write_bytes(
         review_path,
         render_review_markdown(evidence_records).encode("utf-8"),
+    )
+    _emit_progress(
+        progress,
+        f"Done: researched {len(evidence_records)} row(s); proposals: {len(proposals)}.",
     )
     return ResearchResult(
         proposals_path=proposals_path,
@@ -121,6 +140,11 @@ def run_research(
         row_count=len(evidence_records),
         proposal_count=len(proposals),
     )
+
+
+def _emit_progress(progress: Callable[[str], None] | None, message: str) -> None:
+    if progress is not None:
+        progress(message)
 
 
 def load_context_rows(path: Path) -> tuple[Mapping[str, Any], ...]:
