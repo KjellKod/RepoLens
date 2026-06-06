@@ -1057,6 +1057,13 @@ choice per item, optionally add a short disclosure note, then rerun the same com
 ingest the decisions. Open shortlist items still block matching disclosure choices from
 becoming authoritative.
 
+The top of `report.review.md` also contains editable `Presentation Header:` and
+`Presentation preamble text:` fields. On first generation, RepoLens seeds them from
+`report.header.org_name` and `report.header.legal_text` when that config is present;
+otherwise it uses the built-in presentation defaults. Edit those fields in
+`report.review.md`, rerun `repolens report review`, and the values are stored in
+`report.review.json` for the next report build.
+
 After review, rerun only the report step:
 
 ```bash

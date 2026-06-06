@@ -31,6 +31,7 @@ PRESENTATION_COLUMNS = (
     "evidence source",
     "notes",
 )
+DEFAULT_PRESENTATION_TITLE = "RepoLens Presentation Report"
 DATA_LIMITATION_NOTE = "Description is shown when present in resolved metadata; otherwise n/a."
 UNAVAILABLE = "n/a"
 _HTML_COLUMN_WIDTHS = (13, 12, 12, 18, 8, 24, 6, 7)
@@ -68,6 +69,8 @@ def render_presentation_artifacts(
     *,
     header: ReportHeader | None = None,
     review_state: Mapping[str, object] | None = None,
+    title: str = DEFAULT_PRESENTATION_TITLE,
+    preamble: str = DATA_LIMITATION_NOTE,
 ) -> PresentationResult:
     """Write presentation markdown/csv/html and optional header-gated docx."""
 
@@ -84,14 +87,26 @@ def render_presentation_artifacts(
     )
     store.atomic_write_bytes(
         markdown_path,
-        redact_tokens(render_presentation_markdown(presentation_rows)).encode("utf-8"),
+        redact_tokens(
+            render_presentation_markdown(presentation_rows, title=title, preamble=preamble)
+        ).encode("utf-8"),
     )
     store.atomic_write_bytes(
         html_path,
-        redact_tokens(render_presentation_html(presentation_rows)).encode("utf-8"),
+        redact_tokens(
+            render_presentation_html(presentation_rows, title=title, preamble=preamble)
+        ).encode("utf-8"),
     )
     if header is not None and docx_path is not None:
-        store.atomic_write_bytes(docx_path, render_presentation_docx(header, presentation_rows))
+        store.atomic_write_bytes(
+            docx_path,
+            render_presentation_docx(
+                header,
+                presentation_rows,
+                title=title,
+                preface=preamble,
+            ),
+        )
 
     return PresentationResult(
         markdown_path=markdown_path,
@@ -148,13 +163,18 @@ def render_presentation_csv(rows: Sequence[PresentationRow]) -> str:
     return serialize_csv_rows(csv_rows)
 
 
-def render_presentation_markdown(rows: Sequence[PresentationRow]) -> str:
+def render_presentation_markdown(
+    rows: Sequence[PresentationRow],
+    *,
+    title: str = DEFAULT_PRESENTATION_TITLE,
+    preamble: str = DATA_LIMITATION_NOTE,
+) -> str:
     """Render presentation rows grouped by exact SPDX expression."""
 
     lines = [
-        "# RepoLens Presentation Report",
+        f"# {title}",
         "",
-        f"> {DATA_LIMITATION_NOTE}",
+        *[f"> {line}" for line in preamble.splitlines() or [""]],
         "",
     ]
     grouped = _group_rows(rows)
@@ -187,13 +207,26 @@ def render_presentation_markdown(rows: Sequence[PresentationRow]) -> str:
                 + " |"
             )
         lines.append("")
-    return sanitize_markdown("\n".join(lines).rstrip() + "\n")
+    sanitized = sanitize_markdown("\n".join(lines).rstrip() + "\n")
+    return (
+        "\n".join(
+            line.replace("&gt;", ">", 1) if line.startswith("&gt;") else line
+            for line in sanitized.splitlines()
+        )
+        + "\n"
+    )
 
 
-def render_presentation_html(rows: Sequence[PresentationRow]) -> str:
+def render_presentation_html(
+    rows: Sequence[PresentationRow],
+    *,
+    title: str = DEFAULT_PRESENTATION_TITLE,
+    preamble: str = DATA_LIMITATION_NOTE,
+) -> str:
     """Render presentation rows as a grouped, self-contained HTML report."""
 
     grouped = _group_rows(rows)
+    safe_title = _html_text(title.replace("\n", " "))
     colgroup = "".join(f'<col style="width: {width}%">' for width in _HTML_COLUMN_WIDTHS)
     header_cells = "".join(
         f'<th scope="col">{_html_text(column)}</th>' for column in PRESENTATION_COLUMNS
@@ -211,13 +244,16 @@ def render_presentation_html(rows: Sequence[PresentationRow]) -> str:
         "<head>\n"
         '<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        "<title>RepoLens Presentation Report</title>\n"
+        f"<title>{safe_title}</title>\n"
         "<style>\n"
         ":root { color-scheme: light; }\n"
         "@page { size: letter landscape; margin: 0.35in; }\n"
         "body { margin: 24px; font: 14px/1.4 Arial, Helvetica, sans-serif; color: #111827; }\n"
         "h1 { margin: 0 0 10px; font-size: 24px; line-height: 1.2; }\n"
-        "h2 { margin: 22px 0 8px; font-size: 17px; }\n"
+        ".license-group { margin: 22px 0 0; }\n"
+        ".license-group summary { cursor: pointer; font-size: 17px; font-weight: 700; "
+        "line-height: 1.25; margin: 0 0 8px; }\n"
+        ".license-group summary:focus { outline: 2px solid #0f4c81; outline-offset: 2px; }\n"
         ".note { margin: 0 0 18px; color: #4b5563; }\n"
         ".table-wrap { width: 100%; border: 1px solid #d1d5db; }\n"
         "table { border-collapse: collapse; table-layout: fixed; width: 100%; }\n"
@@ -231,15 +267,15 @@ def render_presentation_html(rows: Sequence[PresentationRow]) -> str:
         "@media print {\n"
         "  body { margin: 0; font-size: 8pt; }\n"
         "  h1 { font-size: 16pt; }\n"
-        "  h2 { font-size: 11pt; }\n"
+        "  .license-group summary { font-size: 11pt; cursor: default; }\n"
         "  .table-wrap { border: 0; }\n"
         "  th, td { padding: 3pt 4pt; }\n"
         "}\n"
         "</style>\n"
         "</head>\n"
         "<body>\n"
-        "<h1>RepoLens Presentation Report</h1>\n"
-        f'<p class="note">{_html_text(DATA_LIMITATION_NOTE)}</p>\n'
+        f"<h1>{safe_title}</h1>\n"
+        f'<p class="note">{_html_text(preamble)}</p>\n'
         f"{sections}"
         "</body>\n"
         "</html>\n"
@@ -249,6 +285,9 @@ def render_presentation_html(rows: Sequence[PresentationRow]) -> str:
 def render_presentation_docx(
     header: ReportHeader,
     rows: Sequence[PresentationRow],
+    *,
+    title: str = DEFAULT_PRESENTATION_TITLE,
+    preface: str = DATA_LIMITATION_NOTE,
 ) -> bytes:
     """Render presentation rows as grouped DOCX tables."""
 
@@ -264,9 +303,9 @@ def render_presentation_docx(
         sections = (("No report rows", PRESENTATION_COLUMNS, ()),)
     return render_docx_sections(
         header,
-        "RepoLens Presentation Report",
+        title,
         sections,
-        preface=DATA_LIMITATION_NOTE,
+        preface=preface,
     )
 
 
@@ -294,14 +333,14 @@ def _html_group_section(
         for row in rows
     )
     return (
-        "<section>\n"
-        f"<h2>{_html_text(disclosure_spdx)} ({len(rows)})</h2>\n"
+        '<details class="license-group" open>\n'
+        f"<summary>{_html_text(disclosure_spdx)} ({len(rows)})</summary>\n"
         '<div class="table-wrap"><table>\n'
         f"{colgroup}\n"
         f"<thead><tr>{header_cells}</tr></thead>\n"
         f"<tbody>{body_rows}</tbody>\n"
         "</table></div>\n"
-        "</section>\n"
+        "</details>\n"
     )
 
 

@@ -7,6 +7,7 @@ from typing import Any
 
 import pytest
 
+from repolens.config import Config
 from repolens.data import store
 from repolens.data.errors import LimitExceeded, SchemaValidationError
 from repolens.data.validation import validate_artifact
@@ -119,7 +120,10 @@ def test_review_collapses_identical_disclosure_choices_and_renders_links(tmp_pat
     assert len(payload["items"]) == 1
     assert payload["items"][0]["components"] == ["acme-lib-a", "acme-lib-b"]
     assert "### package: `acme-lib-a` + 1 more package (2 total), version: `1.2.3`" in markdown
-    assert "- grouping reason: `same detected SPDX, same version set, and same policy tier`" in markdown
+    assert (
+        "- grouping reason: `same detected SPDX, same version set, and same policy tier`"
+        in markdown
+    )
     assert "_review id: `license-review-group:MIT OR Apache-2.0|1.2.3|ALLOW`_" in markdown
     assert "### `license-review-group:" not in markdown
     assert "acme-lib-a" in markdown
@@ -133,6 +137,75 @@ def test_review_collapses_identical_disclosure_choices_and_renders_links(tmp_pat
     assert markdown.count("rpl:license-review-item=") == 1
     assert "rpl:license-review=" not in markdown
     assert markdown.count("rpl:license-review-option=") == 4
+
+
+def test_report_review_renders_editable_presentation_text_from_config(
+    tmp_path: Path,
+) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT OR Apache-2.0"))
+
+    run_report_review(
+        tmp_path,
+        config=Config(
+            values={
+                "report": {
+                    "header": {
+                        "org_name": "Acme Legal Notices",
+                        "legal_text": "Prepared for legal review.",
+                    }
+                }
+            },
+            sources=(),
+        ),
+        now="2026-06-06T00:00:00Z",
+    )
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    payload = _review_json(tmp_path)
+    assert "## Presentation Text" in markdown
+    assert markdown.index("Choose exactly one disclosure license option") < markdown.index(
+        "## Presentation Text"
+    )
+    assert "Presentation Header:\n> Acme Legal Notices" in markdown
+    assert "Presentation preamble text:\n> Prepared for legal review." in markdown
+    assert payload["presentation_text"] == {
+        "header": "Acme Legal Notices",
+        "preamble": "Prepared for legal review.",
+    }
+
+
+def test_report_review_presentation_text_edits_round_trip(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT OR Apache-2.0"))
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+    path = tmp_path / "report.review.md"
+    text = path.read_text(encoding="utf-8")
+    text = re.sub(
+        r"Presentation Header:\n> .+",
+        "Presentation Header:\n> Reviewed Third-Party Notices",
+        text,
+        count=1,
+    )
+    text = re.sub(
+        r"Presentation preamble text:\n> .+",
+        "Presentation preamble text:\n> Confirmed by compliance.\n> Publish after final signoff.",
+        text,
+        count=1,
+    )
+    path.write_text(text, encoding="utf-8")
+
+    run_report_review(tmp_path, now="2026-06-06T00:01:00Z")
+
+    payload = _review_json(tmp_path)
+    markdown = path.read_text(encoding="utf-8")
+    assert payload["presentation_text"] == {
+        "header": "Reviewed Third-Party Notices",
+        "preamble": "Confirmed by compliance.\nPublish after final signoff.",
+    }
+    assert "Presentation Header:\n> Reviewed Third-Party Notices" in markdown
+    assert (
+        "Presentation preamble text:\n> Confirmed by compliance.\n> Publish after final signoff."
+        in markdown
+    )
 
 
 def test_report_review_suggests_lower_risk_or_branch(tmp_path: Path) -> None:
@@ -186,7 +259,10 @@ def test_report_review_suggests_keep_full_when_lowest_risk_branch_ties(tmp_path:
     run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
 
     markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
-    assert "suggested choice: `Keep full expression: Apache-2.0 OR LGPL-2.1-or-later OR MIT`" in markdown
+    assert (
+        "suggested choice: `Keep full expression: Apache-2.0 OR LGPL-2.1-or-later OR MIT`"
+        in markdown
+    )
     assert (
         "Apache-2.0 and MIT have policy tier ALLOW; "
         "lower risk than LGPL-2.1-or-later (REVIEW)"

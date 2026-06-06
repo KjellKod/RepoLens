@@ -87,7 +87,7 @@ def test_presentation_uses_approved_review_decision_and_preserves_detected_spdx(
     assert "## MIT (1)" in markdown
     assert "MIT OR Apache-2.0" in markdown
     assert "Using permissive branch." in markdown
-    assert "<h2>MIT (1)</h2>" in html
+    assert "<summary>MIT (1)</summary>" in html
     assert "MIT OR Apache-2.0" in html
     assert b"MIT OR Apache-2.0" in docx_xml
     assert b"Using permissive branch." in docx_xml
@@ -104,12 +104,40 @@ def test_presentation_html_uses_grouped_tables_and_neutralizes_unsafe_urls() -> 
     html = render_presentation_html(rows)
 
     assert "@page { size: letter landscape;" in html
-    assert "<h2>Apache-2.0 (1)</h2>" in html
-    assert "<h2>MIT (1)</h2>" in html
+    assert '<details class="license-group" open>' in html
+    assert "<summary>Apache-2.0 (1)</summary>" in html
+    assert "<summary>MIT (1)</summary>" in html
     assert "acme &lt;html&gt;" in html
     assert "javascript:" not in html
     assert "javascript&#58;alert(1)" in html
     assert 'href="javascript' not in html
+
+
+def test_presentation_artifacts_accept_reviewed_title_and_preamble() -> None:
+    rows = presentation_rows_from_disclosure((_row(),))
+
+    markdown = render_presentation_markdown(
+        rows,
+        title="Acme Notices",
+        preamble="Prepared for review.\nVerify before publishing.",
+    )
+    html = render_presentation_html(rows, title="Acme Notices", preamble="Prepared for review.")
+    docx_xml = _document_xml(
+        render_presentation_docx(
+            _header(),
+            rows,
+            title="Acme Notices",
+            preface="Prepared for review.",
+        )
+    )
+
+    assert "# Acme Notices" in markdown
+    assert "> Prepared for review.\n> Verify before publishing." in markdown
+    assert "<title>Acme Notices</title>" in html
+    assert "<h1>Acme Notices</h1>" in html
+    assert "Prepared for review." in html
+    assert b"Acme Notices" in docx_xml
+    assert b"Prepared for review." in docx_xml
 
 
 def test_presentation_markdown_and_html_preserve_semicolon_source_urls() -> None:

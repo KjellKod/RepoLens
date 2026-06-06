@@ -22,6 +22,8 @@ from repolens.policy.expression import ParseError, pure_or_leaf_options
 from repolens.policy.tiers import risk_rank
 from repolens.policy.types import PolicyTier
 from repolens.report.main import DisclosureRow, select_main_report_rows
+from repolens.report.presentation import DATA_LIMITATION_NOTE, DEFAULT_PRESENTATION_TITLE
+from repolens.report.selection import report_header_if_configured
 from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
 from repolens.security.sanitize import markdown_link, render_code_span, sanitize_markdown
 from repolens.shortlist.render import decode_component_ref, encode_component_ref
@@ -45,8 +47,13 @@ _SHORT_OPTION_MARKER_RE = re.compile(
     r"&lt;!-- rpl:license-review-option=([A-Za-z0-9_-]+) --&gt;"
 )
 _CHECKBOX_RE = re.compile(r"^\s*[-*]\s*\[(?P<mark>[^\]])\]")
+_PRESENTATION_TEXT_HEADING = "## Presentation Text"
+_PRESENTATION_HEADER_HEADING = "Presentation Header:"
+_PRESENTATION_PREAMBLE_HEADING = "Presentation preamble text:"
 _NOTE_HEADING = "Disclosure note:"
 _MAX_REVIEW_NOTE_CHARS = 600
+_MAX_PRESENTATION_HEADER_CHARS = 200
+_MAX_PRESENTATION_PREAMBLE_CHARS = 2_000
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +99,14 @@ class ReviewDecision:
 
 
 @dataclass(frozen=True, slots=True)
+class PresentationText:
+    """Editable presentation report title and preamble text."""
+
+    header: str
+    preamble: str
+
+
+@dataclass(frozen=True, slots=True)
 class ReportReviewResult:
     """Paths and counts for a ``report review`` run."""
 
@@ -108,6 +123,12 @@ class _ParsedMarkdownDecision:
     note: str = ""
 
 
+@dataclass(frozen=True, slots=True)
+class _ParsedPresentationText:
+    header: str | None = None
+    preamble: str | None = None
+
+
 def run_report_review(
     work_root: Path,
     *,
@@ -120,8 +141,15 @@ def run_report_review(
     root = Path(work_root)
     timestamp = now or _utc_now()
     candidates = build_review_items(root, config=config)
-    prior = _load_prior_items(root / REVIEW_JSON_FILENAME)
-    parsed = _parse_existing_markdown(root / REVIEW_MD_FILENAME, candidates)
+    prior_document = _load_prior_document(root / REVIEW_JSON_FILENAME)
+    prior = _prior_items(prior_document)
+    md_path = root / REVIEW_MD_FILENAME
+    parsed = _parse_existing_markdown(md_path, candidates)
+    presentation_text = _presentation_text_for_review(
+        config=config,
+        prior=prior_document,
+        parsed=_parse_existing_presentation_text(md_path),
+    )
     items = _apply_prior_and_markdown(
         candidates,
         prior,
@@ -130,13 +158,17 @@ def run_report_review(
         now=timestamp,
         open_shortlist_refs=_open_shortlist_component_refs(root),
     )
-    document = review_document(items, generated_at=timestamp)
+    document = review_document(items, generated_at=timestamp, presentation_text=presentation_text)
     validate_artifact(document, "report_review")
     redacted = redact_tokens_from_structure(document)
     json_path = root / REVIEW_JSON_FILENAME
-    md_path = root / REVIEW_MD_FILENAME
     store.atomic_write_bytes(json_path, _checked_review_json_bytes(json_path, redacted))
-    store.atomic_write_bytes(md_path, redact_tokens(render_review_markdown(items)).encode("utf-8"))
+    store.atomic_write_bytes(
+        md_path,
+        redact_tokens(
+            render_review_markdown(items, presentation_text=presentation_text)
+        ).encode("utf-8"),
+    )
     return ReportReviewResult(
         markdown_path=md_path,
         json_path=json_path,
@@ -149,7 +181,9 @@ def build_review_items(work_root: Path, *, config: Config | None = None) -> tupl
     """Build review candidates from the same main-report rows as presentation output."""
 
     rows, _file_gaps = select_main_report_rows(Path(work_root), config)
-    return _group_review_items(tuple(_review_item_for_row(row) for row in rows if _row_needs_review(row)))
+    return _group_review_items(
+        tuple(_review_item_for_row(row) for row in rows if _row_needs_review(row))
+    )
 
 
 def load_review_state(work_root: Path) -> dict[str, ReviewDecision]:
@@ -187,6 +221,21 @@ def load_review_state(work_root: Path) -> dict[str, ReviewDecision]:
     return decisions
 
 
+def load_presentation_text(work_root: Path) -> PresentationText:
+    """Load presentation title/preamble text captured by ``report review``."""
+
+    path = Path(work_root) / REVIEW_JSON_FILENAME
+    if not path.exists():
+        return _default_presentation_text(None)
+    raw = store.load_json_capped(path, max_bytes=max_bytes_for("report_review"))
+    validate_artifact(raw, "report_review")
+    if not isinstance(raw, Mapping):
+        raise InputError("report.review.json must be an object")
+    return _presentation_text_from_json(raw.get("presentation_text")) or _default_presentation_text(
+        None
+    )
+
+
 def review_id_for_row(row: DisclosureRow) -> str:
     """Return the stable disclosure-review id for an aggregated report row."""
 
@@ -198,28 +247,54 @@ def review_id_for_row(row: DisclosureRow) -> str:
     )
 
 
-def review_document(items: Sequence[ReviewItem], *, generated_at: str) -> dict[str, object]:
+def review_document(
+    items: Sequence[ReviewItem],
+    *,
+    generated_at: str,
+    presentation_text: PresentationText | None = None,
+) -> dict[str, object]:
     """Serialize review items and enforce the open-count invariant."""
 
     raw_items = [_item_to_json(item) for item in items]
     open_count = sum(1 for item in raw_items if item["review_status"] == "open")
+    text = presentation_text or _default_presentation_text(None)
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": generated_at,
         "open_count": open_count,
+        "presentation_text": {
+            "header": text.header,
+            "preamble": text.preamble,
+        },
         "items": raw_items,
     }
 
 
-def render_review_markdown(items: Sequence[ReviewItem]) -> str:
+def render_review_markdown(
+    items: Sequence[ReviewItem],
+    *,
+    presentation_text: PresentationText | None = None,
+) -> str:
     """Render constrained, sanitized Markdown for human disclosure review."""
 
+    text = presentation_text or _default_presentation_text(None)
     lines = [
         "# RepoLens Disclosure License Review",
         "",
         "Choose exactly one disclosure license option per item, then rerun "
         "`repolens report review`. Review items blocked by an open shortlist row stay open "
         "until the shortlist item is approved or removed.",
+        "",
+        _PRESENTATION_TEXT_HEADING,
+        "",
+        "Edit these values before publishing the presentation report. They are written to "
+        "`report.review.json` and used by `repolens report` for `report.presentation.*`.",
+        "",
+        _PRESENTATION_HEADER_HEADING,
+        f"> {text.header}",
+        "",
+        _PRESENTATION_PREAMBLE_HEADING,
+        *[f"> {line}" for line in text.preamble.splitlines() or [""]],
         "",
     ]
     if not items:
@@ -316,7 +391,10 @@ def _group_review_items(items: Sequence[ReviewItem]) -> tuple[ReviewItem, ...]:
             item.raw_spdx,
             tuple(_strings(item.component_key["versions"])),
             item.policy_tier,
-            tuple((option.option_id, option.label, option.spdx, option.decision) for option in item.options),
+            tuple(
+                (option.option_id, option.label, option.spdx, option.decision)
+                for option in item.options
+            ),
         )
         groups.setdefault(key, []).append(item)
     return tuple(_merged_review_item(group) for group in groups.values())
@@ -326,7 +404,9 @@ def _merged_review_item(items: Sequence[ReviewItem]) -> ReviewItem:
     first = items[0]
     versions = tuple(_strings(first.component_key["versions"]))
     components = _sorted_unique(
-        component for item in items for component in (item.components or (str(item.component_key["name"]),))
+        component
+        for item in items
+        for component in (item.components or (str(item.component_key["name"]),))
     )
     row_review_ids = _sorted_unique(
         review_id for item in items for review_id in (item.row_review_ids or (item.review_id,))
@@ -410,14 +490,18 @@ def _options_for_spdx(raw_spdx: str) -> tuple[ReviewOption, ...]:
     return tuple(options)
 
 
-def _load_prior_items(path: Path) -> dict[str, Mapping[str, Any]]:
+def _load_prior_document(path: Path) -> Mapping[str, Any]:
     if not path.exists():
         return {}
     raw = store.load_json_capped(path, max_bytes=max_bytes_for("report_review"))
     validate_artifact(raw, "report_review")
     if not isinstance(raw, Mapping):
         return {}
-    items = raw.get("items", [])
+    return raw
+
+
+def _prior_items(document: Mapping[str, Any]) -> dict[str, Mapping[str, Any]]:
+    items = document.get("items", [])
     if not isinstance(items, list):
         return {}
     return {
@@ -437,6 +521,57 @@ def _parse_existing_markdown(
         item.review_id: {option.option_id for option in item.options} for item in current_items
     }
     return _parse_review_markdown(path.read_text(encoding="utf-8"), current_options)
+
+
+def _parse_existing_presentation_text(path: Path) -> _ParsedPresentationText:
+    if not path.exists():
+        return _ParsedPresentationText()
+    return _parse_presentation_text_markdown(path.read_text(encoding="utf-8"))
+
+
+def _parse_presentation_text_markdown(markdown: str) -> _ParsedPresentationText:
+    target: str | None = None
+    header_lines: list[str] = []
+    preamble_lines: list[str] = []
+    in_section = False
+
+    def append_quoted(line: str) -> bool:
+        stripped = line.lstrip()
+        if stripped.startswith("&gt;"):
+            value = stripped.removeprefix("&gt;").lstrip()
+        elif stripped.startswith(">"):
+            value = stripped.removeprefix(">").lstrip()
+        else:
+            return False
+        if target == "header":
+            header_lines.append(value)
+        elif target == "preamble":
+            preamble_lines.append(value)
+        return True
+
+    for line in markdown.splitlines():
+        stripped = line.strip()
+        if stripped == _PRESENTATION_TEXT_HEADING:
+            in_section = True
+            target = None
+            continue
+        if in_section and stripped.startswith("## ") and stripped != _PRESENTATION_TEXT_HEADING:
+            break
+        if not in_section:
+            continue
+        if stripped == _PRESENTATION_HEADER_HEADING:
+            target = "header"
+            continue
+        if stripped == _PRESENTATION_PREAMBLE_HEADING:
+            target = "preamble"
+            continue
+        if target is not None and append_quoted(line):
+            continue
+
+    return _ParsedPresentationText(
+        header=_bounded_presentation_header("\n".join(header_lines)),
+        preamble=_bounded_presentation_preamble("\n".join(preamble_lines)),
+    )
 
 
 def _parse_review_markdown(
@@ -812,7 +947,8 @@ def _suggested_choice(item: ReviewItem) -> tuple[ReviewOption, str] | None:
     if keep_full is not None:
         return (
             keep_full,
-            "not a simple OR branch choice; keep the full expression unless legal review chooses otherwise",
+            "not a simple OR branch choice; keep the full expression unless legal review "
+            "chooses otherwise",
         )
     return None
 
@@ -905,7 +1041,8 @@ def _equal_lowest_risk_branches_reason(ranked: Sequence[tuple[ReviewOption, Poli
     )
     return (
         f"{best_labels} have policy tier {best[0][1].value}; "
-        f"lower risk than {higher_labels}; keeping the full expression avoids an arbitrary branch choice"
+        f"lower risk than {higher_labels}; keeping the full expression avoids an arbitrary "
+        "branch choice"
     )
 
 
@@ -972,7 +1109,10 @@ def _source_urls_cell(item: ReviewItem) -> str:
     if not item.source_urls:
         return render_code_span("none")
     limit = 8
-    links = [markdown_link(_source_url_label(url, index), url) for index, url in enumerate(item.source_urls[:limit], 1)]
+    links = [
+        markdown_link(_source_url_label(url, index), url)
+        for index, url in enumerate(item.source_urls[:limit], 1)
+    ]
     if len(item.source_urls) > limit:
         links.append(f"... ({len(item.source_urls)} total)")
     return ", ".join(links)
@@ -994,7 +1134,9 @@ def _review_key_part(value: str) -> str:
 
 
 def _sorted_unique(values: Iterable[str]) -> tuple[str, ...]:
-    return tuple(sorted({value for value in values if value}, key=lambda value: (value.casefold(), value)))
+    return tuple(
+        sorted({value for value in values if value}, key=lambda value: (value.casefold(), value))
+    )
 
 
 def _reviewer_identity(identity: str | None) -> str:
@@ -1008,12 +1150,68 @@ def _reviewer_identity(identity: str | None) -> str:
     return detected or "unknown"
 
 
+def _presentation_text_for_review(
+    *,
+    config: Config | None,
+    prior: Mapping[str, Any],
+    parsed: _ParsedPresentationText,
+) -> PresentationText:
+    default = _default_presentation_text(config)
+    prior_text = _presentation_text_from_json(prior.get("presentation_text"))
+    base = prior_text or default
+    return PresentationText(
+        header=parsed.header or base.header,
+        preamble=parsed.preamble or base.preamble,
+    )
+
+
+def _default_presentation_text(config: Config | None) -> PresentationText:
+    header = report_header_if_configured(config)
+    if header is not None:
+        return PresentationText(
+            header=header.org_name,
+            preamble=header.legal_text,
+        )
+    return PresentationText(
+        header=DEFAULT_PRESENTATION_TITLE,
+        preamble=DATA_LIMITATION_NOTE,
+    )
+
+
+def _presentation_text_from_json(value: object) -> PresentationText | None:
+    if not isinstance(value, Mapping):
+        return None
+    header = _bounded_presentation_header(value.get("header"))
+    preamble = _bounded_presentation_preamble(value.get("preamble"))
+    if header is None or preamble is None:
+        return None
+    return PresentationText(header=header, preamble=preamble)
+
+
+def _bounded_presentation_header(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = " ".join(_clean_text(value).split())
+    return cleaned[:_MAX_PRESENTATION_HEADER_CHARS] or None
+
+
+def _bounded_presentation_preamble(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = _clean_text(value).strip()
+    return cleaned[:_MAX_PRESENTATION_PREAMBLE_CHARS] or None
+
+
+def _clean_text(value: str) -> str:
+    return "".join(char for char in value if char == "\n" or ord(char) >= 32)
+
+
 def _utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _bounded_note(value: str) -> str:
-    cleaned = "".join(char for char in value if char == "\n" or ord(char) >= 32)
+    cleaned = _clean_text(value)
     return cleaned.strip()[:_MAX_REVIEW_NOTE_CHARS]
 
 

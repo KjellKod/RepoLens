@@ -18,6 +18,7 @@ from repolens.report.main import (
 )
 from repolens.report.presentation import (
     DATA_LIMITATION_NOTE,
+    DEFAULT_PRESENTATION_TITLE,
     PRESENTATION_COLUMNS,
     PresentationResult,
     PresentationRow,
@@ -37,6 +38,7 @@ from repolens.report.selection import (
 __all__ = [
     "COLUMNS",
     "DATA_LIMITATION_NOTE",
+    "DEFAULT_PRESENTATION_TITLE",
     "DEFAULT_LEGAL_TEXT",
     "DOCX_SKIPPED_NOTICE",
     "PRESENTATION_COLUMNS",

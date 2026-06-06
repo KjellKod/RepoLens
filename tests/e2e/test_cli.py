@@ -654,10 +654,20 @@ class CliTests(unittest.TestCase):
             )
             self.assertEqual(cli.main(["report", "review", "--work-root", str(work_root)]), 0)
             review_md = work_root / "report.review.md"
-            review_md.write_text(
-                review_md.read_text(encoding="utf-8").replace("- [ ] `MIT`", "- [x] `MIT`", 1),
-                encoding="utf-8",
+            review_text = review_md.read_text(encoding="utf-8")
+            review_text = review_text.replace("- [ ] `MIT`", "- [x] `MIT`", 1)
+            review_text = review_text.replace(
+                "Presentation Header:\n> RepoLens Presentation Report",
+                "Presentation Header:\n> Acme Third-Party Notices",
+                1,
             )
+            review_text = review_text.replace(
+                "Presentation preamble text:\n> Description is shown when present in resolved "
+                "metadata; otherwise n/a.",
+                "Presentation preamble text:\n> Prepared for final legal review.",
+                1,
+            )
+            review_md.write_text(review_text, encoding="utf-8")
             self.assertEqual(
                 cli.main(
                     [
@@ -678,11 +688,17 @@ class CliTests(unittest.TestCase):
             )
 
             presentation = (out_dir / "report.presentation.csv").read_text(encoding="utf-8")
+            presentation_md = (out_dir / "report.presentation.md").read_text(encoding="utf-8")
+            presentation_html = (out_dir / "report.presentation.html").read_text(encoding="utf-8")
             self.assertIn(
                 '"disclosure license (spdx)","detected license (spdx)"',
                 presentation,
             )
             self.assertIn('"MIT","MIT OR Apache-2.0"', presentation)
+            self.assertIn("# Acme Third-Party Notices", presentation_md)
+            self.assertIn("> Prepared for final legal review.", presentation_md)
+            self.assertIn("<h1>Acme Third-Party Notices</h1>", presentation_html)
+            self.assertIn("Prepared for final legal review.", presentation_html)
 
 
 def _fake_clone(options):

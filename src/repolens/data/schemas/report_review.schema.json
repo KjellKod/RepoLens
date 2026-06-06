@@ -8,6 +8,15 @@
     "schema_version": {"const": "1.0"},
     "generated_at": {"type": "string", "minLength": 1},
     "open_count": {"type": "integer", "minimum": 0},
+    "presentation_text": {
+      "type": "object",
+      "required": ["header", "preamble"],
+      "properties": {
+        "header": {"type": "string", "minLength": 1, "maxLength": 200},
+        "preamble": {"type": "string", "minLength": 1, "maxLength": 2000}
+      },
+      "additionalProperties": false
+    },
     "items": {
       "type": "array",
       "items": {

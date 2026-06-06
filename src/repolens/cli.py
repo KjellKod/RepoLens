@@ -16,7 +16,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, TextIO, TypeVar
+from typing import TYPE_CHECKING, Any, Protocol, TextIO, TypeVar
 from urllib.parse import unquote
 
 from repolens.bootstrap.cache import (
@@ -3286,11 +3286,11 @@ def _report_review(args: argparse.Namespace) -> CommandResult:
     )
 
 
-def _report_review_done_message(result: object, work_root: Path) -> str:
-    markdown_path = Path(getattr(result, "markdown_path"))
-    json_path = Path(getattr(result, "json_path"))
-    open_count = int(getattr(result, "open_count"))
-    item_count = int(getattr(result, "item_count"))
+def _report_review_done_message(result: Any, work_root: Path) -> str:
+    markdown_path = Path(result.markdown_path)
+    json_path = Path(result.json_path)
+    open_count = int(result.open_count)
+    item_count = int(result.item_count)
     lines = [
         f"report review: {open_count} open item(s) of {item_count}; "
         f"wrote {markdown_path}, {json_path}",
@@ -3303,6 +3303,8 @@ def _report_review_done_message(result: object, work_root: Path) -> str:
         "",
         "What to edit:",
         f"  Open {markdown_path}",
+        "  Edit `Presentation Header:` and `Presentation preamble text:` near the top if "
+        "the presentation report needs different wording.",
         "  For each item, check exactly one option under `Choose disclosure license:`.",
         "  You may add a short note under `Disclosure note:`.",
         "  Do not edit any `rpl:license-review*` markers.",
