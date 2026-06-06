@@ -187,6 +187,11 @@ repolens config init --work-root work
 repolens config init --out ./.repolens.local.json
 ```
 
+Use `config init` when you want RepoLens to prompt for the common schema fields and
+write the JSON for you. `--work-root` writes `<work-root>/.repolens.local.json`; `--out`
+writes the exact file you name. You can then edit the generated JSON to add exclusions
+such as `dead` repos or `exclude_patterns`.
+
 Inspect and validate config before using it:
 
 ```bash
@@ -247,6 +252,41 @@ Matching order for categories is `explicit`, then `patterns`, then `topics`, the
 `default_category`. Hard exclusions are then applied from GitHub archived status, exact
 `dead` matches, and `exclude_patterns`. The authoritative parser is
 [`src/repolens/discovery/taxonomy.py`](../src/repolens/discovery/taxonomy.py).
+
+Short exclusion-focused `.repolens.local.json` example:
+
+```json
+{
+  "discover": {
+    "taxonomy": {
+      "default_category": "PRODUCTION",
+      "dead": {
+        "KjellKod/legacy-cli": "retired",
+        "KjellKod/old-mobile-sdk": "retired"
+      },
+      "exclude_patterns": [
+        {
+          "glob": "skipme-*",
+          "reason": "out of scope for this review"
+        },
+        {
+          "glob": "forked_to_research-*",
+          "reason": "research fork; not shipped"
+        }
+      ]
+    }
+  },
+  "report": {
+    "selection": {
+      "include": ["PRODUCTION"]
+    },
+    "header": {
+      "org_name": "KjellKod",
+      "legal_text": "Prepared for license review."
+    }
+  }
+}
+```
 
 Example `.repolens.local.json`:
 
