@@ -242,6 +242,7 @@ def render_review_markdown(items: Sequence[ReviewItem]) -> str:
                 *_grouping_reason_lines(item),
                 f"- found in: {render_code_span('; '.join(item.found_in))}",
                 f"- source links: {_source_urls_cell(item)}",
+                f"- resolved: {render_code_span(_resolved_label(item))}",
                 f"- current policy tier: {render_code_span(item.policy_tier)}",
                 f"- detected SPDX: {render_code_span(item.raw_spdx)}",
             ]
@@ -774,6 +775,10 @@ def _checked_option_id(item: ReviewItem) -> str | None:
     if item.decision == "selected_branch" and item.selected_spdx is not None:
         return _branch_option_id_for_selected_spdx(item, item.selected_spdx)
     return None
+
+
+def _resolved_label(item: ReviewItem) -> str:
+    return "yes" if item.review_status == "approved" else "no"
 
 
 def _suggested_choice(item: ReviewItem) -> tuple[ReviewOption, str] | None:

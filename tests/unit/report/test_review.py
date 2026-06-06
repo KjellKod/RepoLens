@@ -127,6 +127,7 @@ def test_review_collapses_identical_disclosure_choices_and_renders_links(tmp_pat
     assert "source links:" in markdown
     assert "[source1](https://example.invalid/licenses/acme-lib-a)" in markdown
     assert "https://example.invalid/licenses/acme-lib-a" in markdown
+    assert "- resolved: `no`" in markdown
     assert "suggested choice: `Keep full expression: MIT OR Apache-2.0`" in markdown
     assert "avoids an arbitrary branch choice" in markdown
     assert markdown.count("rpl:license-review-item=") == 1
@@ -226,6 +227,7 @@ def test_checked_branch_records_selected_spdx_and_note(tmp_path: Path) -> None:
     assert item["review_status"] == "approved"
     assert item["review_note"] == "Using permissive branch for disclosure."
     assert item["decided_by"] == "reviewer-sentinel"
+    assert "- resolved: `yes`" in path.read_text(encoding="utf-8")
 
 
 def test_report_review_markdown_redacts_token_shaped_notes(tmp_path: Path) -> None:
