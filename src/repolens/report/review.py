@@ -5,7 +5,7 @@ from __future__ import annotations
 import getpass
 import json
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,9 +19,10 @@ from repolens.data.validation import validate_artifact
 from repolens.exit_codes import InputError
 from repolens.policy import classify_license_input
 from repolens.policy.expression import ParseError, pure_or_leaf_options
+from repolens.policy.tiers import risk_rank
 from repolens.report.main import DisclosureRow, select_main_report_rows
 from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
-from repolens.security.sanitize import render_code_span, sanitize_markdown
+from repolens.security.sanitize import markdown_link, render_code_span, sanitize_markdown
 from repolens.shortlist.render import decode_component_ref, encode_component_ref
 
 REVIEW_JSON_FILENAME = "report.review.json"
@@ -33,6 +34,9 @@ _COMPOUND_RE = re.compile(r"\b(AND|OR|WITH)\b|[()]", re.IGNORECASE)
 _ITEM_MARKER_RE = re.compile(r"&lt;!-- rpl:license-review-item=([A-Za-z0-9_-]+) --&gt;")
 _OPTION_MARKER_RE = re.compile(
     r"&lt;!-- rpl:license-review=([A-Za-z0-9_-]+) option=([A-Za-z0-9_-]+) --&gt;"
+)
+_SHORT_OPTION_MARKER_RE = re.compile(
+    r"&lt;!-- rpl:license-review-option=([A-Za-z0-9_-]+) --&gt;"
 )
 _CHECKBOX_RE = re.compile(r"^\s*[-*]\s*\[(?P<mark>[^\]])\]")
 _NOTE_HEADING = "Disclosure note:"
@@ -59,6 +63,10 @@ class ReviewItem:
     policy_tier: str
     raw_spdx: str
     options: tuple[ReviewOption, ...]
+    row_review_ids: tuple[str, ...] = ()
+    component_refs: tuple[str, ...] = ()
+    components: tuple[str, ...] = ()
+    source_urls: tuple[str, ...] = ()
     selected_spdx: str | None = None
     decision: str | None = None
     review_status: str = "open"
@@ -135,7 +143,7 @@ def build_review_items(work_root: Path, *, config: Config | None = None) -> tupl
     """Build review candidates from the same main-report rows as presentation output."""
 
     rows, _file_gaps = select_main_report_rows(Path(work_root), config)
-    return tuple(_review_item_for_row(row) for row in rows if _row_needs_review(row))
+    return _group_review_items(tuple(_review_item_for_row(row) for row in rows if _row_needs_review(row)))
 
 
 def load_review_state(work_root: Path) -> dict[str, ReviewDecision]:
@@ -159,11 +167,17 @@ def load_review_state(work_root: Path) -> dict[str, ReviewDecision]:
         selected_spdx = _non_empty(item.get("selected_spdx"))
         if review_id is None or selected_spdx is None:
             continue
-        decisions[review_id] = ReviewDecision(
+        decision = ReviewDecision(
             review_id=review_id,
             selected_spdx=selected_spdx,
             review_note=_note_text(item.get("review_note")),
         )
+        decisions[review_id] = decision
+        row_review_ids = item.get("row_review_ids")
+        if isinstance(row_review_ids, list):
+            for alias in row_review_ids:
+                if isinstance(alias, str) and alias.strip():
+                    decisions[alias] = decision
     return decisions
 
 
@@ -212,14 +226,20 @@ def render_review_markdown(items: Sequence[ReviewItem]) -> str:
                 "",
                 f"### {render_code_span(item.review_id)} {marker}",
                 "",
-                f"- component: {render_code_span(str(item.component_key['name']))}",
+                f"- components: {_components_cell(item)}",
                 "- versions: "
                 f"{render_code_span('; '.join(_strings(item.component_key['versions'])))}",
                 f"- found in: {render_code_span('; '.join(item.found_in))}",
+                f"- source links: {_source_urls_cell(item)}",
                 f"- current policy tier: {render_code_span(item.policy_tier)}",
                 f"- detected SPDX: {render_code_span(item.raw_spdx)}",
             ]
         )
+        suggested = _suggested_choice(item)
+        if suggested is not None:
+            suggested_option, suggested_reason = suggested
+            lines.append(f"- suggested choice: {render_code_span(suggested_option.label)}")
+            lines.append(f"- suggestion reason: {render_code_span(suggested_reason)}")
         if item.review_status == "approved" and item.selected_spdx:
             lines.append(f"- selected disclosure SPDX: {render_code_span(item.selected_spdx)}")
         for warning in item.warnings:
@@ -228,9 +248,7 @@ def render_review_markdown(items: Sequence[ReviewItem]) -> str:
         for option in item.options:
             checkbox = "[x]" if option.option_id == _checked_option_id(item) else "[ ]"
             option_marker = (
-                "<!-- rpl:license-review="
-                f"{encode_component_ref(item.review_id)} option="
-                f"{encode_component_ref(option.option_id)} -->"
+                f"<!-- rpl:license-review-option={encode_component_ref(option.option_id)} -->"
             )
             lines.append(f"- {checkbox} {render_code_span(option.label)} {option_marker}")
         lines.extend(["", _NOTE_HEADING])
@@ -270,6 +288,61 @@ def _review_item_for_row(row: DisclosureRow) -> ReviewItem:
         policy_tier=decision.effective_tier.value,
         raw_spdx=row.spdx_id,
         options=options,
+        row_review_ids=(review_id_for_row(row),),
+        component_refs=(f"{row.name}|{row.spdx_id}",),
+        components=(row.name,),
+        source_urls=row.source_urls,
+    )
+
+
+def _group_review_items(items: Sequence[ReviewItem]) -> tuple[ReviewItem, ...]:
+    groups: dict[tuple[object, ...], list[ReviewItem]] = {}
+    for item in items:
+        key = (
+            item.raw_spdx,
+            tuple(_strings(item.component_key["versions"])),
+            item.policy_tier,
+            tuple((option.option_id, option.label, option.spdx, option.decision) for option in item.options),
+        )
+        groups.setdefault(key, []).append(item)
+    return tuple(_merged_review_item(group) for group in groups.values())
+
+
+def _merged_review_item(items: Sequence[ReviewItem]) -> ReviewItem:
+    first = items[0]
+    versions = tuple(_strings(first.component_key["versions"]))
+    components = _sorted_unique(
+        component for item in items for component in (item.components or (str(item.component_key["name"]),))
+    )
+    row_review_ids = _sorted_unique(
+        review_id for item in items for review_id in (item.row_review_ids or (item.review_id,))
+    )
+    source_urls = _sorted_unique(url for item in items for url in item.source_urls)
+    found_in = _sorted_unique(repo for item in items for repo in item.found_in)
+    component_refs = _sorted_unique(
+        ref for item in items for ref in (item.component_refs or (_component_ref(item),))
+    )
+    group_id = (
+        "license-review-group:"
+        f"{_review_key_part(first.raw_spdx)}|"
+        f"{_review_key_part(_version_key(versions))}|"
+        f"{_review_key_part(first.policy_tier)}"
+    )
+    return ReviewItem(
+        review_id=group_id,
+        component_key={
+            "name": components[0] if len(components) == 1 else f"{len(components)} components",
+            "versions": list(versions),
+            "raw_spdx": first.raw_spdx,
+        },
+        found_in=found_in,
+        policy_tier=first.policy_tier,
+        raw_spdx=first.raw_spdx,
+        options=first.options,
+        row_review_ids=row_review_ids,
+        component_refs=component_refs,
+        components=components,
+        source_urls=source_urls,
     )
 
 
@@ -399,10 +472,15 @@ def _parse_review_markdown(
         if checkbox is None:
             continue
         marker = _OPTION_MARKER_RE.search(line)
-        if marker is None:
+        short_marker = _SHORT_OPTION_MARKER_RE.search(line) if marker is None else None
+        if marker is not None:
+            review_id = decode_component_ref(marker.group(1))
+            option_id = decode_component_ref(marker.group(2))
+        elif short_marker is not None:
+            review_id = current_review_id
+            option_id = decode_component_ref(short_marker.group(1))
+        else:
             continue
-        review_id = decode_component_ref(marker.group(1))
-        option_id = decode_component_ref(marker.group(2))
         if (
             review_id is None
             or option_id is None
@@ -571,7 +649,8 @@ def _apply_prior(item: ReviewItem, prior: Mapping[str, Any] | None) -> ReviewIte
 
 
 def _block_if_shortlist_open(item: ReviewItem, open_shortlist_refs: set[str]) -> ReviewItem:
-    if _component_ref(item) not in open_shortlist_refs:
+    refs = item.component_refs or (_component_ref(item),)
+    if not any(ref in open_shortlist_refs for ref in refs):
         return item
     warnings = tuple((*item.warnings, "matching shortlist item is still open"))
     return _replace_decision(
@@ -603,6 +682,10 @@ def _replace_decision(
         policy_tier=item.policy_tier,
         raw_spdx=item.raw_spdx,
         options=item.options,
+        row_review_ids=item.row_review_ids,
+        component_refs=item.component_refs,
+        components=item.components,
+        source_urls=item.source_urls,
         selected_spdx=item.selected_spdx if selected_spdx is ... else selected_spdx,
         decision=item.decision if decision is ... else decision,
         review_status=item.review_status if review_status is ... else str(review_status),
@@ -620,6 +703,10 @@ def _item_to_json(item: ReviewItem) -> dict[str, object]:
         "found_in": list(item.found_in),
         "policy_tier": item.policy_tier,
         "raw_spdx": item.raw_spdx,
+        "row_review_ids": list(item.row_review_ids),
+        "component_refs": list(item.component_refs),
+        "components": list(item.components),
+        "source_urls": list(item.source_urls),
         "options": [
             {
                 "option_id": option.option_id,
@@ -676,6 +763,43 @@ def _checked_option_id(item: ReviewItem) -> str | None:
     return None
 
 
+def _suggested_choice(item: ReviewItem) -> tuple[ReviewOption, str] | None:
+    keep_full = _option_by_id(item, KEEP_FULL_OPTION_ID)
+    branch_options = tuple(
+        option for option in item.options if option.decision == "selected_branch" and option.spdx
+    )
+    if branch_options:
+        ranked = tuple(
+            (option, classify_license_input(option.spdx or "").effective_tier)
+            for option in branch_options
+        )
+        best_rank = min(risk_rank(tier) for _option, tier in ranked)
+        best = tuple((option, tier) for option, tier in ranked if risk_rank(tier) == best_rank)
+        has_higher_risk_branch = any(risk_rank(tier) > best_rank for _option, tier in ranked)
+        if len(best) == 1 and has_higher_risk_branch:
+            option, tier = best[0]
+            return option, f"lowest policy-risk branch among the simple OR options ({tier.value})"
+        if keep_full is not None:
+            tier_values = _sorted_unique(tier.value for _option, tier in ranked)
+            if len(tier_values) == 1:
+                return (
+                    keep_full,
+                    f"all simple OR options have policy tier {tier_values[0]}; "
+                    "keeping the full expression avoids an arbitrary branch choice",
+                )
+            return (
+                keep_full,
+                "multiple simple OR options share the lowest policy-risk tier; "
+                "keeping the full expression avoids an arbitrary branch choice",
+            )
+    if keep_full is not None:
+        return (
+            keep_full,
+            "not a simple OR branch choice; keep the full expression unless legal review chooses otherwise",
+        )
+    return None
+
+
 def _branch_option_id_for_selected_spdx(item: ReviewItem, selected_spdx: str) -> str | None:
     for option in item.options:
         if option.decision == "selected_branch" and option.spdx == selected_spdx:
@@ -684,7 +808,35 @@ def _branch_option_id_for_selected_spdx(item: ReviewItem, selected_spdx: str) ->
 
 
 def _component_ref(item: ReviewItem) -> str:
+    if item.component_refs:
+        return item.component_refs[0]
     return f"{item.component_key['name']}|{item.raw_spdx}"
+
+
+def _components_cell(item: ReviewItem) -> str:
+    components = item.components or (str(item.component_key["name"]),)
+    limit = 12
+    rendered = ", ".join(render_code_span(component) for component in components[:limit])
+    if len(components) > limit:
+        rendered = f"{rendered}, ... ({len(components)} total)"
+    return rendered or render_code_span("unknown")
+
+
+def _source_urls_cell(item: ReviewItem) -> str:
+    if not item.source_urls:
+        return render_code_span("none")
+    limit = 8
+    links = [markdown_link(_source_url_label(url, index), url) for index, url in enumerate(item.source_urls[:limit], 1)]
+    if len(item.source_urls) > limit:
+        links.append(f"... ({len(item.source_urls)} total)")
+    return ", ".join(links)
+
+
+def _source_url_label(url: str, index: int) -> str:
+    text = url.strip()
+    if text.startswith("pkg:"):
+        return f"package {index}"
+    return f"source{index}"
 
 
 def _version_key(versions: Sequence[str]) -> str:
@@ -693,6 +845,10 @@ def _version_key(versions: Sequence[str]) -> str:
 
 def _review_key_part(value: str) -> str:
     return redact_tokens(value.strip()) or "unknown"
+
+
+def _sorted_unique(values: Iterable[str]) -> tuple[str, ...]:
+    return tuple(sorted({value for value in values if value}, key=lambda value: (value.casefold(), value)))
 
 
 def _reviewer_identity(identity: str | None) -> str:

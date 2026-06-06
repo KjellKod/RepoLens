@@ -822,6 +822,59 @@ Outputs land under `--work-root`:
 The default policy tiers live in [license-policy.md](roadmap/rpl_license-policy.md). They
 are not runtime-configurable through local config today.
 
+### Advanced: changing default policy tiers
+
+The shipped policy table is
+`src/repolens/policy/data/license-policy.default.json`. It maps normalized SPDX IDs and
+known aliases into `ALLOW`, `REVIEW`, or `BLOCK`. `flag` is the stage that applies this
+file: `ALLOW` rows go straight to `inventory.json` and do **not** receive a
+`shortlist.md` checkbox, while `REVIEW`, `BLOCK`, and `UNKNOWN` rows become shortlist
+items that can be approved or rejected by a human.
+
+Use this when the organization makes a standing policy decision such as "treat
+`Unlicense` as reject/block" or "surface a formerly allowed license for legal review":
+
+1. Edit `src/repolens/policy/data/license-policy.default.json` by moving the SPDX ID from
+   `ALLOW` to `REVIEW` or `BLOCK`, and update caveats/aliases only when the normalized
+   license text should change too.
+2. Run the policy/unit tests before using the policy on a work root:
+
+   ```bash
+   PYTHONPATH=src python3 -m pytest tests/policy tests/unit/test_schema_validation.py
+   ```
+
+3. Back up the current work-root decision artifacts if humans have already been reviewing
+   them:
+
+   ```bash
+   mkdir -p <WORK>/.policy-backup
+   cp <WORK>/shortlist.json <WORK>/shortlist.md <WORK>/shortlist.evidence.json \
+      <WORK>/shortlist.proposals.json <WORK>/shortlist.review.md <WORK>/.policy-backup/ 2>/dev/null || true
+   ```
+
+4. Rebuild policy output:
+
+   ```bash
+   repolens flag --work-root <WORK>
+   repolens shortlist --work-root <WORK>
+   ```
+
+Rerunning `flag` does not rerun scan or resolve, and it does not delete
+`work/<repo>/resolved.ndjson`. It rebuilds `inventory.json`, `shortlist.json`, and
+`shortlist.md` from the resolved records. Before rebuilding, `flag` ingests pending
+checkboxes from the existing `shortlist.md` and carries forward matching
+approved/rejected decisions by exact `component_ref`, so settled rows should not be
+silently reopened. New or materially changed rows stay open. Rich research metadata and
+proposal annotations are separate artifacts; if you need them after a policy rebuild,
+rerun or reingest the relevant `shortlist.evidence.json` and `shortlist.proposals.json`.
+
+Paid/vendor software is a separate decision from SPDX policy. A commercial SDK can still
+declare an open-source license for bundled notices, and `flag` will treat that license
+according to the policy table. If the organization pays for a component and decides it
+must not be submitted as OSS, the row must be rejected in the shortlist. If it is already
+`ALLOW`, it will not have a checkbox until the policy or a supported override surfaces it
+as a `REVIEW`/`BLOCK` row and `flag` is rerun.
+
 ## `shortlist` — artifact proposals + grouped human approval
 
 `repolens shortlist --work-root work` reads the `shortlist.json`

@@ -48,6 +48,22 @@
           },
           "policy_tier": {"type": "string", "minLength": 1},
           "raw_spdx": {"type": "string", "minLength": 1},
+          "row_review_ids": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "component_refs": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "components": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "source_urls": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
           "options": {
             "type": "array",
             "minItems": 2,

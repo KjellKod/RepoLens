@@ -37,5 +37,6 @@ and secure against untrusted repo content by design.
 | [architecture.md](rpl_architecture.md) | The orchestration design (pipeline, resolution ladder, storage, report views) |
 | [security.md](rpl_security.md) | **Mandatory** guardrails + canary tests — must not deviate |
 | [license-policy.md](rpl_license-policy.md) | The default, config-ready risk policy |
+| [github-license-api-download-url.md](rpl_github-license-api-download-url.md) | Follow-up verifier fix for GitHub License API `download_url` evidence |
 | [archive/roadmap.md](archive/rpl_roadmap.md) | 📦 *Archived build plan (historical).* The parallel workstreams, sequencing, milestones, acceptance the build followed; M0–M3 substantially delivered, residual items tracked in issue #20. |
 | [archive/execution.md](archive/rpl_execution.md) | 📦 *Archived build plan (historical).* How the build was driven: Quest vs Workflow lanes, parallel rounds, gates. |

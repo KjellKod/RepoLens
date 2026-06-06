@@ -96,6 +96,7 @@ class RunSummary:
     report_rows: int = 0
     failures: list[RunFailure] = field(default_factory=list)
     skipped: int = 0
+    work_root: Path | None = None
     reports_dir: Path | None = None
     report_paths: tuple[Path, ...] = ()
     appendix_rows_by_label: dict[str, int] = field(default_factory=dict)
@@ -1455,7 +1456,7 @@ def _run_command(args: argparse.Namespace) -> CommandResult:
     work_root = Path(args.work_root)
     out_dir = _resolve_report_out_dir(work_root, args.out_dir)
     _print_run_header(args, out_dir)
-    summary = RunSummary(reports_dir=out_dir)
+    summary = RunSummary(work_root=work_root, reports_dir=out_dir)
     interactive = _run_interactive(args)
 
     persisted_failures = _persisted_scan_failures(work_root)
@@ -2212,6 +2213,13 @@ def _format_counts(counts: dict[str, int]) -> str:
 
 def _review_guidance(summary: RunSummary) -> list[str]:
     lines = ["Review checklist:"]
+    report_review_command = _report_review_command(summary.work_root)
+    lines.append(
+        "  - Disclosure-license review: run this after the report is written to review "
+        "compound or review-worthy disclosure licenses before publishing presentation "
+        "artifacts."
+    )
+    lines.append(f"      {report_review_command}")
     existing_main_paths = [path for path in summary.report_paths if path.exists()]
     if existing_main_paths:
         lines.append("  - Main and presentation reports:")
@@ -2245,6 +2253,12 @@ def _review_guidance(summary: RunSummary) -> list[str]:
             "to generate main and presentation docx files."
         )
     return lines
+
+
+def _report_review_command(work_root: Path | None) -> str:
+    if work_root is None:
+        return "repolens report review --work-root <WORK>"
+    return f"repolens report review --work-root {shlex.quote(str(work_root))}"
 
 
 def _has_coverage_gaps(gaps_by_label: dict[str, dict[str, int]]) -> bool:
@@ -3259,19 +3273,63 @@ def _shortlist_research_stage(args: argparse.Namespace) -> CommandResult:
 def _report_review(args: argparse.Namespace) -> CommandResult:
     from repolens.report.review import run_report_review
 
+    work_root = Path(args.work_root)
     result = run_report_review(
-        args.work_root,
+        work_root,
         config=args.runtime_config,
         identity=args.identity,
     )
     return CommandResult(
         CommandStatus.SUCCESS,
-        (
-            f"report review: {result.open_count} open item(s) of {result.item_count}; "
-            f"wrote {result.markdown_path}, {result.json_path}"
-        ),
+        _report_review_done_message(result, work_root),
         metadata=result,
     )
+
+
+def _report_review_done_message(result: object, work_root: Path) -> str:
+    markdown_path = Path(getattr(result, "markdown_path"))
+    json_path = Path(getattr(result, "json_path"))
+    open_count = int(getattr(result, "open_count"))
+    item_count = int(getattr(result, "item_count"))
+    lines = [
+        f"report review: {open_count} open item(s) of {item_count}; "
+        f"wrote {markdown_path}, {json_path}",
+        "",
+        "What this does:",
+        "  Builds a human review checklist for final disclosure-license choices in the "
+        "presentation report. It is for rows where RepoLens detected a compound or "
+        "review-worthy expression, such as `MIT OR Apache-2.0`, and needs one disclosure "
+        "choice before publishing presentation artifacts.",
+        "",
+        "What to edit:",
+        f"  Open {markdown_path}",
+        "  For each item, check exactly one option under `Choose disclosure license:`.",
+        "  You may add a short note under `Disclosure note:`.",
+        "  Do not edit any `rpl:license-review*` markers.",
+        "",
+        "Then ingest your choices:",
+        f"  repolens report review --work-root {shlex.quote(str(work_root))}",
+        "",
+        "Then rebuild the report so approved choices flow into presentation outputs:",
+        f"  repolens report --work-root {shlex.quote(str(work_root))}",
+    ]
+    if open_count == 0:
+        lines.extend(
+            [
+                "",
+                "Status: all report-review items are approved. You can rerun the report now.",
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "",
+                "Status: review is still open. The report can exist, but presentation "
+                "outputs will not use these disclosure choices until you check options "
+                "and rerun `repolens report review`.",
+            ]
+        )
+    return "\n".join(lines)
 
 
 def _shortlist_scancode_retry_hint(work_root: Path) -> str:
@@ -3329,7 +3387,7 @@ def _report(args: argparse.Namespace) -> CommandResult:
         )
     except ReportGateOpen as exc:
         return CommandResult(CommandStatus.FINDINGS_OPEN, str(exc))
-    summary = RunSummary(reports_dir=out_dir)
+    summary = RunSummary(work_root=Path(args.work_root), reports_dir=out_dir)
     _apply_report_result(summary, result)
     return CommandResult(
         CommandStatus.SUCCESS,

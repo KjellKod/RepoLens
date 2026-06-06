@@ -598,18 +598,27 @@ class CliTests(unittest.TestCase):
                 ],
             )
 
-            code = cli.main(
-                [
-                    "report",
-                    "review",
-                    "--work-root",
-                    str(work_root),
-                    "--identity",
-                    "reviewer-sentinel",
-                ]
-            )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main(
+                    [
+                        "report",
+                        "review",
+                        "--work-root",
+                        str(work_root),
+                        "--identity",
+                        "reviewer-sentinel",
+                    ]
+                )
 
             self.assertEqual(code, 0)
+            output = stdout.getvalue()
+            self.assertIn("What this does:", output)
+            self.assertIn("What to edit:", output)
+            self.assertIn("Choose disclosure license:", output)
+            self.assertIn("Do not edit any `rpl:license-review*` markers.", output)
+            self.assertIn(f"repolens report review --work-root {work_root}", output)
+            self.assertIn(f"repolens report --work-root {work_root}", output)
             self.assertTrue((work_root / "report.review.md").exists())
             payload = json.loads((work_root / "report.review.json").read_text(encoding="utf-8"))
             self.assertEqual(payload["open_count"], 1)

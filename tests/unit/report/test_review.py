@@ -100,6 +100,56 @@ def test_review_candidate_selection_matches_main_report_rows(tmp_path: Path) -> 
     assert [item.component_key["name"] for item in items] == ["runtime-lib"]
 
 
+def test_review_collapses_identical_disclosure_choices_and_renders_links(tmp_path: Path) -> None:
+    _write_resolved(
+        tmp_path,
+        _record(name="acme-lib-a", spdx_id="MIT OR Apache-2.0"),
+        _record(name="acme-lib-b", spdx_id="MIT OR Apache-2.0"),
+    )
+
+    items = build_review_items(tmp_path)
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    payload = _review_json(tmp_path)
+
+    assert len(items) == 1
+    assert items[0].components == ("acme-lib-a", "acme-lib-b")
+    assert len(items[0].row_review_ids) == 2
+    assert payload["open_count"] == 1
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["components"] == ["acme-lib-a", "acme-lib-b"]
+    assert "acme-lib-a" in markdown
+    assert "acme-lib-b" in markdown
+    assert "source links:" in markdown
+    assert "[source1](https://example.invalid/licenses/acme-lib-a)" in markdown
+    assert "https://example.invalid/licenses/acme-lib-a" in markdown
+    assert "suggested choice: `Keep full expression: MIT OR Apache-2.0`" in markdown
+    assert "avoids an arbitrary branch choice" in markdown
+    assert markdown.count("rpl:license-review-item=") == 1
+    assert "rpl:license-review=" not in markdown
+    assert markdown.count("rpl:license-review-option=") == 4
+
+
+def test_report_review_suggests_lower_risk_or_branch(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT OR GPL-3.0-only"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "suggested choice: `MIT`" in markdown
+    assert "lowest policy-risk branch among the simple OR options (ALLOW)" in markdown
+
+
+def test_report_review_suggests_keep_full_for_non_branch_expression(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT AND Apache-2.0"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "suggested choice: `Keep full expression: MIT AND Apache-2.0`" in markdown
+    assert "not a simple OR branch choice" in markdown
+
+
 def test_checked_branch_records_selected_spdx_and_note(tmp_path: Path) -> None:
     _write_resolved(tmp_path, _record(spdx_id="MIT OR Apache-2.0"))
     run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
@@ -154,7 +204,8 @@ def test_report_review_markers_do_not_encode_token_shaped_names(tmp_path: Path) 
     payload = _review_json(tmp_path)
     assert token not in markdown
     assert token not in json.dumps(payload)
-    assert REDACTION in payload["items"][0]["review_id"]
+    assert REDACTION not in payload["items"][0]["review_id"]
+    assert REDACTION in payload["items"][0]["row_review_ids"][0]
 
 
 def test_report_review_option_markers_do_not_encode_token_shaped_spdx(tmp_path: Path) -> None:
@@ -166,11 +217,10 @@ def test_report_review_option_markers_do_not_encode_token_shaped_spdx(tmp_path: 
     markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
     payload = _review_json(tmp_path)
     decoded_markers: list[str] = []
-    for review_id, option_id in re.findall(
-        r"rpl:license-review=([A-Za-z0-9_-]+) option=([A-Za-z0-9_-]+)",
+    for option_id in re.findall(
+        r"rpl:license-review-option=([A-Za-z0-9_-]+)",
         markdown,
     ):
-        decoded_markers.append(decode_component_ref(review_id) or "")
         decoded_markers.append(decode_component_ref(option_id) or "")
     assert decoded_markers
     assert token not in markdown
