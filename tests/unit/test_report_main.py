@@ -33,6 +33,14 @@ def test_render_main_report_writes_md_and_csv_from_resolved_records(
     assert result.csv_path.exists()
     assert result.html_path.exists()
     assert result.docx_path.exists()
+    assert result.presentation_markdown_path == tmp_path / "out" / "report.presentation.md"
+    assert result.presentation_csv_path == tmp_path / "out" / "report.presentation.csv"
+    assert result.presentation_html_path == tmp_path / "out" / "report.presentation.html"
+    assert result.presentation_docx_path == tmp_path / "out" / "report.presentation.docx"
+    assert result.presentation_markdown_path.exists()
+    assert result.presentation_csv_path.exists()
+    assert result.presentation_html_path.exists()
+    assert result.presentation_docx_path.exists()
     assert tuple(_csv_rows(result.csv_path)[0]) == COLUMNS
     markdown = result.markdown_path.read_text(encoding="utf-8")
     for column in ("version", "source_url", "modified?", "origin", "scope", "distribution"):
@@ -50,6 +58,10 @@ def test_render_main_report_defaults_out_dir_under_work_root(
     assert result.csv_path == tmp_path / "reports" / "report.main.csv"
     assert result.html_path == tmp_path / "reports" / "report.main.html"
     assert result.docx_path == tmp_path / "reports" / "report.main.docx"
+    assert result.presentation_markdown_path == tmp_path / "reports" / "report.presentation.md"
+    assert result.presentation_csv_path == tmp_path / "reports" / "report.presentation.csv"
+    assert result.presentation_html_path == tmp_path / "reports" / "report.presentation.html"
+    assert result.presentation_docx_path == tmp_path / "reports" / "report.presentation.docx"
 
 
 def test_render_main_report_writes_dependency_boundary_artifacts(
@@ -435,6 +447,30 @@ def test_pipe_characters_are_escaped_in_markdown_table(
     assert "https://example.invalid/licenses/acme\\|widget" in markdown
 
 
+def test_main_markdown_safe_source_url_label_is_not_double_escaped(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    url = (
+        "https://api.deps.dev/v3alpha/systems/npm/packages/"
+        "@aashutoshrathi%2Fword-wrap/versions/1.2.6"
+    )
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [{**resolved_record, "evidence": {**resolved_record["evidence"], "url": url}}],
+    )
+
+    markdown = render_main_report(
+        tmp_path,
+        tmp_path / "out",
+        _report_config(),
+    ).markdown_path.read_text(encoding="utf-8")
+
+    assert f"[{url}]({url})" in markdown
+    assert "api\\." not in markdown
+    assert "word\\-wrap" not in markdown
+
+
 def test_html_report_uses_wide_landscape_layout_and_inert_unsafe_urls(
     tmp_path: Path, resolved_record: dict[str, Any]
 ) -> None:
@@ -467,7 +503,7 @@ def test_html_report_uses_wide_landscape_layout_and_inert_unsafe_urls(
     assert "acme &lt;widget&gt;" in html
     assert "javascript:" not in html
     assert "javascript&#58;alert(1)" in html
-    assert "href=\"javascript" not in html
+    assert 'href="javascript' not in html
 
 
 def test_empty_resolved_file_renders_file_gap(tmp_path: Path) -> None:
@@ -500,7 +536,16 @@ def test_report_renders_md_csv_without_header_config(
     assert result.html_path.exists()
     assert result.docx_path is None
     assert result.docx_skipped is True
+    assert result.presentation_markdown_path is not None
+    assert result.presentation_csv_path is not None
+    assert result.presentation_html_path is not None
+    assert result.presentation_markdown_path.exists()
+    assert result.presentation_csv_path.exists()
+    assert result.presentation_html_path.exists()
+    assert result.presentation_docx_path is None
+    assert result.presentation_docx_skipped is True
     assert not (tmp_path / "out" / "report.main.docx").exists()
+    assert not (tmp_path / "out" / "report.presentation.docx").exists()
 
 
 def test_report_skips_docx_when_header_absent_non_interactive(
@@ -519,10 +564,19 @@ def test_report_skips_docx_when_header_absent_non_interactive(
     assert output.getvalue().strip() == DOCX_SKIPPED_NOTICE
     assert result.docx_path is None
     assert result.docx_skipped is True
+    assert result.presentation_docx_path is None
+    assert result.presentation_docx_skipped is True
     assert not (tmp_path / "out" / "report.main.docx").exists()
+    assert not (tmp_path / "out" / "report.presentation.docx").exists()
     assert result.csv_path.exists()
     assert result.markdown_path.exists()
     assert result.html_path.exists()
+    assert result.presentation_csv_path is not None
+    assert result.presentation_markdown_path is not None
+    assert result.presentation_html_path is not None
+    assert result.presentation_csv_path.exists()
+    assert result.presentation_markdown_path.exists()
+    assert result.presentation_html_path.exists()
 
 
 def test_report_header_present_but_empty_still_raises(
@@ -552,10 +606,16 @@ def test_report_prompts_and_renders_docx_with_entered_header(
     )
 
     assert result.docx_path is not None
+    assert result.presentation_docx_path is not None
     assert result.docx_skipped is False
     document_xml = zipfile.ZipFile(result.docx_path).read("word/document.xml").decode("utf-8")
+    presentation_xml = (
+        zipfile.ZipFile(result.presentation_docx_path).read("word/document.xml").decode("utf-8")
+    )
     assert "Acme Inc" in document_xml
     assert "Confidential - internal only" in document_xml
+    assert "RepoLens Presentation Report" in presentation_xml
+    assert "Acme Inc" in presentation_xml
 
 
 def test_report_prompt_defaults_use_owner_and_default_legal(
@@ -597,9 +657,12 @@ def test_report_prompt_eof_without_owner_skips_docx(
     )
 
     assert result.docx_path is None
+    assert result.presentation_docx_path is None
     assert result.docx_skipped is True
+    assert result.presentation_docx_skipped is True
     assert DOCX_SKIPPED_NOTICE in output.getvalue()
     assert not (tmp_path / "out" / "report.main.docx").exists()
+    assert not (tmp_path / "out" / "report.presentation.docx").exists()
 
 
 def test_same_component_can_split_between_main_and_appendix(

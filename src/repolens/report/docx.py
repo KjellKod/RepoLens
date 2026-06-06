@@ -24,14 +24,19 @@ _BODY_FONT_HALF_POINTS = 16
 _COLUMN_WIDTHS_DXA = {
     "name": 1500,
     "spdx_id": 900,
+    "software license (spdx)": 1400,
+    "description": 2700,
     "version": 950,
     "source_url": 3600,
+    "source url": 3400,
     "modified?": 760,
     "origin": 1300,
     "scope": 850,
     "distribution": 1000,
     "found_in": 1200,
+    "found_id": 1400,
     "evidence_source_layer": 1000,
+    "evidence source": 1200,
     "coverage_gaps": 1628,
 }
 
@@ -43,7 +48,28 @@ def render_docx(
 ) -> bytes:
     """Render a minimal valid docx package with escaped, redacted text fields."""
 
-    document_xml = _document_xml(header, columns, rows)
+    document_xml = _document_xml(
+        header,
+        "RepoLens Main Report",
+        (("", columns, tuple(_row_values(row) for row in rows)),),
+    )
+    return _docx_package(document_xml)
+
+
+def render_docx_sections(
+    header: ReportHeader,
+    title: str,
+    sections: Sequence[tuple[str, Sequence[str], Sequence[Sequence[object]]]],
+    *,
+    preface: str | None = None,
+) -> bytes:
+    """Render a minimal valid docx package with one table per section."""
+
+    document_xml = _document_xml(header, title, sections, preface=preface)
+    return _docx_package(document_xml)
+
+
+def _docx_package(document_xml: str) -> bytes:
     parts = {
         "[Content_Types].xml": _CONTENT_TYPES,
         "_rels/.rels": _ROOT_RELS,
@@ -62,22 +88,31 @@ def render_docx(
 
 def _document_xml(
     header: ReportHeader,
-    columns: Sequence[str],
-    rows: Sequence[DisclosureRow],
+    title: str,
+    sections: Sequence[tuple[str, Sequence[str], Sequence[Sequence[object]]]],
+    *,
+    preface: str | None = None,
 ) -> str:
-    column_widths = _column_widths(columns)
-    table_rows = [_table_row(columns, column_widths, bold=True)]
-    table_rows.extend(_table_row(_row_values(row), column_widths) for row in rows)
+    section_xml = []
+    if preface:
+        section_xml.append(_paragraph(preface))
+    for section_title, columns, rows in sections:
+        if section_title:
+            section_xml.append(_paragraph(section_title, size_half_points=18, bold=True))
+        column_widths = _column_widths(columns)
+        table_rows = [_table_row(columns, column_widths, bold=True)]
+        table_rows.extend(_table_row(row, column_widths) for row in rows)
+        section_xml.append(
+            "<w:tbl>" + _table_grid(column_widths) + "".join(table_rows) + "</w:tbl>"
+        )
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f'<w:document xmlns:w="{_W_NS}"><w:body>'
-        f"{_paragraph('RepoLens Main Report', size_half_points=24, bold=True)}"
+        f"{_paragraph(title, size_half_points=24, bold=True)}"
         f"{_paragraph(header.org_name, size_half_points=20)}"
         f"{_paragraph(header.legal_text, size_half_points=18)}"
-        "<w:tbl>"
-        + _table_grid(column_widths)
-        + "".join(table_rows)
-        + f"</w:tbl>{_section_properties()}</w:body></w:document>"
+        + "".join(section_xml)
+        + f"{_section_properties()}</w:body></w:document>"
     )
 
 
@@ -108,7 +143,7 @@ def _paragraph(
         "<w:p><w:pPr>"
         '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>'
         "</w:pPr><w:r><w:rPr>"
-        f"{bold_xml}<w:sz w:val=\"{size_half_points}\"/>"
+        f'{bold_xml}<w:sz w:val="{size_half_points}"/>'
         f"</w:rPr><w:t>{_xml_text(value)}</w:t></w:r></w:p>"
     )
 

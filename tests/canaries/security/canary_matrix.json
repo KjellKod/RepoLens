@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 59,
+    "expected_active_count": 61,
     "markers": [
         "offline",
         "security",
@@ -30,6 +30,18 @@
             "status": "active",
             "nodeid": "tests/canaries/security/test_output_canaries.py::test_p6a_report_markdown_artifact_sanitizes_hrefs_and_names",
             "guardrail": "markdown_href_sanitization"
+        },
+        {
+            "id": "p6a_report_html_artifact_sanitizes_hrefs_and_names",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_output_canaries.py::test_p6a_report_html_artifact_sanitizes_hrefs_and_names",
+            "guardrail": "html_href_sanitization"
+        },
+        {
+            "id": "presentation_report_artifacts_preserve_output_security_invariants",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_output_canaries.py::test_presentation_report_artifacts_preserve_output_security_invariants",
+            "guardrail": "presentation_output_sanitization"
         },
         {
             "id": "x2_ssrf_resolve_validate_blocks",

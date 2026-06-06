@@ -67,6 +67,44 @@ def test_markdown_safe_link_survives() -> None:
     )
 
 
+def test_sanitize_markdown_preserves_safe_link_label_without_double_escape() -> None:
+    url = (
+        "https://api.deps.dev/v3alpha/systems/npm/packages/"
+        "@aashutoshrathi%2Fword-wrap/versions/1.2.6"
+    )
+
+    output = sanitize_markdown(markdown_link(url, url))
+
+    assert output == f"[{url}]({url})"
+    assert "api\\." not in output
+    assert "word\\-wrap" not in output
+
+
+def test_markdown_link_escapes_self_url_label_delimiters_without_overescaping() -> None:
+    url = "https://allowed.example/path[ref]name"
+
+    output = markdown_link(url, url)
+
+    assert output == f"[https://allowed.example/path\\[ref\\]name]({url})"
+    assert "allowed\\.example" not in output
+    assert sanitize_markdown(output) == output
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://allowed.example/license#section",
+        "https://allowed.example/license(foo)",
+        "https://allowed.example/a_b!c",
+    ],
+)
+def test_markdown_link_keeps_common_self_url_punctuation_readable(url: str) -> None:
+    output = markdown_link(url, url)
+
+    assert output == f"[{url}]({url})"
+    assert sanitize_markdown(output) == output
+
+
 def test_malformed_markdown_url_is_neutralized() -> None:
     assert sanitize_markdown("[x](http://[::1)") == "x"
 
