@@ -55,7 +55,7 @@ def test_presentation_markdown_groups_by_exact_spdx_and_states_data_limits() -> 
     assert "## MIT (1)" in markdown
     assert "## MIT OR Apache-2.0 (1)" in markdown
     assert markdown.index("## Apache-2.0 (1)") < markdown.index("## MIT (1)")
-    assert "not available in current resolved records" in markdown
+    assert " n/a " in markdown
 
 
 def test_presentation_html_uses_grouped_tables_and_neutralizes_unsafe_urls() -> None:

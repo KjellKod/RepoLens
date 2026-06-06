@@ -34,7 +34,7 @@ DATA_LIMITATION_NOTE = (
     "Description and found_id are not durable resolved-report fields today; "
     "presentation rows show this as not available rather than inventing values."
 )
-UNAVAILABLE = "not available in current resolved records"
+UNAVAILABLE = "n/a"
 _HTML_COLUMN_WIDTHS = (15, 12, 21, 10, 27, 8, 7)
 
 
