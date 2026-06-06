@@ -219,6 +219,8 @@ def render_review_markdown(items: Sequence[ReviewItem]) -> str:
     ]
     if not items:
         lines.append("No disclosure-license review items.")
+    else:
+        lines.extend(_high_attention_section(items))
     for item in items:
         marker = f"<!-- rpl:license-review-item={encode_component_ref(item.review_id)} -->"
         lines.extend(
@@ -244,6 +246,8 @@ def render_review_markdown(items: Sequence[ReviewItem]) -> str:
             suggested_option, suggested_reason = suggested
             lines.append(f"- suggested choice: {render_code_span(suggested_option.label)}")
             lines.append(f"- suggestion reason: {render_code_span(suggested_reason)}")
+        for high_attention in _high_attention_notes(item):
+            lines.append(f"- ⚠️ high attention: {render_code_span(high_attention)}")
         if item.review_status == "approved" and item.selected_spdx:
             lines.append(f"- selected disclosure SPDX: {render_code_span(item.selected_spdx)}")
         for warning in item.warnings:
@@ -801,6 +805,56 @@ def _suggested_choice(item: ReviewItem) -> tuple[ReviewOption, str] | None:
             "not a simple OR branch choice; keep the full expression unless legal review chooses otherwise",
         )
     return None
+
+
+def _high_attention_section(items: Sequence[ReviewItem]) -> list[str]:
+    rows = [
+        f"- ⚠️ {_high_attention_summary(item)}"
+        for item in items
+        if _high_attention_notes(item)
+    ]
+    if not rows:
+        return []
+    return [
+        "## ⚠️ High-Attention License Choices",
+        "",
+        "These review items include `REVIEW`, `BLOCK`, or `UNKNOWN` license choices. "
+        "Resolve them deliberately before final presentation output.",
+        "",
+        *rows,
+        "",
+    ]
+
+
+def _high_attention_summary(item: ReviewItem) -> str:
+    suggested = _suggested_choice(item)
+    suggested_text = (
+        f"; suggested choice: {render_code_span(suggested[0].label)}"
+        if suggested is not None
+        else ""
+    )
+    return (
+        f"{render_code_span(_components_summary(item))} ({render_code_span(item.raw_spdx)}): "
+        f"{'; '.join(_high_attention_notes(item))}{suggested_text}"
+    )
+
+
+def _high_attention_notes(item: ReviewItem) -> tuple[str, ...]:
+    notes: list[str] = []
+    for option in item.options:
+        if option.option_id == LEGAL_FOLLOW_UP_OPTION_ID or option.spdx is None:
+            continue
+        tier = classify_license_input(option.spdx).effective_tier
+        if tier != PolicyTier.ALLOW:
+            notes.append(f"{option.spdx} is policy tier {tier.value}")
+    return tuple(_sorted_unique(notes))
+
+
+def _components_summary(item: ReviewItem) -> str:
+    components = item.components or (str(item.component_key["name"]),)
+    if len(components) == 1:
+        return components[0]
+    return f"{components[0]} + {len(components) - 1} more"
 
 
 def _lower_risk_branch_reason(

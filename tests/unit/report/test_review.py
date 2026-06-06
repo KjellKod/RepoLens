@@ -142,6 +142,24 @@ def test_report_review_suggests_lower_risk_or_branch(tmp_path: Path) -> None:
     markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
     assert "suggested choice: `MIT`" in markdown
     assert "MIT has policy tier ALLOW; lower risk than GPL-3.0-only (BLOCK)" in markdown
+    assert "## ⚠️ High-Attention License Choices" in markdown
+    assert (
+        "- ⚠️ `acme-lib` (`MIT OR GPL-3.0-only`): GPL-3.0-only is policy tier BLOCK; "
+        "suggested choice: `MIT`"
+    ) in markdown
+    assert "- ⚠️ high attention: `GPL-3.0-only is policy tier BLOCK`" in markdown
+
+
+def test_report_review_skips_high_attention_section_for_permissive_choices(
+    tmp_path: Path,
+) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="MIT OR Apache-2.0"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "High-Attention License Choices" not in markdown
+    assert "high attention:" not in markdown
 
 
 def test_report_review_suggests_keep_full_for_non_branch_expression(tmp_path: Path) -> None:
@@ -166,6 +184,17 @@ def test_report_review_suggests_keep_full_when_lowest_risk_branch_ties(tmp_path:
         "Apache-2.0 and MIT have policy tier ALLOW; "
         "lower risk than LGPL-2.1-or-later (REVIEW)"
     ) in markdown
+    assert "LGPL-2.1-or-later is policy tier REVIEW" in markdown
+
+
+def test_report_review_marks_non_branch_review_expression_high_attention(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="Unicode-3.0 AND MIT"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "## ⚠️ High-Attention License Choices" in markdown
+    assert "Unicode-3.0 AND MIT is policy tier REVIEW" in markdown
 
 
 def test_checked_branch_records_selected_spdx_and_note(tmp_path: Path) -> None:
