@@ -322,8 +322,14 @@ def test_multiple_checked_options_leave_item_open(tmp_path: Path) -> None:
     item = _review_json(tmp_path)["items"][0]
     assert result.open_count == 1
     assert item["selected_spdx"] is None
+    assert item["decision"] is None
     assert item["review_status"] == "open"
-    assert item["warnings"] == ["multiple checked options; choose exactly one"]
+    assert item["warnings"] == ["2 or more checked options; choose exactly one"]
+    markdown = path.read_text(encoding="utf-8")
+    assert "- resolved: `no`" in markdown
+    assert "- [ ] `MIT`" in markdown
+    assert "- [ ] `Apache-2.0`" in markdown
+    assert "- warning: `2 or more checked options; choose exactly one`" in markdown
 
 
 def test_open_shortlist_overlap_blocks_selected_disclosure(tmp_path: Path) -> None:

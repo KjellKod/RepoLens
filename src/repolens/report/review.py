@@ -541,7 +541,7 @@ def _apply_prior_and_markdown(
         if parsed_decision.invalid_marks:
             warnings.append("invalid checkbox mark ignored")
         if len(parsed_decision.option_ids) > 1:
-            warnings.append("multiple checked options; choose exactly one")
+            warnings.append("2 or more checked options; choose exactly one")
             updated.append(
                 _block_if_shortlist_open(
                     _replace_decision(
