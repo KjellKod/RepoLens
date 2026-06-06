@@ -36,6 +36,7 @@ def _write_report(out_dir: Path, rows: int = 1) -> cli.CommandResult:
     lines.extend(f"sentinel-lib-{index},MIT" for index in range(rows))
     (out_dir / "report.main.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
     (out_dir / "report.main.md").write_text("# report\n", encoding="utf-8")
+    (out_dir / "report.main.html").write_text("<!doctype html>\n", encoding="utf-8")
     (out_dir / "report.main.docx").write_bytes(b"docx")
     return cli.CommandResult(cli.CommandStatus.SUCCESS, "wrote report")
 
@@ -139,6 +140,7 @@ def test_report_command_defaults_out_dir_under_work_root(
     assert code == 0
     assert (work_root / "reports" / "report.main.md").exists()
     assert (work_root / "reports" / "report.main.csv").exists()
+    assert (work_root / "reports" / "report.main.html").exists()
 
 
 def test_run_yes_no_header_skips_docx_via_report_stage(
@@ -211,6 +213,7 @@ def test_run_yes_no_header_skips_docx_via_report_stage(
     assert "docx skipped (no report.header)" in stderr.getvalue()
     assert (out_dir / "report.main.md").exists()
     assert (out_dir / "report.main.csv").exists()
+    assert (out_dir / "report.main.html").exists()
     assert not (out_dir / "report.main.docx").exists()
 
 
@@ -1283,9 +1286,10 @@ def test_report_resume_currency_is_config_aware_for_skipped_docx(tmp_path: Path)
     )
     (work_root / "shortlist.md").write_text("settled\n", encoding="utf-8")
     out_dir.mkdir(parents=True, exist_ok=True)
-    # A prior `--yes` run with no header skipped the docx: only md/csv exist.
+    # A prior `--yes` run with no header skipped the docx but wrote all data artifacts.
     (out_dir / "report.main.md").write_text("# report\n", encoding="utf-8")
     (out_dir / "report.main.csv").write_text("name,spdx_id\n", encoding="utf-8")
+    (out_dir / "report.main.html").write_text("<!doctype html>\n", encoding="utf-8")
     for input_path in (
         resolved_path,
         work_root / "inventory.json",
@@ -1611,9 +1615,10 @@ def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: 
     reports_dir.mkdir()
     main_md = reports_dir / "report.main.md"
     main_csv = reports_dir / "report.main.csv"
+    main_html = reports_dir / "report.main.html"
     appendix_md = reports_dir / "report.appendix.build-ci.md"
     appendix_csv = reports_dir / "report.appendix.build-ci.csv"
-    for path in (main_md, main_csv, appendix_md, appendix_csv):
+    for path in (main_md, main_csv, main_html, appendix_md, appendix_csv):
         path.write_text("x\n", encoding="utf-8")
     summary = cli.RunSummary(
         repo_refs={"sentinel-alpha"},
@@ -1621,7 +1626,7 @@ def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: 
         failures=[cli.RunFailure("scan", "sentinel-private", "needs auth")],
         skipped=1,
         reports_dir=reports_dir,
-        report_paths=(main_md, main_csv),
+        report_paths=(main_md, main_csv, main_html),
         appendix_rows_by_label={"build-ci": 1},
         appendix_paths_by_label={"build-ci": (appendix_md, appendix_csv)},
         coverage_gaps_by_label={"build-ci": {"missing_spdx_id": 1, "missing_source_url": 1}},

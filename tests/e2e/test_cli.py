@@ -460,6 +460,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertTrue((out_dir / "report.main.md").exists())
             self.assertTrue((out_dir / "report.main.csv").exists())
+            self.assertTrue((out_dir / "report.main.html").exists())
             self.assertTrue((out_dir / "report.main.docx").exists())
 
     def test_report_missing_work_root_returns_two(self) -> None:
@@ -556,6 +557,7 @@ class CliTests(unittest.TestCase):
             self.assertIn("docx skipped (no report.header)", stderr.getvalue())
             self.assertTrue((out_dir / "report.main.md").exists())
             self.assertTrue((out_dir / "report.main.csv").exists())
+            self.assertTrue((out_dir / "report.main.html").exists())
             self.assertFalse((out_dir / "report.main.docx").exists())
 
 

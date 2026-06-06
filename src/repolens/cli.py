@@ -68,7 +68,7 @@ CommandHandler = Callable[[argparse.Namespace], CommandResult]
 
 
 STAGE_COMMANDS = ("discover", "scan", "resolve", "flag", "shortlist", "report")
-REPORT_MAIN_DATA_FILENAMES = ("report.main.md", "report.main.csv")
+REPORT_MAIN_DATA_FILENAMES = ("report.main.md", "report.main.csv", "report.main.html")
 REPORT_MAIN_DOCX_FILENAME = "report.main.docx"
 REPORT_MAIN_FILENAMES = (*REPORT_MAIN_DATA_FILENAMES, REPORT_MAIN_DOCX_FILENAME)
 
@@ -230,7 +230,7 @@ _STAGE_HELP = {
             "resolved.ndjson files from resolve, discovered.json categories when present, "
             "a clear shortlist.json when present, and report.header config for docx.",
             "repolens report --work-root <WORK>",
-            "report.main.{md,csv,docx} + report.appendix.<category>.{md,csv}.",
+            "report.main.{md,csv,html,docx} + report.appendix.<category>.{md,csv}.",
             "review and share it — you are responsible for validating the result.",
         ),
     ),
@@ -611,7 +611,7 @@ def _configure_run_parser(subparser: argparse.ArgumentParser) -> None:
         type=Path,
         metavar="PATH",
         help=(
-            "Directory for report.main.{md,csv,docx} and appendix artifacts "
+            "Directory for report.main.{md,csv,html,docx} and appendix artifacts "
             "(default: <work-root>/reports)."
         ),
     )
@@ -802,7 +802,7 @@ def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--out-dir",
         type=Path,
-        help="Directory for report.main.{md,csv,docx} and appendix artifacts.",
+        help="Directory for report.main.{md,csv,html,docx} and appendix artifacts.",
     )
     subparser.set_defaults(handler=_report)
 
@@ -1965,7 +1965,7 @@ def _report_outputs_current(
     out_dir: Path, input_paths: Sequence[Path], *, require_docx: bool = True
 ) -> bool:
     # When no header is configured the docx is legitimately skipped, so resume
-    # currency keys off the always-produced md/csv only. Once a header is added,
+    # currency keys off the always-produced md/csv/html only. Once a header is added,
     # the docx becomes required again so a previously skipped run re-renders it.
     filenames = REPORT_MAIN_FILENAMES if require_docx else REPORT_MAIN_DATA_FILENAMES
     output_paths = tuple(Path(out_dir) / filename for filename in filenames)
@@ -2031,7 +2031,7 @@ def _run_done_message(summary: RunSummary) -> str:
 
 
 def _apply_report_result(summary: RunSummary, result: ReportResult) -> None:
-    paths = [result.markdown_path, result.csv_path]
+    paths = [result.markdown_path, result.csv_path, result.html_path]
     if result.docx_path is not None:
         paths.append(result.docx_path)
     summary.report_rows = result.row_count

@@ -179,7 +179,7 @@ resolved shortlist; it never resolves items itself.
       **re-fetched and verified** before an item can close. **Security-critical: full
       workflow lane** ([execution doc](rpl_execution.md#execution-intensity--model-lanes)).
 - [x] P6b — report full: extends the merged P6a with category selection →
-      `report.main.{md,csv,docx}` + `report.appendix.<category>.*`; docx from the
+      `report.main.{md,csv,html}` + optional `.docx` + `report.appendix.<category>.*`; docx from the
       generic template with org/legal text injected at runtime; **refuses to assemble
       while any flagged item is open**.
 - [x] X1 — fixtures grown for R3: injection-bearing fixtures (prompt-injection content

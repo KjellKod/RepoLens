@@ -83,6 +83,51 @@ def test_docx_table_emits_tblpr_and_grid_with_one_col_per_column() -> None:
     assert grid.tag == f"{{{w}}}tblGrid"
     grid_cols = grid.findall(f"{{{w}}}gridCol")
     assert len(grid_cols) == len(COLUMNS)
+    assert [col.attrib[f"{{{w}}}w"] for col in grid_cols] == [
+        "1500",
+        "900",
+        "950",
+        "3600",
+        "760",
+        "1300",
+        "850",
+        "1000",
+        "1200",
+        "1000",
+        "1628",
+    ]
+
+
+def test_docx_uses_landscape_page_with_fixed_width_table() -> None:
+    xml = _document_xml(render_docx(_header(), COLUMNS, [_row()]))
+
+    root = ElementTree.fromstring(xml)
+    w = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    section = root.find(f".//{{{w}}}sectPr")
+    assert section is not None
+    page_size = section.find(f"{{{w}}}pgSz")
+    margins = section.find(f"{{{w}}}pgMar")
+    assert page_size is not None
+    assert margins is not None
+    assert page_size.attrib[f"{{{w}}}orient"] == "landscape"
+    assert page_size.attrib[f"{{{w}}}w"] == "15840"
+    assert page_size.attrib[f"{{{w}}}h"] == "12240"
+    assert margins.attrib[f"{{{w}}}left"] == "576"
+    assert margins.attrib[f"{{{w}}}right"] == "576"
+
+    table_properties = root.find(f".//{{{w}}}tbl/{{{w}}}tblPr")
+    assert table_properties is not None
+    table_width = table_properties.find(f"{{{w}}}tblW")
+    table_layout = table_properties.find(f"{{{w}}}tblLayout")
+    assert table_width is not None
+    assert table_width.attrib[f"{{{w}}}type"] == "dxa"
+    assert table_width.attrib[f"{{{w}}}w"] == "14688"
+    assert table_layout is not None
+    assert table_layout.attrib[f"{{{w}}}type"] == "fixed"
+
+    first_cell_width = root.find(f".//{{{w}}}tc/{{{w}}}tcPr/{{{w}}}tcW")
+    assert first_cell_width is not None
+    assert first_cell_width.attrib[f"{{{w}}}w"] == "1500"
 
 
 def test_docx_is_byte_deterministic() -> None:

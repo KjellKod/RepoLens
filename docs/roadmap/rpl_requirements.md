@@ -39,7 +39,8 @@
 ## Outputs
 
 - `inventory.json` — the complete tagged dataset.
-- `report.main.{md,csv,docx}` — the disclosure for included categories/items.
+- `report.main.{md,csv,html}` — the disclosure for included categories/items, plus
+  optional `report.main.docx` when header text is configured or entered interactively.
 - `report.appendix.<category>.{md,csv}` — one per excluded category + first-party.
 - `shortlist.md` — the human approval / audit artifact.
 - Per-item evidence + agent I/O audit log.

@@ -6,9 +6,10 @@ import sys
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
+from html import escape as html_escape
 from pathlib import Path
 from typing import Any, TextIO
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 from repolens.config import Config
 from repolens.data import store
@@ -50,6 +51,7 @@ COLUMNS = (
     "evidence_source_layer",
     "coverage_gaps",
 )
+_HTML_COLUMN_WIDTHS = (10, 7, 7, 25, 6, 9, 6, 7, 8, 7, 8)
 
 _NONE = "none"
 _UNKNOWN = "UNKNOWN"
@@ -100,6 +102,7 @@ class ReportResult:
 
     markdown_path: Path
     csv_path: Path
+    html_path: Path
     row_count: int
     file_gaps: tuple[str, ...]
     docx_path: Path | None = None
@@ -178,12 +181,14 @@ def render_main_report(
     default_category = _default_category(config)
 
     records, file_gaps = collect_resolved_records(root, _active_report_repo_refs(root))
+    records = _exclude_rejected_shortlist_records(root, records)
     split = route_occurrences(records, category_index, selection.include, default_category)
     rows = aggregate_rows(split.main_records)
     dependency_boundary_summary = build_dependency_boundary_summary(root)
 
     csv_text = redact_tokens(render_csv(rows))
     markdown_text = render_markdown(rows, file_gaps)
+    html_text = render_html(rows, file_gaps)
     if dependency_boundary_summary is not None:
         markdown_text = (
             markdown_text.rstrip()
@@ -195,11 +200,14 @@ def render_main_report(
             )
         )
     markdown_text = redact_tokens(markdown_text)
+    html_text = redact_tokens(html_text)
 
     csv_path = output_dir / "report.main.csv"
     markdown_path = output_dir / "report.main.md"
+    html_path = output_dir / "report.main.html"
     store.atomic_write_bytes(csv_path, csv_text.encode("utf-8"))
     store.atomic_write_bytes(markdown_path, markdown_text.encode("utf-8"))
+    store.atomic_write_bytes(html_path, html_text.encode("utf-8"))
 
     appendix_paths: list[Path] = []
     dependency_boundary_paths: tuple[Path, ...] = ()
@@ -255,6 +263,7 @@ def render_main_report(
     return ReportResult(
         markdown_path=markdown_path,
         csv_path=csv_path,
+        html_path=html_path,
         docx_path=docx_path,
         row_count=len(rows),
         file_gaps=tuple(file_gaps),
@@ -366,6 +375,41 @@ def collect_resolved_records(
     if not resolved_seen:
         raise InputError("report found no work/<repo>/resolved.ndjson input")
     return records, sorted(file_gaps, key=lambda value: (value.casefold(), value))
+
+
+def _exclude_rejected_shortlist_records(
+    work_root: Path,
+    records: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    rejected_refs = _rejected_shortlist_component_refs(work_root)
+    if not rejected_refs:
+        return list(records)
+    return [
+        record
+        for record in records
+        if _resolved_component_ref(record) not in rejected_refs
+    ]
+
+
+def _rejected_shortlist_component_refs(work_root: Path) -> frozenset[str]:
+    shortlist_path = Path(work_root) / "shortlist.json"
+    if not shortlist_path.exists():
+        return frozenset()
+    document = store.read_shortlist(work_root)
+    raw_items = document.get("items", [])
+    if not isinstance(raw_items, list):
+        return frozenset()
+    return frozenset(
+        str(item["component_ref"])
+        for item in raw_items
+        if isinstance(item, dict)
+        and item.get("status") == "rejected"
+        and isinstance(item.get("component_ref"), str)
+    )
+
+
+def _resolved_component_ref(record: dict[str, Any]) -> str:
+    return f"{record['name']}|{_normalized_spdx(record.get('spdx_id'))}"
 
 
 def _active_report_repo_refs(work_root: Path) -> tuple[str, ...] | None:
@@ -486,6 +530,96 @@ def render_markdown(
     return sanitize_markdown("\n".join(lines) + "\n")
 
 
+def render_html(
+    rows: Sequence[DisclosureRow],
+    file_gaps: Sequence[str],
+    *,
+    title: str = "RepoLens Main Report",
+) -> str:
+    """Render report rows as a self-contained, print-landscape HTML artifact."""
+
+    safe_title = _html_text(title.replace("\n", " "))
+    colgroup = "".join(f'<col style="width: {width}%">' for width in _HTML_COLUMN_WIDTHS)
+    header_cells = "".join(f"<th scope=\"col\">{_html_text(column)}</th>" for column in COLUMNS)
+    body_rows = [
+        "<tr>"
+        + "".join(
+            (
+                f'<td class="col-name"><code>{_html_text(row.name)}</code></td>',
+                f"<td>{_html_text(row.spdx_id)}</td>",
+                f"<td>{_html_text(_join(row.versions))}</td>",
+                f'<td class="col-source">{_html_source_urls(row.source_urls)}</td>',
+                f"<td>{_html_text(_join(row.modified))}</td>",
+                f"<td>{_html_text(_join(row.origins))}</td>",
+                f"<td>{_html_text(_join(row.scopes))}</td>",
+                f"<td>{_html_text(_join(row.distributions))}</td>",
+                f"<td>{_html_text(_join(row.found_in))}</td>",
+                f"<td>{_html_text(_join(row.evidence_source_layers))}</td>",
+                f"<td>{_html_text(_coverage(row.coverage_gaps))}</td>",
+            )
+        )
+        + "</tr>"
+        for row in rows
+    ]
+    if not body_rows:
+        body_rows.append(f'<tr><td colspan="{len(COLUMNS)}">No report rows.</td></tr>')
+
+    coverage_section = ""
+    if file_gaps:
+        gap_items = "".join(f"<li><code>{_html_text(gap)}</code></li>" for gap in file_gaps)
+        coverage_section = (
+            '<section class="coverage-gaps">'
+            "<h2>Coverage Gaps</h2>"
+            f"<ul>{gap_items}</ul>"
+            "</section>"
+        )
+
+    return (
+        "<!doctype html>\n"
+        '<html lang="en">\n'
+        "<head>\n"
+        '<meta charset="utf-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        f"<title>{safe_title}</title>\n"
+        "<style>\n"
+        ":root { color-scheme: light; }\n"
+        "@page { size: letter landscape; margin: 0.35in; }\n"
+        "body { margin: 24px; font: 14px/1.4 Arial, Helvetica, sans-serif; color: #111827; }\n"
+        "h1 { margin: 0 0 16px; font-size: 24px; line-height: 1.2; }\n"
+        "h2 { margin: 24px 0 8px; font-size: 16px; }\n"
+        ".table-wrap { width: 100%; border: 1px solid #d1d5db; }\n"
+        "table { border-collapse: collapse; table-layout: fixed; width: 100%; }\n"
+        "th, td { border: 1px solid #d1d5db; padding: 6px 8px; "
+        "vertical-align: top; text-align: left; }\n"
+        "th { position: sticky; top: 0; background: #f3f4f6; font-weight: 700; }\n"
+        "td { overflow-wrap: anywhere; word-break: break-word; }\n"
+        "code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; "
+        "font-size: 0.92em; }\n"
+        "a { color: #0f4c81; text-decoration: underline; }\n"
+        ".coverage-gaps ul { margin-top: 8px; padding-left: 22px; }\n"
+        "@media print {\n"
+        "  body { margin: 0; font-size: 8pt; }\n"
+        "  h1 { font-size: 16pt; }\n"
+        "  .table-wrap { border: 0; }\n"
+        "  table { width: 100%; }\n"
+        "  th, td { padding: 3pt 4pt; }\n"
+        "  th { position: static; }\n"
+        "}\n"
+        "</style>\n"
+        "</head>\n"
+        "<body>\n"
+        f"<h1>{safe_title}</h1>\n"
+        '<div class="table-wrap"><table>\n'
+        f"{colgroup}\n"
+        f"<thead><tr>{header_cells}</tr></thead>\n"
+        f"<tbody>{''.join(body_rows)}</tbody>\n"
+        "</table></div>\n"
+        f"{coverage_section}\n"
+        "</body>\n"
+        "</html>\n"
+    )
+
+
 def _object_mapping(value: object, field_name: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise InputError(f"resolved record {field_name} must be an object")
@@ -548,6 +682,47 @@ def _markdown_source_urls(source_urls: Sequence[str]) -> str:
 
 def _markdown_table_cell(value: str) -> str:
     return value.replace("|", "\\|").replace("\n", " ")
+
+
+def _html_source_urls(source_urls: Sequence[str]) -> str:
+    return "; ".join(_html_link(url) for url in source_urls)
+
+
+def _html_link(url: str) -> str:
+    label = _html_text(url)
+    if not _safe_html_url(url):
+        return _html_inert_url_text(url)
+    href = html_escape(url, quote=True)
+    return f'<a href="{href}" rel="noopener noreferrer">{label}</a>'
+
+
+def _safe_html_url(url: str) -> bool:
+    stripped = url.strip()
+    if not stripped:
+        return False
+    try:
+        parsed = urlparse(stripped)
+    except ValueError:
+        return False
+    return parsed.scheme.lower() in {"http", "https", "mailto"}
+
+
+def _html_inert_url_text(url: str) -> str:
+    label = _html_text(url)
+    try:
+        parsed = urlparse(url.strip())
+    except ValueError:
+        return label
+    if parsed.scheme:
+        colon_index = label.find(":")
+        if colon_index != -1:
+            return f"{label[:colon_index]}&#58;{label[colon_index + 1:]}"
+    return label
+
+
+def _html_text(value: object) -> str:
+    text = "" if value is None else str(value)
+    return html_escape(text.replace("\n", " "), quote=False)
 
 
 def _record_and_extra_gaps(

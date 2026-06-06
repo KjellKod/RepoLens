@@ -50,6 +50,7 @@ def test_m1_fixture_e2e_harness_writes_valid_deduped_report(
     assert summary["monorepo_shared_component_report_rows"] == 1
     assert summary["report_md_exists"] is True
     assert summary["report_csv_exists"] is True
+    assert summary["report_html_exists"] is True
     assert summary["report_docx_exists"] is True
     assert summary["appendix_csv_exists"] is True
     assert summary["appendix_md_exists"] is True

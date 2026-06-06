@@ -109,6 +109,39 @@ def test_p6a_report_markdown_artifact_sanitizes_hrefs_and_names(
 @pytest.mark.offline
 @pytest.mark.security
 @pytest.mark.canary
+def test_p6a_report_html_artifact_sanitizes_hrefs_and_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _stub_report_records(
+        tmp_path,
+        monkeypatch,
+        [
+            _resolved_record(
+                name="acme <html>",
+                evidence_url="javascript:alert(1)",
+            )
+        ],
+    )
+
+    data = render_main_report(
+        tmp_path,
+        tmp_path / "out",
+        _report_config(),
+    ).html_path.read_bytes()
+    html = data.decode("utf-8")
+
+    assert "<html" in html
+    assert "@page { size: letter landscape;" in html
+    assert "table-layout: fixed" in html
+    assert "acme &lt;html&gt;" in html
+    assert "javascript:" not in html
+    assert "javascript&#58;alert(1)" in html
+    assert "href=\"javascript" not in html
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
 def test_p6b_report_docx_artifact_escapes_untrusted_markup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -346,7 +346,7 @@ What happens:
 7. Mark available group checkboxes or item rows in `work/shortlist.md` with `[x]` approve
    or `[r]` reject, then press Enter. Item ticks override group ticks. `run` repeats until
    `open_count == 0`.
-8. `report` writes `report.main.{md,csv,docx}` and appendices under
+8. `report` writes `report.main.{md,csv,html}` plus optional `.docx` and appendices under
    `<work-root>/reports` unless `--out-dir` overrides it.
 
 Resume is artifact-based. Rerun the same command after Ctrl-C, a closed terminal, or a crash:
@@ -373,9 +373,9 @@ non-interactive mode, open shortlist items produce a deterministic non-zero exit
 instructions once, and write no report until a human clears `shortlist.md`.
 
 The final `run` summary separates resume skips from real failures and names the exact
-report directory. Review `report.main.md` and `report.main.csv` (and `report.main.docx`
-when present), review every `report.appendix.<label>.{md,csv}`, and double-check any
-reported coverage gaps. An empty shortlist means there are no open shipped-license
+report directory. Review `report.main.html`, `report.main.md`, and `report.main.csv`
+(and `report.main.docx` when present), review every `report.appendix.<label>.{md,csv}`,
+and double-check any reported coverage gaps. An empty shortlist means there are no open shipped-license
 decisions; it does not mean appendix rows have complete SPDX, source URL, or version
 coverage.
 
@@ -423,7 +423,7 @@ without running Swift, Xcode, CocoaPods, dependency checkout, or native mobile t
 
 GitHub Actions package-url records are retained in inventory as `scope: build` and
 `distribution: not-distributed`. They route to the `build-ci` appendix and do not create
-shipped-license gaps in `report.main.{md,csv,docx}`.
+shipped-license gaps in `report.main.{md,csv,html}` or optional `.docx`.
 
 ## Step-it-yourself pipeline
 
@@ -881,14 +881,15 @@ no report artifacts. A missing shortlist does not block assembly.
 
 When `--out-dir` is omitted, report writes to `<WORK>/reports`. The finish summary lists
 the resolved report directory, main row count, appendix row counts by label, and coverage
-gaps worth human review. Review `report.main.md`/`.csv`/`.docx` when present, review
+gaps worth human review. Review `report.main.html`/`.md`/`.csv`/`.docx` when present, review
 appendices especially when `build-ci` rows have `UNKNOWN`, `missing_spdx_id`,
 `missing_source_url`, or `missing_version`, and generate the docx later by adding
 `report.header` config or rerunning report interactively if the summary says docx was
 skipped.
 
-The `report.main.{md,csv}` and appendix data always render — they need no header
-config and never hard-fail. The docx cover is **optional** and resolved as follows:
+The `report.main.{md,csv,html}` and appendix data always render — they need no header
+config and never hard-fail. The HTML report is self-contained, wide on screen, and uses
+letter-landscape print CSS. The docx cover is **optional** and resolved as follows:
 
 - **`report.header` config present** → the docx is generated from it (the polished,
   final docx). This is the path for a shareable artifact:
@@ -922,7 +923,8 @@ config and never hard-fail. The docx cover is **optional** and resolved as follo
   generic disclaimer above.
 
 - **Absent + non-interactive (`--yes` or no TTY)** → the docx is skipped (no invented
-  header), the md/csv/appendices still render, and one notice is printed (exit `0`):
+  header), the md/csv/html data and appendices still render, and one notice is printed
+  (exit `0`):
 
   ```text
   docx skipped (no report.header); md/csv contain all the data — add report.header config or run interactively to generate it.
@@ -931,9 +933,12 @@ config and never hard-fail. The docx cover is **optional** and resolved as follo
 A `report.header` that is *present but malformed* (empty `org_name`/`legal_text`) still
 errors — only the *absent* case is relaxed.
 
+Rejected shortlist items are excluded from `report.main`; approved shortlist items are
+included, even if they still carry coverage gaps such as `UNKNOWN` SPDX.
+
 `report.selection.include` is optional. When it is omitted, every observed third-party
 category is selected into `report.main`. When present, third-party occurrences in included
-categories go to `report.main.{md,csv,docx}`; excluded third-party categories go to
+categories go to `report.main.{md,csv,html}` and optional `.docx`; excluded third-party categories go to
 `report.appendix.<category>.{md,csv}`. First-party occurrences always go to
 `report.appendix.first-party.{md,csv}`. Build/CI-only occurrences tagged as
 `scope: build` and `distribution: not-distributed` always go to
@@ -958,8 +963,8 @@ python scripts/m1_fixture_e2e.py --work-root /tmp/repolens-m1-fixture
 Expected output is a one-line JSON summary with discovered, SBOM, resolved, main report,
 appendix, and docx counts. The work root contains `discovered.json`,
 `repos.candidate.md`, per-fixture `sbom.syft.json` and
-`resolved.ndjson`, a clear `shortlist.json`, `reports/report.main.{md,csv,docx}`, and
-`reports/report.appendix.<category>.{md,csv}`. This is a fixture harness only; live owner
+`resolved.ndjson`, a clear `shortlist.json`, `reports/report.main.{md,csv,html}` plus
+optional `.docx`, and `reports/report.appendix.<category>.{md,csv}`. This is a fixture harness only; live owner
 dogfood still uses the normal `repolens run --work-root /tmp/repolens-dogfood --owner
 <OWNER> --repos "<REPO>"` shape, or the equivalent
 `discover -> scan -> resolve -> flag -> shortlist -> report` stage flow.
@@ -972,7 +977,10 @@ dogfood still uses the normal `repolens run --work-root /tmp/repolens-dogfood --
 - `<WORK>/work/<repo_ref>/sbom.syft.json` — the per-repo Syft SBOM from `scan`.
 - `<WORK>/work/<repo_ref>/resolved.ndjson` — license records and evidence from `resolve`.
 - `inventory.json`, `shortlist.json`, and `shortlist.md` — policy output from `flag`.
-- `report.main.{md,csv,docx}` — the gated main disclosure output.
+- `report.main.{md,csv,html}` — the gated main disclosure output; HTML is wide on
+  screen and prints as letter landscape.
+- `report.main.docx` — optional shareable Word output when report header text is
+  configured or entered interactively.
 - `report.appendix.<category>.{md,csv}` — excluded-category and first-party appendices.
 
 ## Safety

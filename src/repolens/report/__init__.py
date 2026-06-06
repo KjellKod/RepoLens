@@ -11,6 +11,7 @@ from repolens.report.main import (
     aggregate_rows,
     collect_resolved_records,
     render_csv,
+    render_html,
     render_main_report,
     render_markdown,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "aggregate_rows",
     "collect_resolved_records",
     "render_csv",
+    "render_html",
     "render_main_report",
     "render_markdown",
     "report_header_if_configured",

@@ -70,7 +70,7 @@ def test_p6a_report_token_redacts_emitted_artifacts(
 
     result = render_main_report(tmp_path, tmp_path / "out", _report_config())
 
-    for path in (result.csv_path, result.markdown_path):
+    for path in (result.csv_path, result.markdown_path, result.html_path):
         data = path.read_bytes()
         assert classic.encode("utf-8") not in data
         assert session.encode("utf-8") not in data

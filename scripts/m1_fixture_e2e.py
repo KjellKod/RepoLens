@@ -390,6 +390,7 @@ def _validate_and_summarize(work_root: Path, csv_path: Path) -> dict[str, object
         ),
         "report_md_exists": (work_root / "reports" / "report.main.md").exists(),
         "report_csv_exists": csv_path.exists(),
+        "report_html_exists": (work_root / "reports" / "report.main.html").exists(),
         "report_docx_exists": (work_root / "reports" / "report.main.docx").exists(),
         "appendix_csv_exists": bool(appendix_paths),
         "appendix_md_exists": bool(list((work_root / "reports").glob("report.appendix.*.md"))),

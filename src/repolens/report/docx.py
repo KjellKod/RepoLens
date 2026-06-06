@@ -16,6 +16,24 @@ if TYPE_CHECKING:
 
 _ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 _W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+_LANDSCAPE_PAGE_WIDTH_DXA = 15840
+_LANDSCAPE_PAGE_HEIGHT_DXA = 12240
+_PAGE_MARGIN_DXA = 576
+_TABLE_WIDTH_DXA = _LANDSCAPE_PAGE_WIDTH_DXA - (2 * _PAGE_MARGIN_DXA)
+_BODY_FONT_HALF_POINTS = 16
+_COLUMN_WIDTHS_DXA = {
+    "name": 1500,
+    "spdx_id": 900,
+    "version": 950,
+    "source_url": 3600,
+    "modified?": 760,
+    "origin": 1300,
+    "scope": 850,
+    "distribution": 1000,
+    "found_in": 1200,
+    "evidence_source_layer": 1000,
+    "coverage_gaps": 1628,
+}
 
 
 def render_docx(
@@ -47,33 +65,88 @@ def _document_xml(
     columns: Sequence[str],
     rows: Sequence[DisclosureRow],
 ) -> str:
-    table_rows = [_table_row(columns)]
-    table_rows.extend(_table_row(_row_values(row)) for row in rows)
+    column_widths = _column_widths(columns)
+    table_rows = [_table_row(columns, column_widths, bold=True)]
+    table_rows.extend(_table_row(_row_values(row), column_widths) for row in rows)
     return (
         '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
         f'<w:document xmlns:w="{_W_NS}"><w:body>'
-        f"{_paragraph('RepoLens Main Report')}"
-        f"{_paragraph(header.org_name)}"
-        f"{_paragraph(header.legal_text)}"
+        f"{_paragraph('RepoLens Main Report', size_half_points=24, bold=True)}"
+        f"{_paragraph(header.org_name, size_half_points=20)}"
+        f"{_paragraph(header.legal_text, size_half_points=18)}"
         "<w:tbl>"
-        + _table_grid(len(columns))
+        + _table_grid(column_widths)
         + "".join(table_rows)
-        + "</w:tbl><w:sectPr/></w:body></w:document>"
+        + f"</w:tbl>{_section_properties()}</w:body></w:document>"
     )
 
 
-def _table_grid(column_count: int) -> str:
-    grid_cols = "<w:gridCol/>" * column_count
-    return f'<w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr><w:tblGrid>{grid_cols}</w:tblGrid>'
+def _table_grid(column_widths: Sequence[int]) -> str:
+    grid_cols = "".join(f'<w:gridCol w:w="{width}"/>' for width in column_widths)
+    return (
+        f'<w:tblPr><w:tblW w:w="{_TABLE_WIDTH_DXA}" w:type="dxa"/>'
+        '<w:tblLayout w:type="fixed"/>'
+        "<w:tblCellMar>"
+        '<w:top w:w="80" w:type="dxa"/>'
+        '<w:left w:w="80" w:type="dxa"/>'
+        '<w:bottom w:w="80" w:type="dxa"/>'
+        '<w:right w:w="80" w:type="dxa"/>'
+        "</w:tblCellMar>"
+        "</w:tblPr>"
+        f"<w:tblGrid>{grid_cols}</w:tblGrid>"
+    )
 
 
-def _paragraph(value: object) -> str:
-    return f"<w:p><w:r><w:t>{_xml_text(value)}</w:t></w:r></w:p>"
+def _paragraph(
+    value: object,
+    *,
+    size_half_points: int = _BODY_FONT_HALF_POINTS,
+    bold: bool = False,
+) -> str:
+    bold_xml = "<w:b/>" if bold else ""
+    return (
+        "<w:p><w:pPr>"
+        '<w:spacing w:after="0" w:line="240" w:lineRule="auto"/>'
+        "</w:pPr><w:r><w:rPr>"
+        f"{bold_xml}<w:sz w:val=\"{size_half_points}\"/>"
+        f"</w:rPr><w:t>{_xml_text(value)}</w:t></w:r></w:p>"
+    )
 
 
-def _table_row(values: Sequence[object]) -> str:
-    cells = "".join(f"<w:tc>{_paragraph(value)}</w:tc>" for value in values)
+def _table_row(
+    values: Sequence[object],
+    column_widths: Sequence[int],
+    *,
+    bold: bool = False,
+) -> str:
+    cells = "".join(
+        (
+            "<w:tc><w:tcPr>"
+            f'<w:tcW w:w="{width}" w:type="dxa"/>'
+            '<w:vAlign w:val="top"/>'
+            "</w:tcPr>"
+            f"{_paragraph(value, bold=bold)}</w:tc>"
+        )
+        for value, width in zip(values, column_widths, strict=True)
+    )
     return f"<w:tr>{cells}</w:tr>"
+
+
+def _section_properties() -> str:
+    return (
+        "<w:sectPr>"
+        f'<w:pgSz w:w="{_LANDSCAPE_PAGE_WIDTH_DXA}" '
+        f'w:h="{_LANDSCAPE_PAGE_HEIGHT_DXA}" w:orient="landscape"/>'
+        f'<w:pgMar w:top="{_PAGE_MARGIN_DXA}" w:right="{_PAGE_MARGIN_DXA}" '
+        f'w:bottom="{_PAGE_MARGIN_DXA}" w:left="{_PAGE_MARGIN_DXA}" '
+        'w:header="360" w:footer="360" w:gutter="0"/>'
+        "</w:sectPr>"
+    )
+
+
+def _column_widths(columns: Sequence[str]) -> tuple[int, ...]:
+    fallback_width = _TABLE_WIDTH_DXA // len(columns)
+    return tuple(_COLUMN_WIDTHS_DXA.get(column, fallback_width) for column in columns)
 
 
 def _row_values(row: DisclosureRow) -> tuple[str, ...]:

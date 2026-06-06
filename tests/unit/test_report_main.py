@@ -31,6 +31,7 @@ def test_render_main_report_writes_md_and_csv_from_resolved_records(
     assert result.row_count == 1
     assert result.markdown_path.exists()
     assert result.csv_path.exists()
+    assert result.html_path.exists()
     assert result.docx_path.exists()
     assert tuple(_csv_rows(result.csv_path)[0]) == COLUMNS
     markdown = result.markdown_path.read_text(encoding="utf-8")
@@ -47,6 +48,7 @@ def test_render_main_report_defaults_out_dir_under_work_root(
 
     assert result.markdown_path == tmp_path / "reports" / "report.main.md"
     assert result.csv_path == tmp_path / "reports" / "report.main.csv"
+    assert result.html_path == tmp_path / "reports" / "report.main.html"
     assert result.docx_path == tmp_path / "reports" / "report.main.docx"
 
 
@@ -199,6 +201,51 @@ def test_coverage_gaps_are_rendered_without_dropping_rows(
     assert rows[0]["version"] == "1.2.3; 1.2.4"
     assert rows[0]["source_url"] == "pkg:pypi/acme-lib@1.2.3"
     assert rows[0]["coverage_gaps"] == "missing_category; missing_source_url; missing_spdx_id"
+
+
+def test_report_excludes_rejected_shortlist_components(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(tmp_path, [_shortlist_item("acme-lib|UNKNOWN", status="rejected")])
+
+    rows = _csv_records(render_main_report(tmp_path, tmp_path / "out", _report_config()).csv_path)
+
+    assert rows == []
+    assert "acme-lib" not in (tmp_path / "out" / "report.main.html").read_text(encoding="utf-8")
+
+
+def test_report_keeps_approved_shortlist_components(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(tmp_path, [_shortlist_item("acme-lib|UNKNOWN", status="approved")])
+
+    rows = _csv_records(render_main_report(tmp_path, tmp_path / "out", _report_config()).csv_path)
+
+    assert len(rows) == 1
+    assert rows[0]["name"] == "acme-lib"
+    assert rows[0]["spdx_id"] == "UNKNOWN"
+
+
+def test_report_rejected_shortlist_ref_does_not_drop_other_spdx_for_same_name(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    unknown = {
+        **resolved_record,
+        "spdx_id": None,
+        "version": "2.0.0",
+        "evidence": {"source_layer": "syft"},
+    }
+    store.write_resolved(tmp_path, "acme-alpha", [resolved_record, unknown])
+    _write_shortlist(tmp_path, [_shortlist_item("acme-lib|UNKNOWN", status="rejected")])
+
+    rows = _csv_records(render_main_report(tmp_path, tmp_path / "out", _report_config()).csv_path)
+
+    assert [row["spdx_id"] for row in rows] == ["MIT"]
+    assert rows[0]["version"] == "1.2.3"
 
 
 def test_missing_evidence_url_without_purl_still_renders_empty_source_url(
@@ -388,6 +435,41 @@ def test_pipe_characters_are_escaped_in_markdown_table(
     assert "https://example.invalid/licenses/acme\\|widget" in markdown
 
 
+def test_html_report_uses_wide_landscape_layout_and_inert_unsafe_urls(
+    tmp_path: Path, resolved_record: dict[str, Any]
+) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            {
+                **resolved_record,
+                "name": "acme <widget>",
+                "evidence": {
+                    **resolved_record["evidence"],
+                    "url": "javascript:alert(1)",
+                },
+            }
+        ],
+    )
+
+    html = render_main_report(
+        tmp_path,
+        tmp_path / "out",
+        _report_config(),
+    ).html_path.read_text(encoding="utf-8")
+
+    assert "@page { size: letter landscape;" in html
+    assert "table-layout: fixed" in html
+    assert "word-break: break-word" in html
+    assert 'style="width: 25%"' in html
+    assert "overflow-x: auto" not in html
+    assert "acme &lt;widget&gt;" in html
+    assert "javascript:" not in html
+    assert "javascript&#58;alert(1)" in html
+    assert "href=\"javascript" not in html
+
+
 def test_empty_resolved_file_renders_file_gap(tmp_path: Path) -> None:
     repo_dir = tmp_path / "work" / "acme-alpha"
     repo_dir.mkdir(parents=True)
@@ -415,6 +497,7 @@ def test_report_renders_md_csv_without_header_config(
     assert result.row_count == 1
     assert result.markdown_path.exists()
     assert result.csv_path.exists()
+    assert result.html_path.exists()
     assert result.docx_path is None
     assert result.docx_skipped is True
     assert not (tmp_path / "out" / "report.main.docx").exists()
@@ -439,6 +522,7 @@ def test_report_skips_docx_when_header_absent_non_interactive(
     assert not (tmp_path / "out" / "report.main.docx").exists()
     assert result.csv_path.exists()
     assert result.markdown_path.exists()
+    assert result.html_path.exists()
 
 
 def test_report_header_present_but_empty_still_raises(
@@ -729,3 +813,27 @@ def _write_candidates(tmp_path: Path, rows: list[str]) -> None:
         ),
         encoding="utf-8",
     )
+
+
+def _write_shortlist(tmp_path: Path, items: list[dict[str, object]]) -> None:
+    store.write_shortlist(
+        tmp_path,
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "open_count": 0,
+            "items": items,
+        },
+    )
+
+
+def _shortlist_item(component_ref: str, *, status: str) -> dict[str, object]:
+    return {
+        "component_ref": component_ref,
+        "reason": "UNKNOWN",
+        "evidence": {"source_layer": "syft"},
+        "candidate_spdx": None,
+        "status": status,
+        "decided_by": "reviewer",
+        "decided_at": "2026-01-01T00:00:00Z",
+    }

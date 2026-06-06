@@ -39,9 +39,9 @@ python -m repolens.security.name_hygiene --self-test   # prove the name-hygiene 
 
 ## What you get
 
-- **A deduplicated license disclosure** — `Name | License | …` as Markdown, CSV, and a
-  ready-to-share **`.docx`**, plus per-category appendices. One row per library, nothing
-  silently dropped.
+- **A deduplicated license disclosure** — `Name | License | …` as Markdown, CSV, wide
+  landscape-print HTML, and an optional ready-to-share **`.docx`**, plus per-category
+  appendices. One row per library, nothing silently dropped.
 - **Risk flagged, not buried** — copyleft, network-copyleft, non-commercial, and
   source-available licenses surfaced against RepoLens's policy tiers.
 - **Ambiguity resolved with evidence** — anything the tooling can't determine is flagged
@@ -222,7 +222,7 @@ approval in `shortlist.md`.
 
 ## What the disclosure looks like
 
-`report.main` (illustrative excerpt — same columns in Markdown, CSV, and `.docx`):
+`report.main` (illustrative excerpt — same columns in Markdown, CSV, HTML, and `.docx`):
 
 | name | spdx_id | version | source_url | origin | scope | distribution |
 |------|---------|---------|------------|--------|-------|--------------|
