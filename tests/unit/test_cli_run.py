@@ -1720,10 +1720,16 @@ def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: 
     assert "Resume skips: 1" in message
     assert "Failures: 1" in message
     assert "Appendix rows: build-ci=1" in message
-    assert (
-        "Coverage gaps to double-check: build-ci: missing_source_url=1, missing_spdx_id=1"
-    ) in message
     assert "Main and presentation reports:" in message
+    assert f"      - {main_md.resolve()}" in message
+    assert f"      - {main_csv.resolve()}" in message
+    assert f"      - {main_html.resolve()}" in message
+    assert "  - Appendices:\n      - build-ci:" in message
+    assert f"          - {appendix_md.resolve()}" in message
+    assert f"          - {appendix_csv.resolve()}" in message
+    assert "  - Coverage gaps to double-check:\n      - build-ci:" in message
+    assert "          - missing_source_url=1" in message
+    assert "          - missing_spdx_id=1" in message
     assert "Docx skipped" in message
 
 

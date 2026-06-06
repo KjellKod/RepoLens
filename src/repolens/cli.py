@@ -2182,38 +2182,29 @@ def _format_counts(counts: dict[str, int]) -> str:
     return ", ".join(f"{label}={count}" for label, count in sorted(counts.items()))
 
 
-def _format_gap_counts(gaps_by_label: dict[str, dict[str, int]]) -> str:
-    chunks: list[str] = []
-    for label, gaps in sorted(gaps_by_label.items()):
-        if not gaps:
-            continue
-        chunks.append(
-            f"{label}: " + ", ".join(f"{gap}={count}" for gap, count in sorted(gaps.items()))
-        )
-    return "; ".join(chunks)
-
-
 def _review_guidance(summary: RunSummary) -> list[str]:
     lines = ["Review checklist:"]
     existing_main_paths = [path for path in summary.report_paths if path.exists()]
     if existing_main_paths:
-        lines.append(
-            "  - Main and presentation reports: "
-            + ", ".join(str(_resolved_path(path)) for path in existing_main_paths)
-        )
+        lines.append("  - Main and presentation reports:")
+        lines.extend(f"      - {_resolved_path(path)}" for path in existing_main_paths)
     if summary.appendix_paths_by_label:
-        appendix_parts = []
+        appendix_lines: list[str] = []
         for label, paths in sorted(summary.appendix_paths_by_label.items()):
             existing = [path for path in paths if path.exists()]
             if existing:
-                appendix_parts.append(
-                    f"{label}: " + ", ".join(str(_resolved_path(path)) for path in existing)
-                )
-        if appendix_parts:
-            lines.append("  - Appendices: " + "; ".join(appendix_parts))
-    gaps = _format_gap_counts(summary.coverage_gaps_by_label)
-    if gaps:
-        lines.append(f"  - Coverage gaps to double-check: {gaps}")
+                appendix_lines.append(f"      - {label}:")
+                appendix_lines.extend(f"          - {_resolved_path(path)}" for path in existing)
+        if appendix_lines:
+            lines.append("  - Appendices:")
+            lines.extend(appendix_lines)
+    if _has_coverage_gaps(summary.coverage_gaps_by_label):
+        lines.append("  - Coverage gaps to double-check:")
+        for label, gaps in sorted(summary.coverage_gaps_by_label.items()):
+            if not gaps:
+                continue
+            lines.append(f"      - {label}:")
+            lines.extend(f"          - {gap}={count}" for gap, count in sorted(gaps.items()))
     else:
         lines.append("  - Coverage gaps: none reported in main or appendices")
     lines.append(
@@ -2226,6 +2217,10 @@ def _review_guidance(summary: RunSummary) -> list[str]:
             "to generate main and presentation docx files."
         )
     return lines
+
+
+def _has_coverage_gaps(gaps_by_label: dict[str, dict[str, int]]) -> bool:
+    return any(bool(gaps) for gaps in gaps_by_label.values())
 
 
 def _resolved_path(path: Path) -> Path:
