@@ -1,0 +1,22 @@
+src/repolens/report/review.py
+  s_c68e1e0d04d3fb::t_d13d9a2188109e 544
+tests/unit/report/test_review.py
+  s_c68e1e0d04d3fb::t_4f683926116d37 325,328-331
+  s_c68e1e0d04d3fb::t_97d9e49c0259e5 327,332
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "12f65c89cea773b28347c12602ebdb72609d6878",
+  "prompts": {},
+  "sessions": {
+    "s_c68e1e0d04d3fb": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9ca8-f4fb-7671-83ea-1f5f8252a218",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
