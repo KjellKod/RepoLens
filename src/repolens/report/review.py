@@ -30,6 +30,11 @@ REVIEW_JSON_FILENAME = "report.review.json"
 REVIEW_MD_FILENAME = "report.review.md"
 KEEP_FULL_OPTION_ID = "keep-full"
 LEGAL_FOLLOW_UP_OPTION_ID = "needs-legal-follow-up"
+DEFAULT_POLICY_PATH = "src/repolens/policy/data/license-policy.default.json"
+DEFAULT_POLICY_URL = (
+    "https://github.com/KjellKod/RepoLens/blob/main/"
+    "src/repolens/policy/data/license-policy.default.json"
+)
 
 _COMPOUND_RE = re.compile(r"\b(AND|OR|WITH)\b|[()]", re.IGNORECASE)
 _ITEM_MARKER_RE = re.compile(r"&lt;!-- rpl:license-review-item=([A-Za-z0-9_-]+) --&gt;")
@@ -820,6 +825,11 @@ def _high_attention_section(items: Sequence[ReviewItem]) -> list[str]:
         "",
         "These review items include `REVIEW`, `BLOCK`, or `UNKNOWN` license choices. "
         "Resolve them deliberately before final presentation output.",
+        "",
+        "High-attention rules come from RepoLens policy tiers in "
+        f"{markdown_link(DEFAULT_POLICY_PATH, DEFAULT_POLICY_URL)}. Move a license between "
+        "`ALLOW`, `REVIEW`, and `BLOCK` there to change what is treated as high attention; "
+        "for example, marking `MIT` or `Unlicense` as high risk belongs in that policy file.",
         "",
         *rows,
         "",

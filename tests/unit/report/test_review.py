@@ -143,6 +143,12 @@ def test_report_review_suggests_lower_risk_or_branch(tmp_path: Path) -> None:
     assert "suggested choice: `MIT`" in markdown
     assert "MIT has policy tier ALLOW; lower risk than GPL-3.0-only (BLOCK)" in markdown
     assert "## ⚠️ High-Attention License Choices" in markdown
+    assert "High-attention rules come from RepoLens policy tiers" in markdown
+    assert (
+        "https://github.com/KjellKod/RepoLens/blob/main/"
+        "src/repolens/policy/data/license-policy.default.json"
+    ) in markdown
+    assert "marking `MIT` or `Unlicense` as high risk belongs in that policy file" in markdown
     assert (
         "- ⚠️ `acme-lib` (`MIT OR GPL-3.0-only`): GPL-3.0-only is policy tier BLOCK; "
         "suggested choice: `MIT`"
