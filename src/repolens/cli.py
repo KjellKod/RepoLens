@@ -71,6 +71,16 @@ STAGE_COMMANDS = ("discover", "scan", "resolve", "flag", "shortlist", "report")
 REPORT_MAIN_DATA_FILENAMES = ("report.main.md", "report.main.csv", "report.main.html")
 REPORT_MAIN_DOCX_FILENAME = "report.main.docx"
 REPORT_MAIN_FILENAMES = (*REPORT_MAIN_DATA_FILENAMES, REPORT_MAIN_DOCX_FILENAME)
+REPORT_PRESENTATION_DATA_FILENAMES = (
+    "report.presentation.md",
+    "report.presentation.csv",
+    "report.presentation.html",
+)
+REPORT_PRESENTATION_DOCX_FILENAME = "report.presentation.docx"
+REPORT_PRESENTATION_FILENAMES = (
+    *REPORT_PRESENTATION_DATA_FILENAMES,
+    REPORT_PRESENTATION_DOCX_FILENAME,
+)
 
 
 @dataclass
@@ -224,13 +234,17 @@ _STAGE_HELP = {
         ),
     ),
     "report": StageHelp(
-        help="Assemble gated main, appendix, and docx disclosure reports.",
-        description=("Stage 6/6 — assemble gated disclosure reports from resolved artifacts."),
+        help="Assemble gated main, presentation, appendix, and docx disclosure reports.",
+        description=(
+            "Stage 6/6 — assemble gated main and presentation disclosure reports "
+            "from resolved artifacts."
+        ),
         epilog=_stage_epilog(
             "resolved.ndjson files from resolve, discovered.json categories when present, "
             "a clear shortlist.json when present, and report.header config for docx.",
             "repolens report --work-root <WORK>",
-            "report.main.{md,csv,html,docx} + report.appendix.<category>.{md,csv}.",
+            "report.main.{md,csv,html,docx}, report.presentation.{md,csv,html,docx}, "
+            "+ report.appendix.<category>.{md,csv}.",
             "review and share it — you are responsible for validating the result.",
         ),
     ),
@@ -611,7 +625,7 @@ def _configure_run_parser(subparser: argparse.ArgumentParser) -> None:
         type=Path,
         metavar="PATH",
         help=(
-            "Directory for report.main.{md,csv,html,docx} and appendix artifacts "
+            "Directory for report.main.*, report.presentation.*, and appendix artifacts "
             "(default: <work-root>/reports)."
         ),
     )
@@ -802,7 +816,7 @@ def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
     subparser.add_argument(
         "--out-dir",
         type=Path,
-        help="Directory for report.main.{md,csv,html,docx} and appendix artifacts.",
+        help="Directory for report.main.*, report.presentation.*, and appendix artifacts.",
     )
     subparser.set_defaults(handler=_report)
 
@@ -1737,8 +1751,7 @@ def _run_shortlist_loop(
                     ),
                     "",
                     "Then ingest verified proposals and browser evidence:",
-                    "  "
-                    + _shortlist_ingest_command(work_root, proposals_path, evidence_path),
+                    "  " + _shortlist_ingest_command(work_root, proposals_path, evidence_path),
                     "",
                     "Press Enter after the research command has finished.",
                 )
@@ -2017,7 +2030,11 @@ def _report_outputs_current(
     # When no header is configured the docx is legitimately skipped, so resume
     # currency keys off the always-produced md/csv/html only. Once a header is added,
     # the docx becomes required again so a previously skipped run re-renders it.
-    filenames = REPORT_MAIN_FILENAMES if require_docx else REPORT_MAIN_DATA_FILENAMES
+    filenames = (
+        (*REPORT_MAIN_FILENAMES, *REPORT_PRESENTATION_FILENAMES)
+        if require_docx
+        else (*REPORT_MAIN_DATA_FILENAMES, *REPORT_PRESENTATION_DATA_FILENAMES)
+    )
     output_paths = tuple(Path(out_dir) / filename for filename in filenames)
     return _artifacts_current(output_paths, input_paths)
 
@@ -2084,9 +2101,17 @@ def _apply_report_result(summary: RunSummary, result: ReportResult) -> None:
     paths = [result.markdown_path, result.csv_path, result.html_path]
     if result.docx_path is not None:
         paths.append(result.docx_path)
+    for path in (
+        result.presentation_markdown_path,
+        result.presentation_csv_path,
+        result.presentation_html_path,
+        result.presentation_docx_path,
+    ):
+        if path is not None:
+            paths.append(path)
     summary.report_rows = result.row_count
     summary.report_paths = tuple(paths)
-    summary.docx_skipped = result.docx_skipped
+    summary.docx_skipped = result.docx_skipped or result.presentation_docx_skipped
     summary.coverage_gaps_by_label = {"main": dict(result.coverage_gaps)}
     summary.appendix_rows_by_label = {
         appendix.label: appendix.row_count for appendix in result.appendices
@@ -2102,12 +2127,15 @@ def _apply_report_result(summary: RunSummary, result: ReportResult) -> None:
 def _load_existing_report_summary(summary: RunSummary, out_dir: Path) -> None:
     summary.report_rows = _report_row_count(out_dir)
     paths: list[Path] = []
-    for filename in REPORT_MAIN_FILENAMES:
+    for filename in (*REPORT_MAIN_FILENAMES, *REPORT_PRESENTATION_FILENAMES):
         path = Path(out_dir) / filename
         if path.exists():
             paths.append(path)
     summary.report_paths = tuple(paths)
-    summary.docx_skipped = not (Path(out_dir) / REPORT_MAIN_DOCX_FILENAME).exists()
+    summary.docx_skipped = not all(
+        (Path(out_dir) / filename).exists()
+        for filename in (REPORT_MAIN_DOCX_FILENAME, REPORT_PRESENTATION_DOCX_FILENAME)
+    )
     summary.coverage_gaps_by_label = {}
     main_gaps = _coverage_gaps_from_csv(Path(out_dir) / "report.main.csv")
     if main_gaps:
@@ -2170,7 +2198,7 @@ def _review_guidance(summary: RunSummary) -> list[str]:
     existing_main_paths = [path for path in summary.report_paths if path.exists()]
     if existing_main_paths:
         lines.append(
-            "  - Main report: "
+            "  - Main and presentation reports: "
             + ", ".join(str(_resolved_path(path)) for path in existing_main_paths)
         )
     if summary.appendix_paths_by_label:
@@ -2195,7 +2223,7 @@ def _review_guidance(summary: RunSummary) -> list[str]:
     if summary.docx_skipped:
         lines.append(
             "  - Docx skipped: add report.header config or rerun report interactively "
-            "to generate it."
+            "to generate main and presentation docx files."
         )
     return lines
 

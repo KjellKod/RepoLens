@@ -136,7 +136,7 @@ def test_p6a_report_html_artifact_sanitizes_hrefs_and_names(
     assert "acme &lt;html&gt;" in html
     assert "javascript:" not in html
     assert "javascript&#58;alert(1)" in html
-    assert "href=\"javascript" not in html
+    assert 'href="javascript' not in html
 
 
 @pytest.mark.offline
@@ -164,6 +164,49 @@ def test_p6b_report_docx_artifact_escapes_untrusted_markup(
     assert b"<w:pwned/>" not in xml
     assert b"acme &lt;w:pwned/&gt;" in xml
     assert b"x=&lt;bad&gt;&amp;y=1" in xml
+
+
+@pytest.mark.offline
+@pytest.mark.security
+@pytest.mark.canary
+def test_presentation_report_artifacts_preserve_output_security_invariants(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    token = "ghp_" + "A" * 24
+    _stub_report_records(
+        tmp_path,
+        monkeypatch,
+        [
+            _resolved_record(
+                name=f"=presentation <name> {token}",
+                version="+presentation-version",
+                evidence_url="javascript:alert(1)",
+            )
+        ],
+    )
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+    assert result.presentation_csv_path is not None
+    assert result.presentation_markdown_path is not None
+    assert result.presentation_html_path is not None
+    assert result.presentation_docx_path is not None
+    csv_data = result.presentation_csv_path.read_bytes()
+    markdown = result.presentation_markdown_path.read_text(encoding="utf-8")
+    html = result.presentation_html_path.read_text(encoding="utf-8")
+    with zipfile.ZipFile(result.presentation_docx_path) as archive:
+        xml = archive.read("word/document.xml")
+
+    ElementTree.fromstring(xml)
+    assert b'"\t=presentation <name> [REDACTED_TOKEN]"' in csv_data
+    assert b'"\t+presentation-version"' in csv_data
+    assert token not in markdown
+    assert "javascript:" not in markdown
+    assert "javascript&#58;alert\\(1\\)" in markdown
+    assert token not in html
+    assert "javascript:" not in html
+    assert "javascript&#58;alert(1)" in html
+    assert token.encode("utf-8") not in xml
+    assert b"&lt;name&gt;" in xml
 
 
 @pytest.mark.offline

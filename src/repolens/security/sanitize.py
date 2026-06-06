@@ -48,9 +48,9 @@ def serialize_csv_rows(rows: list[list[object] | tuple[object, ...]]) -> str:
 def markdown_link(label: str, url: str) -> str:
     """Render a safe Markdown link or inert label for unsafe hrefs."""
 
-    safe_label = _escape_markdown_text(label)
     if not _safe_markdown_url(url):
-        return safe_label
+        return _escape_markdown_text(label)
+    safe_label = _escape_markdown_url_label(label) if label == url else _escape_markdown_text(label)
     return f"[{safe_label}]({html.escape(url, quote=True)})"
 
 
@@ -63,7 +63,11 @@ def sanitize_markdown(markdown: str) -> str:
         return _escape_markdown_text(match.group(1))
 
     def replace_link(match: re.Match[str]) -> str:
-        return markdown_link(match.group(1), match.group(2))
+        label = match.group(1)
+        url = match.group(2)
+        if not _safe_markdown_url(url):
+            return _escape_markdown_text(label)
+        return f"[{label}]({html.escape(url, quote=True)})"
 
     def replace_reference_link(match: re.Match[str]) -> str:
         label = match.group(1)
@@ -131,3 +135,8 @@ def _escape_raw_html(text: str) -> str:
 def _escape_markdown_text(text: str) -> str:
     escaped = html.escape(text, quote=False)
     return re.sub(r"([\\`*_{}\[\]()#+.!|-])", r"\\\1", escaped)
+
+
+def _escape_markdown_url_label(text: str) -> str:
+    escaped = html.escape(text, quote=False)
+    return re.sub(r"([\\\[\]])", r"\\\1", escaped)

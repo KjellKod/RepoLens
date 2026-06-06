@@ -462,6 +462,10 @@ class CliTests(unittest.TestCase):
             self.assertTrue((out_dir / "report.main.csv").exists())
             self.assertTrue((out_dir / "report.main.html").exists())
             self.assertTrue((out_dir / "report.main.docx").exists())
+            self.assertTrue((out_dir / "report.presentation.md").exists())
+            self.assertTrue((out_dir / "report.presentation.csv").exists())
+            self.assertTrue((out_dir / "report.presentation.html").exists())
+            self.assertTrue((out_dir / "report.presentation.docx").exists())
 
     def test_report_missing_work_root_returns_two(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -522,6 +526,7 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(code, 1)
             self.assertFalse((out_dir / "report.main.csv").exists())
+            self.assertFalse((out_dir / "report.presentation.csv").exists())
 
     def test_report_cli_skips_docx_when_header_missing_non_interactive(self) -> None:
         with TemporaryDirectory() as tmp:
@@ -554,11 +559,15 @@ class CliTests(unittest.TestCase):
                 )
 
             self.assertEqual(code, 0)
-            self.assertIn("docx skipped (no report.header)", stderr.getvalue())
+            self.assertIn("docx files skipped (no report.header)", stderr.getvalue())
             self.assertTrue((out_dir / "report.main.md").exists())
             self.assertTrue((out_dir / "report.main.csv").exists())
             self.assertTrue((out_dir / "report.main.html").exists())
+            self.assertTrue((out_dir / "report.presentation.md").exists())
+            self.assertTrue((out_dir / "report.presentation.csv").exists())
+            self.assertTrue((out_dir / "report.presentation.html").exists())
             self.assertFalse((out_dir / "report.main.docx").exists())
+            self.assertFalse((out_dir / "report.presentation.docx").exists())
 
 
 def _fake_clone(options):

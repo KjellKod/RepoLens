@@ -346,7 +346,8 @@ What happens:
 7. Mark available group checkboxes or item rows in `work/shortlist.md` with `[x]` approve
    or `[r]` reject, then press Enter. Item ticks override group ticks. `run` repeats until
    `open_count == 0`.
-8. `report` writes `report.main.{md,csv,html}` plus optional `.docx` and appendices under
+8. `report` writes `report.main.{md,csv,html}` and
+   `report.presentation.{md,csv,html}` plus optional `.docx` files and appendices under
    `<work-root>/reports` unless `--out-dir` overrides it.
 
 Resume is artifact-based. Rerun the same command after Ctrl-C, a closed terminal, or a crash:
@@ -373,11 +374,23 @@ non-interactive mode, open shortlist items produce a deterministic non-zero exit
 instructions once, and write no report until a human clears `shortlist.md`.
 
 The final `run` summary separates resume skips from real failures and names the exact
-report directory. Review `report.main.html`, `report.main.md`, and `report.main.csv`
-(and `report.main.docx` when present), review every `report.appendix.<label>.{md,csv}`,
-and double-check any reported coverage gaps. An empty shortlist means there are no open shipped-license
-decisions; it does not mean appendix rows have complete SPDX, source URL, or version
-coverage.
+report directory. Review `report.main.html`, `report.main.md`, `report.main.csv`,
+`report.presentation.html`, `report.presentation.md`, and `report.presentation.csv`
+(and their `.docx` files when present), review every
+`report.appendix.<label>.{md,csv}`, and double-check any reported coverage gaps. An empty
+shortlist means there are no open shipped-license decisions; it does not mean appendix
+rows have complete SPDX, source URL, or version coverage.
+
+If you already have a complete work root with resolved artifacts and a clear shortlist,
+you do not need to rerun the full pipeline just to create or refresh presentation
+artifacts. Run only the final report stage:
+
+```bash
+repolens report --work-root <WORK> --out-dir <REPORTS>
+```
+
+Run the full `repolens run` pipeline again only when earlier stages are stale or
+incomplete, or when the shortlist still has open items.
 
 `run` continues past per-repo scan or resolve failures when other repos succeeded. It lists the
 failed repos in the final summary, writes reports for successfully resolved repos, and exits
@@ -448,7 +461,7 @@ repolens shortlist --work-root work \
   --evidence work/shortlist.evidence.json
                                       # ingest verified proposals and browser evidence
 repolens report --work-root <WORK>
-                                      # assemble gated main, docx, and appendix reports
+                                      # assemble gated main, presentation, docx, and appendix reports
 ```
 
 Discovery (you approve the repo list), the `shortlist` approval gate, and the final report
@@ -872,7 +885,7 @@ items that public package metadata might clarify. After proposal ingestion, revi
 `shortlist.md` and mark remaining groups or rows with `[x]` to accept or `[r]` to reject,
 then rerun `repolens shortlist --work-root <WORK>`.
 
-## `report` — gated main disclosure + appendices
+## `report` — gated main and presentation disclosure + appendices
 
 `report` reads resolved occurrences, discovered repository categories when available, and
 local runtime report config. If `<WORK>/shortlist.json` exists with `open_count > 0` or
@@ -881,15 +894,16 @@ no report artifacts. A missing shortlist does not block assembly.
 
 When `--out-dir` is omitted, report writes to `<WORK>/reports`. The finish summary lists
 the resolved report directory, main row count, appendix row counts by label, and coverage
-gaps worth human review. Review `report.main.html`/`.md`/`.csv`/`.docx` when present, review
-appendices especially when `build-ci` rows have `UNKNOWN`, `missing_spdx_id`,
-`missing_source_url`, or `missing_version`, and generate the docx later by adding
-`report.header` config or rerunning report interactively if the summary says docx was
-skipped.
+gaps worth human review. Review `report.main.html`/`.md`/`.csv`/`.docx` when present,
+review `report.presentation.html`/`.md`/`.csv`/`.docx` when present, review appendices
+especially when `build-ci` rows have `UNKNOWN`, `missing_spdx_id`, `missing_source_url`,
+or `missing_version`, and generate the docx files later by adding `report.header` config
+or rerunning report interactively if the summary says docx was skipped.
 
-The `report.main.{md,csv,html}` and appendix data always render — they need no header
-config and never hard-fail. The HTML report is self-contained, wide on screen, and uses
-letter-landscape print CSS. The docx cover is **optional** and resolved as follows:
+The `report.main.{md,csv,html}`, `report.presentation.{md,csv,html}`, and appendix data
+always render — they need no header config and never hard-fail. The main and presentation
+HTML reports are self-contained, wide on screen, and use letter-landscape print CSS. The
+docx cover is **optional** and resolved as follows:
 
 - **`report.header` config present** → the docx is generated from it (the polished,
   final docx). This is the path for a shareable artifact:
@@ -927,7 +941,7 @@ letter-landscape print CSS. The docx cover is **optional** and resolved as follo
   (exit `0`):
 
   ```text
-  docx skipped (no report.header); md/csv contain all the data — add report.header config or run interactively to generate it.
+  docx files skipped (no report.header); md/csv/html contain all the data — add report.header config or run interactively to generate it.
   ```
 
 A `report.header` that is *present but malformed* (empty `org_name`/`legal_text`) still
@@ -938,14 +952,18 @@ included, even if they still carry coverage gaps such as `UNKNOWN` SPDX.
 
 `report.selection.include` is optional. When it is omitted, every observed third-party
 category is selected into `report.main`. When present, third-party occurrences in included
-categories go to `report.main.{md,csv,html}` and optional `.docx`; excluded third-party categories go to
-`report.appendix.<category>.{md,csv}`. First-party occurrences always go to
+categories go to `report.main.{md,csv,html}`, `report.presentation.{md,csv,html}`, and
+optional `.docx`; excluded third-party categories go to `report.appendix.<category>.{md,csv}`. First-party occurrences always go to
 `report.appendix.first-party.{md,csv}`. Build/CI-only occurrences tagged as
 `scope: build` and `distribution: not-distributed` always go to
 `report.appendix.build-ci.{md,csv}` instead of the shipped main report.
 
-The main markdown and CSV keep the frozen P6a columns. Category is used only for routing,
-appendix filenames, and appendix headings. If a resolved repo cannot be joined to
+The main markdown and CSV keep the frozen P6a columns. The presentation report is a
+sibling view of the same gated main row set: Markdown, HTML, and DOCX group by exact SPDX
+expression/value, while CSV stays flat and sorted by SPDX, name, then version. Current
+resolved records do not durably model `description` or `found_id`, so presentation output
+marks those cells as unavailable rather than inventing schema fields. Category is used
+only for routing, appendix filenames, and appendix headings. If a resolved repo cannot be joined to
 `discovered.json` by exact trimmed `name` or `name_with_owner`, it uses
 `discover.taxonomy.default_category` or `uncategorized` and the row records a
 `missing_category` coverage gap.
@@ -963,8 +981,9 @@ python scripts/m1_fixture_e2e.py --work-root /tmp/repolens-m1-fixture
 Expected output is a one-line JSON summary with discovered, SBOM, resolved, main report,
 appendix, and docx counts. The work root contains `discovered.json`,
 `repos.candidate.md`, per-fixture `sbom.syft.json` and
-`resolved.ndjson`, a clear `shortlist.json`, `reports/report.main.{md,csv,html}` plus
-optional `.docx`, and `reports/report.appendix.<category>.{md,csv}`. This is a fixture harness only; live owner
+`resolved.ndjson`, a clear `shortlist.json`, `reports/report.main.{md,csv,html}`,
+`reports/report.presentation.{md,csv,html}` plus optional `.docx` files, and
+`reports/report.appendix.<category>.{md,csv}`. This is a fixture harness only; live owner
 dogfood still uses the normal `repolens run --work-root /tmp/repolens-dogfood --owner
 <OWNER> --repos "<REPO>"` shape, or the equivalent
 `discover -> scan -> resolve -> flag -> shortlist -> report` stage flow.
@@ -979,8 +998,10 @@ dogfood still uses the normal `repolens run --work-root /tmp/repolens-dogfood --
 - `inventory.json`, `shortlist.json`, and `shortlist.md` — policy output from `flag`.
 - `report.main.{md,csv,html}` — the gated main disclosure output; HTML is wide on
   screen and prints as letter landscape.
-- `report.main.docx` — optional shareable Word output when report header text is
-  configured or entered interactively.
+- `report.presentation.{md,csv,html}` — the sibling presentation view, grouped by exact
+  SPDX in Markdown and HTML and flat in CSV.
+- `report.main.docx` and `report.presentation.docx` — optional shareable Word outputs
+  when report header text is configured or entered interactively.
 - `report.appendix.<category>.{md,csv}` — excluded-category and first-party appendices.
 
 ## Safety

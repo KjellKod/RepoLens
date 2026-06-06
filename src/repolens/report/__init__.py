@@ -15,6 +15,18 @@ from repolens.report.main import (
     render_main_report,
     render_markdown,
 )
+from repolens.report.presentation import (
+    DATA_LIMITATION_NOTE,
+    PRESENTATION_COLUMNS,
+    PresentationResult,
+    PresentationRow,
+    presentation_rows_from_disclosure,
+    render_presentation_artifacts,
+    render_presentation_csv,
+    render_presentation_docx,
+    render_presentation_html,
+    render_presentation_markdown,
+)
 from repolens.report.selection import (
     ReportHeader,
     ReportSelection,
@@ -23,9 +35,13 @@ from repolens.report.selection import (
 
 __all__ = [
     "COLUMNS",
+    "DATA_LIMITATION_NOTE",
     "DEFAULT_LEGAL_TEXT",
     "DOCX_SKIPPED_NOTICE",
+    "PRESENTATION_COLUMNS",
     "DisclosureRow",
+    "PresentationResult",
+    "PresentationRow",
     "ReportGateOpen",
     "ReportHeader",
     "ReportAppendixSummary",
@@ -37,5 +53,11 @@ __all__ = [
     "render_html",
     "render_main_report",
     "render_markdown",
+    "render_presentation_artifacts",
+    "render_presentation_csv",
+    "render_presentation_docx",
+    "render_presentation_html",
+    "render_presentation_markdown",
+    "presentation_rows_from_disclosure",
     "report_header_if_configured",
 ]

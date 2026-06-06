@@ -38,6 +38,10 @@ def _write_report(out_dir: Path, rows: int = 1) -> cli.CommandResult:
     (out_dir / "report.main.md").write_text("# report\n", encoding="utf-8")
     (out_dir / "report.main.html").write_text("<!doctype html>\n", encoding="utf-8")
     (out_dir / "report.main.docx").write_bytes(b"docx")
+    (out_dir / "report.presentation.csv").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    (out_dir / "report.presentation.md").write_text("# presentation\n", encoding="utf-8")
+    (out_dir / "report.presentation.html").write_text("<!doctype html>\n", encoding="utf-8")
+    (out_dir / "report.presentation.docx").write_bytes(b"docx")
     return cli.CommandResult(cli.CommandStatus.SUCCESS, "wrote report")
 
 
@@ -141,6 +145,9 @@ def test_report_command_defaults_out_dir_under_work_root(
     assert (work_root / "reports" / "report.main.md").exists()
     assert (work_root / "reports" / "report.main.csv").exists()
     assert (work_root / "reports" / "report.main.html").exists()
+    assert (work_root / "reports" / "report.presentation.md").exists()
+    assert (work_root / "reports" / "report.presentation.csv").exists()
+    assert (work_root / "reports" / "report.presentation.html").exists()
 
 
 def test_run_yes_no_header_skips_docx_via_report_stage(
@@ -210,11 +217,15 @@ def test_run_yes_no_header_skips_docx_via_report_stage(
 
     assert code == 0
     assert captured == {"owner": "sentinel-owner", "interactive": False}
-    assert "docx skipped (no report.header)" in stderr.getvalue()
+    assert "docx files skipped (no report.header)" in stderr.getvalue()
     assert (out_dir / "report.main.md").exists()
     assert (out_dir / "report.main.csv").exists()
     assert (out_dir / "report.main.html").exists()
+    assert (out_dir / "report.presentation.md").exists()
+    assert (out_dir / "report.presentation.csv").exists()
+    assert (out_dir / "report.presentation.html").exists()
     assert not (out_dir / "report.main.docx").exists()
+    assert not (out_dir / "report.presentation.docx").exists()
 
 
 def test_run_resolve_stage_resolves_every_scanned_repo(
@@ -1231,7 +1242,15 @@ def test_stale_flag_outputs_rerun_after_new_resolved_artifact(
     resolved_path = resolved_dir / "resolved.ndjson"
     resolved_path.write_text("{}\n", encoding="utf-8")
     (work_root / "inventory.json").write_text("{}\n", encoding="utf-8")
-    (work_root / "shortlist.json").write_text('{"open_count":0,"items":[]}\n', encoding="utf-8")
+    store.atomic_write_json(
+        work_root / "shortlist.json",
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "open_count": 0,
+            "items": [],
+        },
+    )
     (work_root / "shortlist.md").write_text("settled\n", encoding="utf-8")
     for stale_path in (
         work_root / "inventory.json",
@@ -1290,6 +1309,9 @@ def test_report_resume_currency_is_config_aware_for_skipped_docx(tmp_path: Path)
     (out_dir / "report.main.md").write_text("# report\n", encoding="utf-8")
     (out_dir / "report.main.csv").write_text("name,spdx_id\n", encoding="utf-8")
     (out_dir / "report.main.html").write_text("<!doctype html>\n", encoding="utf-8")
+    (out_dir / "report.presentation.md").write_text("# report\n", encoding="utf-8")
+    (out_dir / "report.presentation.csv").write_text("name,spdx_id\n", encoding="utf-8")
+    (out_dir / "report.presentation.html").write_text("<!doctype html>\n", encoding="utf-8")
     for input_path in (
         resolved_path,
         work_root / "inventory.json",
@@ -1310,6 +1332,52 @@ def test_report_resume_currency_is_config_aware_for_skipped_docx(tmp_path: Path)
     assert cli._report_resume_complete(work_root, out_dir, {"sentinel-alpha"}, no_header) is True
     # Header now configured: the missing docx must force a re-run (no stranding).
     assert cli._report_resume_complete(work_root, out_dir, {"sentinel-alpha"}, with_header) is False
+
+
+def test_report_resume_requires_presentation_artifacts_for_complete_work_root(
+    tmp_path: Path,
+) -> None:
+    from repolens.config import Config
+
+    work_root = tmp_path / "work"
+    out_dir = tmp_path / "reports"
+    resolved_dir = store.repo_dir(work_root, "sentinel-alpha")
+    resolved_dir.mkdir(parents=True, exist_ok=True)
+    resolved_path = resolved_dir / "resolved.ndjson"
+    resolved_path.write_text("{}\n", encoding="utf-8")
+    (work_root / "inventory.json").write_text("{}\n", encoding="utf-8")
+    store.atomic_write_json(
+        work_root / "shortlist.json",
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "open_count": 0,
+            "items": [],
+        },
+    )
+    (work_root / "shortlist.md").write_text("settled\n", encoding="utf-8")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for filename in cli.REPORT_MAIN_DATA_FILENAMES:
+        (out_dir / filename).write_text("x\n", encoding="utf-8")
+    for input_path in (
+        resolved_path,
+        work_root / "inventory.json",
+        work_root / "shortlist.json",
+        work_root / "shortlist.md",
+    ):
+        _set_mtime(input_path, 10)
+    for report_path in out_dir.iterdir():
+        _set_mtime(report_path, 20)
+
+    assert (
+        cli._report_resume_complete(
+            work_root,
+            out_dir,
+            {"sentinel-alpha"},
+            Config(values={"report": {}}, sources=()),
+        )
+        is False
+    )
 
 
 def test_stale_report_reruns_when_inputs_are_newer(
@@ -1655,6 +1723,7 @@ def test_done_message_separates_resume_skips_failures_and_review_cues(tmp_path: 
     assert (
         "Coverage gaps to double-check: build-ci: missing_source_url=1, missing_spdx_id=1"
     ) in message
+    assert "Main and presentation reports:" in message
     assert "Docx skipped" in message
 
 
