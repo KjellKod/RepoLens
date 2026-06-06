@@ -1,0 +1,28 @@
+tests/unit/test_cli_run.py
+  s_11ee0ae2d41c29::t_896d459678a9db 1527-1532,1605,1607,1618-1623
+tests/unit/test_cli_shortlist_research.py
+  s_11ee0ae2d41c29::t_05460db55ec4d7 53,58-65,70-71,92
+src/repolens/shortlist/research.py
+  s_11ee0ae2d41c29::t_5e263ba3168531 6,95,99,101,104-109,114-117,119,121,127,132-135,145-147
+src/repolens/cli.py
+  s_11ee0ae2d41c29::t_ba8dd2e7633d1c 3196
+  s_11ee0ae2d41c29::t_aa87d1b04964ba 1690,1727-1745,1781-1789,1796-1824,1826
+tests/unit/shortlist/test_research.py
+  s_11ee0ae2d41c29::t_9a6cbcaae2ba97 10-15,320-348
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "bd39f2c4d1f1c9c87aeaeb74ed5d462f4f0bd661",
+  "prompts": {},
+  "sessions": {
+    "s_11ee0ae2d41c29": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9a12-f3c1-7ff3-b180-44dee1fd1dc7",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
