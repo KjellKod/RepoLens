@@ -14,6 +14,7 @@ from repolens.report.main import (
     render_html,
     render_main_report,
     render_markdown,
+    select_main_report_rows,
 )
 from repolens.report.presentation import (
     DATA_LIMITATION_NOTE,
@@ -53,6 +54,7 @@ __all__ = [
     "render_html",
     "render_main_report",
     "render_markdown",
+    "select_main_report_rows",
     "render_presentation_artifacts",
     "render_presentation_csv",
     "render_presentation_docx",

@@ -1,7 +1,7 @@
 """Compound SPDX expression tests."""
 
 from repolens.policy import classify_license_input, load_default_policy
-from repolens.policy.expression import equivalent_expressions
+from repolens.policy.expression import equivalent_expressions, pure_or_leaf_options
 from repolens.policy.spdx import normalize_license
 from repolens.policy.types import PolicyTier
 
@@ -110,6 +110,11 @@ def test_expression_equivalence_tolerates_or_operand_order() -> None:
         "MIT OR Apache-2.0",
         leaf_normalizer=_normalize_leaf,
     )
+
+
+def test_pure_or_leaf_options_rejects_parenthesized_nested_or() -> None:
+    assert pure_or_leaf_options("MIT OR Apache-2.0") == ("MIT", "Apache-2.0")
+    assert pure_or_leaf_options("MIT OR (Apache-2.0 OR BSD-3-Clause)") is None
 
 
 def test_with_without_exception_match_is_unknown() -> None:

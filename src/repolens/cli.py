@@ -819,6 +819,34 @@ def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
         help="Directory for report.main.*, report.presentation.*, and appendix artifacts.",
     )
     subparser.set_defaults(handler=_report)
+    actions = subparser.add_subparsers(
+        dest="report_action",
+        metavar="<action>",
+        title="report actions",
+        required=False,
+    )
+    review_parser = actions.add_parser(
+        "review",
+        help="Generate or ingest disclosure-license review artifacts.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Generate report.review.md/json for compound disclosure licenses, ingesting "
+            "only constrained human checkbox choices from report.review.md."
+        ),
+    )
+    review_parser.add_argument(
+        "--work-root",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Pipeline work root used for report.review.md/json.",
+    )
+    review_parser.add_argument(
+        "--identity",
+        metavar="REVIEWER",
+        help="Optional reviewer label override recorded on approved review choices.",
+    )
+    review_parser.set_defaults(handler=_report_review)
 
 
 def _global_config_help_requested(argv: Sequence[str]) -> bool:
@@ -3225,6 +3253,24 @@ def _shortlist_research_stage(args: argparse.Namespace) -> CommandResult:
             f"{result.proposals_path.name}, {result.evidence_path.name}, "
             f"{result.review_path.name}; proposals: {result.proposal_count}"
         ),
+    )
+
+
+def _report_review(args: argparse.Namespace) -> CommandResult:
+    from repolens.report.review import run_report_review
+
+    result = run_report_review(
+        args.work_root,
+        config=args.runtime_config,
+        identity=args.identity,
+    )
+    return CommandResult(
+        CommandStatus.SUCCESS,
+        (
+            f"report review: {result.open_count} open item(s) of {result.item_count}; "
+            f"wrote {result.markdown_path}, {result.json_path}"
+        ),
+        metadata=result,
     )
 
 

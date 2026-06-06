@@ -990,6 +990,30 @@ errors — only the *absent* case is relaxed.
 Rejected shortlist items are excluded from `report.main`; approved shortlist items are
 included, even if they still carry coverage gaps such as `UNKNOWN` SPDX.
 
+Before publishing final presentation artifacts, you can review complex disclosure
+licenses without rerunning scan or resolve:
+
+```bash
+repolens report review --work-root <WORK>
+```
+
+This writes `<WORK>/report.review.md` and `<WORK>/report.review.json` for final main-report
+rows whose detected SPDX expression is compound or otherwise review-worthy, including
+policy-allowed `OR` expressions. Edit `report.review.md` by checking exactly one disclosure
+choice per item, optionally add a short disclosure note, then rerun the same command to
+ingest the decisions. Open shortlist items still block matching disclosure choices from
+becoming authoritative.
+
+After review, rerun only the report step:
+
+```bash
+repolens report --work-root <WORK>
+```
+
+Approved review choices flow into `report.presentation.{md,csv,html,docx}` as the
+disclosure license and note while the detected SPDX expression stays visible. The main
+report keeps its raw SPDX column unchanged.
+
 `report.selection.include` is optional. When it is omitted, every observed third-party
 category is selected into `report.main`. When present, third-party occurrences in included
 categories go to `report.main.{md,csv,html}`, `report.presentation.{md,csv,html}`, and

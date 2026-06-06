@@ -18,6 +18,7 @@ SCHEMA_NAMES = frozenset(
         "shortlist",
         "shortlist_evidence",
         "shortlist_proposals",
+        "report_review",
         "local_config",
     }
 )
@@ -63,6 +64,8 @@ def validate_artifact(value: Any, artifact_name: str) -> None:
         _validate_discovered_counts(value)
     if artifact_name == "shortlist":
         _validate_shortlist_open_count(value)
+    if artifact_name == "report_review":
+        _validate_report_review_open_count(value)
 
 
 def _validate_discovered_counts(value: Any) -> None:
@@ -96,3 +99,16 @@ def _validate_shortlist_open_count(value: Any) -> None:
     open_count = sum(1 for item in items if isinstance(item, dict) and item.get("status") == "open")
     if value.get("open_count") != open_count:
         raise SchemaValidationError("shortlist.open_count: must match open item count")
+
+
+def _validate_report_review_open_count(value: Any) -> None:
+    if not isinstance(value, dict):
+        return
+    items = value.get("items", [])
+    if not isinstance(items, list):
+        return
+    open_count = sum(
+        1 for item in items if isinstance(item, dict) and item.get("review_status") == "open"
+    )
+    if value.get("open_count") != open_count:
+        raise SchemaValidationError("report_review.open_count: must match open review item count")

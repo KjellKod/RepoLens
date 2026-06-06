@@ -19,6 +19,7 @@ from repolens.report import (
     render_presentation_html,
     render_presentation_markdown,
 )
+from repolens.report.review import ReviewDecision, review_id_for_row
 from repolens.report.selection import ReportHeader
 
 
@@ -37,6 +38,7 @@ def test_presentation_csv_is_flat_and_sorted_by_spdx_name_version() -> None:
     assert "found_id" not in csv_rows[0]
     assert [row[0] for row in csv_rows[1:]] == ["alpha-lib", "alpha-lib", "zeta-lib"]
     assert [row[1] for row in csv_rows[1:]] == ["Apache-2.0", "MIT", "MIT"]
+    assert [row[2] for row in csv_rows[1:]] == ["Apache-2.0", "MIT", "MIT"]
     assert all(not row[0].startswith("##") for row in csv_rows[1:])
 
 
@@ -59,6 +61,36 @@ def test_presentation_markdown_groups_by_exact_spdx_and_states_data_limits() -> 
     assert "Brief package summary" in markdown
     assert " n/a " in markdown
     assert "found_id" not in markdown
+
+
+def test_presentation_uses_approved_review_decision_and_preserves_detected_spdx() -> None:
+    disclosure_row = _row(spdx_id="MIT OR Apache-2.0")
+    rows = presentation_rows_from_disclosure(
+        (disclosure_row,),
+        review_state={
+            review_id_for_row(disclosure_row): ReviewDecision(
+                review_id=review_id_for_row(disclosure_row),
+                selected_spdx="MIT",
+                review_note="Using permissive branch.",
+            )
+        },
+    )
+
+    csv_rows = list(csv.DictReader(io.StringIO(render_presentation_csv(rows))))
+    markdown = render_presentation_markdown(rows)
+    html = render_presentation_html(rows)
+    docx_xml = _document_xml(render_presentation_docx(_header(), rows))
+
+    assert csv_rows[0]["disclosure license (spdx)"] == "MIT"
+    assert csv_rows[0]["detected license (spdx)"] == "MIT OR Apache-2.0"
+    assert csv_rows[0]["notes"] == "Using permissive branch."
+    assert "## MIT (1)" in markdown
+    assert "MIT OR Apache-2.0" in markdown
+    assert "Using permissive branch." in markdown
+    assert "<h2>MIT (1)</h2>" in html
+    assert "MIT OR Apache-2.0" in html
+    assert b"MIT OR Apache-2.0" in docx_xml
+    assert b"Using permissive branch." in docx_xml
 
 
 def test_presentation_html_uses_grouped_tables_and_neutralizes_unsafe_urls() -> None:
