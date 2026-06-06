@@ -1,0 +1,21 @@
+src/repolens/cli.py
+  s_3073ea6fd0069a::t_fff0a6195799f2 2189-2190,2192,2196-2207,2222-2223
+tests/unit/test_cli_run.py
+  s_3073ea6fd0069a::t_7cef9030336adc 1724-1732
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "ff90dcc039b0eff568ab2d0590ce3d81c135d416",
+  "prompts": {},
+  "sessions": {
+    "s_3073ea6fd0069a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9aa5-10b3-7d31-a790-88ca22eb7b42",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
