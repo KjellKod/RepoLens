@@ -6,9 +6,21 @@ import pytest
 
 from repolens.data import store
 from repolens.data.errors import SchemaValidationError
+from repolens.data.validation import validate_artifact
 from repolens.security.http_client import FetchResult, HttpFetchOptions
 from repolens.shortlist.agent import AgentRequest, AgentResponse
 from repolens.shortlist.stage import run_shortlist
+
+_GITHUB_DEFAULT_BRANCH_BODY = (
+    b'{"license":{"spdx_id":"MIT"},'
+    b'"html_url":"https://github.com/sentinel/acme-lib/blob/HEAD/LICENSE",'
+    b'"download_url":"https://raw.githubusercontent.com/sentinel/acme-lib/HEAD/LICENSE"}'
+)
+_GITHUB_PINNED_BODY = (
+    b'{"license":{"spdx_id":"MIT"},'
+    b'"html_url":"https://github.com/sentinel/acme-lib/blob/1.2.3/LICENSE",'
+    b'"download_url":"https://raw.githubusercontent.com/sentinel/acme-lib/1.2.3/LICENSE"}'
+)
 
 _DEPS_DEV_URL = "https://api.deps.dev/v3alpha/systems/pypi/packages/acme-lib/versions/1.2.3"
 
@@ -446,6 +458,406 @@ def test_github_source_repo_proposal_rejects_wrong_repo(tmp_path: Path) -> None:
     item = store.read_shortlist(tmp_path)["items"][0]
     assert item["candidate_spdx"] is None
     assert item["note"] == "verify_failed:verify:source_repo_mismatch"
+
+
+def _default_branch_source_repo(**overrides: object) -> dict[str, object]:
+    source_repo: dict[str, object] = {
+        "host": "github.com",
+        "owner": "sentinel",
+        "repo": "acme-lib",
+        "ref_kind": "default_branch",
+        "provenance": "package_metadata",
+        "provenance_detail": "swiftpm_purl",
+        "bound_to_package": True,
+    }
+    source_repo.update(overrides)
+    return source_repo
+
+
+def test_github_default_branch_proposal_verifies_with_provenance(tmp_path: Path) -> None:
+    """#12 — provenance-bound default-branch proposal verifies and emits the unpinned link."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(),
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_DEFAULT_BRANCH_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] == "MIT"
+    assert item["note"] == "agent:verified_awaiting_human"
+    assert item["verify_reason"] == "verify:exact_anchor_default_branch"
+    research = item["research_evidence"]
+    entry = research["browser_evidence"][0]
+    assert entry["label"] == "🔎 GitHub license (MIT · default branch, not version-pinned)"
+    assert entry["source_type"] == "github_license_api_default_branch"
+    assert entry["url"] == "https://github.com/sentinel/acme-lib/blob/HEAD/LICENSE"
+    assert research["outcome"] == "verify:exact_anchor_default_branch"
+    assert research["machine_verification"] == "verified"
+
+
+def test_github_default_branch_proposal_verifies_even_with_known_version(tmp_path: Path) -> None:
+    """#13 — default-branch acceptance is allowed despite a known package version."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)  # carries version 1.2.3
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(),
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_DEFAULT_BRANCH_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] == "MIT"
+    assert item["verify_reason"] == "verify:exact_anchor_default_branch"
+
+
+def test_provenance_missing_required(tmp_path: Path) -> None:
+    """#14 — a GitHub license URL with no source_repo fails provenance-required."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [_proposal(evidence_url="https://api.github.com/repos/sentinel/acme-lib/license")],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_DEFAULT_BRANCH_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_provenance_required"
+
+
+def test_default_branch_without_ref_kind_fails_closed(tmp_path: Path) -> None:
+    """#15 — a bare missing ref with no ref_kind=default_branch fails closed."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(ref_kind="unknown"),
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_DEFAULT_BRANCH_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_provenance_required"
+
+
+def test_source_pins_ref_url_unpinned_ref_mismatch(tmp_path: Path) -> None:
+    """#16 — source pins a ref but the URL is unpinned: asymmetric, no downgrade."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(ref="1.2.3", ref_kind="version"),
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_DEFAULT_BRANCH_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_ref_mismatch"
+
+
+def test_default_branch_kind_but_url_pinned_ref_mismatch(tmp_path: Path) -> None:
+    """#17 — source says default branch but the URL pins a ref: asymmetric reverse."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license?ref=master",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(),
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_DEFAULT_BRANCH_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_ref_mismatch"
+
+
+def test_owner_repo_mismatch(tmp_path: Path) -> None:
+    """#18 — URL repo differs from the provenance-bound repo: source_repo_mismatch."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/attacker/acme-lib/license",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(owner="attacker"),
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_DEFAULT_BRANCH_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_mismatch"
+
+
+def test_pinned_but_wrong_ref_proposal_ref_mismatch(tmp_path: Path) -> None:
+    """#19 — pinned source ref but URL pins a different ref: source_repo_ref_mismatch."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license?ref=2.0.0",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(ref="1.2.3", ref_kind="version"),
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_PINNED_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_ref_mismatch"
+
+
+def test_verified_github_proposal_emits_validated_browser_evidence(tmp_path: Path) -> None:
+    """#20 — a pinned proposal emits the clean (no caveat) browser-evidence link."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license?ref=1.2.3",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(ref="1.2.3", ref_kind="version"),
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_PINNED_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] == "MIT"
+    assert item["verify_reason"] == "verify:exact_anchor"
+    entry = item["research_evidence"]["browser_evidence"][0]
+    assert entry["label"] == "GitHub license (MIT)"
+    assert entry["source_type"] == "github_license_api"
+    # html_url is preferred over the raw download_url; its hostname is exactly github.com.
+    assert entry["url"] == "https://github.com/sentinel/acme-lib/blob/1.2.3/LICENSE"
+
+
+def test_attacker_host_lifted_url_dropped(tmp_path: Path) -> None:
+    """#21 — look-alike/attacker lifted URLs are dropped; no browser_evidence written."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(),
+            )
+        ],
+    )
+    body = (
+        b'{"license":{"spdx_id":"MIT"},'
+        b'"html_url":"https://github.com.attacker.test/x/LICENSE",'
+        b'"download_url":"https://evil.example/raw"}'
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(body),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    # Verification still succeeds, but the look-alike hosts are dropped (exact-match guard).
+    assert item["candidate_spdx"] == "MIT"
+    research = item.get("research_evidence") or {}
+    assert not research.get("browser_evidence")
+
+
+def test_default_branch_proposal_missing_provenance_rejected(tmp_path: Path) -> None:
+    """#22 — a default-branch proposal cannot verify without a provenance binding."""
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(bound_to_package=False),
+            )
+        ],
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_DEFAULT_BRANCH_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_provenance_required"
+    research = item.get("research_evidence") or {}
+    assert not research.get("browser_evidence")
+
+
+def _schema_proposal(**source_repo_overrides: object) -> dict[str, object]:
+    source_repo: dict[str, object] = {
+        "host": "github.com",
+        "owner": "sentinel",
+        "repo": "acme-lib",
+        "provenance": "package_metadata",
+        "provenance_detail": "swiftpm_purl",
+        "bound_to_package": True,
+    }
+    source_repo.update(source_repo_overrides)
+    return _proposal(
+        evidence_url="https://api.github.com/repos/sentinel/acme-lib/license",
+        evidence_kind="github_source_repo",
+        source_repo=source_repo,
+    )
+
+
+def test_default_branch_proposal_passes_artifact_schema() -> None:
+    """#24 — the schema ACCEPTS the default-branch shape (ref absent) and a pinned shape."""
+
+    default_branch = _schema_proposal(ref_kind="default_branch")
+    validate_artifact([default_branch], "shortlist_proposals")  # must not raise
+
+    pinned = _schema_proposal(ref_kind="version", ref="1.2.3")
+    validate_artifact([pinned], "shortlist_proposals")  # if/then did not break pinned
+
+
+def test_bare_missing_ref_without_ref_kind_still_fails_schema() -> None:
+    """#25 — a version proposal that omits ref fails the schema if/then (ref required).
+
+    The absent-``ref_kind`` variant is permitted by the schema (it is the runtime gate that
+    fail-closes it via ``verify:source_repo_provenance_required`` — covered by test #15);
+    the schema's role is to guarantee a pinned proposal can never silently drop its ``ref``.
+    """
+
+    version_without_ref = _schema_proposal(ref_kind="version")
+    with pytest.raises(SchemaValidationError):
+        validate_artifact([version_without_ref], "shortlist_proposals")
 
 
 def test_github_source_repo_proposal_accepts_matching_package_repo(tmp_path: Path) -> None:

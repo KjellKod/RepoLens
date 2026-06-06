@@ -21,7 +21,6 @@
           "host",
           "owner",
           "repo",
-          "ref",
           "provenance",
           "provenance_detail",
           "bound_to_package"
@@ -33,12 +32,17 @@
           "ref": {"type": "string", "minLength": 1},
           "ref_kind": {
             "type": ["string", "null"],
-            "enum": ["version", "commit", "unknown", null]
+            "enum": ["version", "commit", "unknown", "default_branch", null]
           },
           "provenance": {"type": "string", "enum": ["package_metadata"]},
           "provenance_detail": {"type": "string", "minLength": 1},
           "bound_to_package": {"type": "boolean"}
         },
+        "if": {
+          "properties": {"ref_kind": {"enum": ["version", "commit"]}},
+          "required": ["ref_kind"]
+        },
+        "then": {"required": ["ref"]},
         "additionalProperties": false
       },
       "abstain": {"type": "boolean"},

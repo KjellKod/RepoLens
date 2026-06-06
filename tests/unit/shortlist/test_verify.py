@@ -252,6 +252,219 @@ def test_partial_claim_against_compound_expression_fails_anchor_match() -> None:
     assert outcome.reason == "verify:anchor_mismatch"
 
 
+_GITHUB_LICENSE_BODY = (
+    b'{"license":{"spdx_id":"MIT"},'
+    b'"html_url":"https://github.com/o/r/blob/v1.2.3/LICENSE",'
+    b'"download_url":"https://raw.githubusercontent.com/o/r/v1.2.3/LICENSE"}'
+)
+
+
+def test_github_license_api_pinned_ref_verifies_with_urls() -> None:
+    """#1 — pinned ref verifies, ref_pinned True, URLs lifted, reason exact_anchor."""
+
+    url = "https://api.github.com/repos/o/r/license?ref=1.2.3"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        expected_ref="1.2.3",
+        allow_default_branch=False,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.reason == "verify:exact_anchor"
+    assert outcome.ref_pinned is True
+    assert outcome.html_url == "https://github.com/o/r/blob/v1.2.3/LICENSE"
+    assert outcome.download_url == "https://raw.githubusercontent.com/o/r/v1.2.3/LICENSE"
+
+
+def test_github_license_api_bare_url_verifies_default_branch_with_urls() -> None:
+    """#2 — bare /license with the flag verifies as unpinned default branch."""
+
+    url = "https://api.github.com/repos/o/r/license"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.reason == "verify:exact_anchor_default_branch"
+    assert outcome.ref_pinned is False
+    assert outcome.html_url == "https://github.com/o/r/blob/v1.2.3/LICENSE"
+    assert outcome.download_url == "https://raw.githubusercontent.com/o/r/v1.2.3/LICENSE"
+
+
+def test_github_license_api_master_ref_verifies_default_branch() -> None:
+    """#3 — ?ref=master with the flag verifies as unpinned default branch."""
+
+    url = "https://api.github.com/repos/o/r/license?ref=master"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.reason == "verify:exact_anchor_default_branch"
+    assert outcome.ref_pinned is False
+
+
+def test_github_license_api_bare_url_without_flag_still_missing_ref() -> None:
+    """#4 — without the flag, a bare /license still fails verify:missing_ref."""
+
+    url = "https://api.github.com/repos/o/r/license"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=False,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:missing_ref"
+
+
+def test_github_license_api_master_ref_without_flag_still_rejected() -> None:
+    """#5 — without the flag, ?ref=master still fails default_branch_rejected."""
+
+    url = "https://api.github.com/repos/o/r/license?ref=master"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        expected_ref="1.2.3",
+        allow_default_branch=False,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:default_branch_rejected"
+
+
+def test_github_license_api_noassertion_fails_closed() -> None:
+    """#6 — NOASSERTION fails closed even with the flag on."""
+
+    url = "https://api.github.com/repos/o/r/license"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(b'{"license":{"spdx_id":"NOASSERTION"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:anchor_mismatch"
+
+
+def test_github_license_api_null_spdx_fails_closed() -> None:
+    """#7 — null spdx_id fails closed."""
+
+    url = "https://api.github.com/repos/o/r/license"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(b'{"license":{"spdx_id":null}}'),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:anchor_mismatch"
+
+
+def test_github_license_api_spdx_mismatch_fails_closed() -> None:
+    """#8 — SPDX mismatch fails closed (never downgraded)."""
+
+    url = "https://api.github.com/repos/o/r/license"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(b'{"license":{"spdx_id":"GPL-3.0-only"}}'),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:anchor_mismatch"
+
+
+def test_github_license_api_pinned_but_wrong_ref_still_ref_mismatch() -> None:
+    """#9 — a pinned-but-wrong ref fails verify:ref_mismatch even with the flag on."""
+
+    url = "https://api.github.com/repos/o/r/license?ref=2.0.0"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        expected_ref="1.2.3",
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:ref_mismatch"
+
+
+def test_github_license_api_sha_ref_stays_pinned() -> None:
+    """#10 — a 40-char SHA ref stays pinned even with the flag on."""
+
+    url = "https://api.github.com/repos/o/r/license?ref=" + ("a" * 40)
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.reason == "verify:exact_anchor"
+    assert outcome.ref_pinned is True
+
+
+def test_raw_download_url_as_primary_evidence_blocked() -> None:
+    """#11 — a raw githubusercontent URL that is not a CocoaPods podspec is blocked."""
+
+    url = "https://raw.githubusercontent.com/o/r/master/LICENSE"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:fetch_blocked_or_failed"
+
+
+def test_verifier_reason_set_not_asserted_exhaustively() -> None:
+    """#26 — grounding guard: no consumer enumerates the verifier reason-set.
+
+    A repo-wide search (``rg "verify:exact_anchor" tests/ src/``) confirmed no test or
+    consumer asserts the reason-set exhaustively (no set-membership / all-reasons
+    enumeration), so adding ``verify:exact_anchor_default_branch`` is purely additive. If a
+    future exhaustive assertion is introduced, EXTEND it to include the new reason rather
+    than letting it silently reject the value. Both reasons are produced by the verifier
+    and are distinct.
+    """
+
+    pinned = verify_agent_resolution(
+        Resolution("MIT", "https://api.github.com/repos/o/r/license?ref=1.2.3", "MIT"),
+        expected_ref="1.2.3",
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+    default_branch = verify_agent_resolution(
+        Resolution("MIT", "https://api.github.com/repos/o/r/license", "MIT"),
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert pinned.reason == "verify:exact_anchor"
+    assert default_branch.reason == "verify:exact_anchor_default_branch"
+    assert pinned.reason != default_branch.reason
+
+
 def test_off_allowlist_host_raises_at_validate() -> None:
     options = HttpFetchOptions(allowed_hosts=API_ALLOWED_HOSTS, headers={})
     with pytest.raises(FetchSecurityError, match="host is not allowlisted"):
