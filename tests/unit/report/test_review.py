@@ -141,7 +141,7 @@ def test_report_review_suggests_lower_risk_or_branch(tmp_path: Path) -> None:
 
     markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
     assert "suggested choice: `MIT`" in markdown
-    assert "lowest policy-risk branch among the simple OR options (ALLOW)" in markdown
+    assert "MIT has policy tier ALLOW; lower risk than GPL-3.0-only (BLOCK)" in markdown
 
 
 def test_report_review_suggests_keep_full_for_non_branch_expression(tmp_path: Path) -> None:
@@ -153,6 +153,19 @@ def test_report_review_suggests_keep_full_for_non_branch_expression(tmp_path: Pa
     assert "### package: `acme-lib`, version: `1.2.3`" in markdown
     assert "suggested choice: `Keep full expression: MIT AND Apache-2.0`" in markdown
     assert "not a simple OR branch choice" in markdown
+
+
+def test_report_review_suggests_keep_full_when_lowest_risk_branch_ties(tmp_path: Path) -> None:
+    _write_resolved(tmp_path, _record(spdx_id="Apache-2.0 OR LGPL-2.1-or-later OR MIT"))
+
+    run_report_review(tmp_path, now="2026-06-06T00:00:00Z")
+
+    markdown = (tmp_path / "report.review.md").read_text(encoding="utf-8")
+    assert "suggested choice: `Keep full expression: Apache-2.0 OR LGPL-2.1-or-later OR MIT`" in markdown
+    assert (
+        "Apache-2.0 and MIT have policy tier ALLOW; "
+        "lower risk than LGPL-2.1-or-later (REVIEW)"
+    ) in markdown
 
 
 def test_checked_branch_records_selected_spdx_and_note(tmp_path: Path) -> None:

@@ -20,6 +20,7 @@ from repolens.exit_codes import InputError
 from repolens.policy import classify_license_input
 from repolens.policy.expression import ParseError, pure_or_leaf_options
 from repolens.policy.tiers import risk_rank
+from repolens.policy.types import PolicyTier
 from repolens.report.main import DisclosureRow, select_main_report_rows
 from repolens.security.redaction import redact_tokens, redact_tokens_from_structure
 from repolens.security.sanitize import markdown_link, render_code_span, sanitize_markdown
@@ -781,7 +782,7 @@ def _suggested_choice(item: ReviewItem) -> tuple[ReviewOption, str] | None:
         has_higher_risk_branch = any(risk_rank(tier) > best_rank for _option, tier in ranked)
         if len(best) == 1 and has_higher_risk_branch:
             option, tier = best[0]
-            return option, f"lowest policy-risk branch among the simple OR options ({tier.value})"
+            return option, _lower_risk_branch_reason(option, tier.value, ranked)
         if keep_full is not None:
             tier_values = _sorted_unique(tier.value for _option, tier in ranked)
             if len(tier_values) == 1:
@@ -792,8 +793,7 @@ def _suggested_choice(item: ReviewItem) -> tuple[ReviewOption, str] | None:
                 )
             return (
                 keep_full,
-                "multiple simple OR options share the lowest policy-risk tier; "
-                "keeping the full expression avoids an arbitrary branch choice",
+                _equal_lowest_risk_branches_reason(ranked),
             )
     if keep_full is not None:
         return (
@@ -801,6 +801,52 @@ def _suggested_choice(item: ReviewItem) -> tuple[ReviewOption, str] | None:
             "not a simple OR branch choice; keep the full expression unless legal review chooses otherwise",
         )
     return None
+
+
+def _lower_risk_branch_reason(
+    selected_option: ReviewOption,
+    selected_tier: str,
+    ranked: Sequence[tuple[ReviewOption, PolicyTier]],
+) -> str:
+    other_options = [
+        f"{option.spdx or option.label} ({tier.value})"
+        for option, tier in ranked
+        if option.option_id != selected_option.option_id
+    ]
+    if not other_options:
+        return f"{selected_option.spdx or selected_option.label} has policy tier {selected_tier}"
+    return (
+        f"{selected_option.spdx or selected_option.label} has policy tier {selected_tier}; "
+        f"lower risk than {', '.join(other_options)}"
+    )
+
+
+def _equal_lowest_risk_branches_reason(ranked: Sequence[tuple[ReviewOption, PolicyTier]]) -> str:
+    best_rank = min(risk_rank(tier) for _option, tier in ranked)
+    best = tuple((option, tier) for option, tier in ranked if risk_rank(tier) == best_rank)
+    higher = tuple((option, tier) for option, tier in ranked if risk_rank(tier) > best_rank)
+    best_labels = _joined_option_labels(option.spdx or option.label for option, _tier in best)
+    if not higher:
+        return (
+            f"{best_labels} have policy tier {best[0][1].value}; "
+            "keeping the full expression avoids an arbitrary branch choice"
+        )
+    higher_labels = _joined_option_labels(
+        f"{option.spdx or option.label} ({tier.value})" for option, tier in higher
+    )
+    return (
+        f"{best_labels} have policy tier {best[0][1].value}; "
+        f"lower risk than {higher_labels}; keeping the full expression avoids an arbitrary branch choice"
+    )
+
+
+def _joined_option_labels(values: Iterable[str]) -> str:
+    labels = tuple(values)
+    if len(labels) <= 1:
+        return labels[0] if labels else "no options"
+    if len(labels) == 2:
+        return f"{labels[0]} and {labels[1]}"
+    return f"{', '.join(labels[:-1])}, and {labels[-1]}"
 
 
 def _branch_option_id_for_selected_spdx(item: ReviewItem, selected_spdx: str) -> str | None:
