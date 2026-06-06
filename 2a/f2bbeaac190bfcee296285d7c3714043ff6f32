@@ -1,0 +1,20 @@
+docs/usage.md
+  s_3073ea6fd0069a::t_8ab650ca517672 256-290
+  s_3073ea6fd0069a::t_0a8b23f3eb5faa 190-194
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.3",
+  "base_commit_sha": "2af2bbeaac190bfcee296285d7c3714043ff6f32",
+  "prompts": {},
+  "sessions": {
+    "s_3073ea6fd0069a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e9aa5-10b3-7d31-a790-88ca22eb7b42",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
