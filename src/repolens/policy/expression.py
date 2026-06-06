@@ -206,6 +206,20 @@ def evaluate_expression(
     return tree.evaluate(mapper)
 
 
+def pure_or_leaf_options(expression: str) -> tuple[str, ...] | None:
+    """Return leaf license ids only when ``expression`` is a pure OR chain.
+
+    The helper intentionally rejects nested groups, ``AND``, and ``WITH`` so report-review
+    callers can offer branch choices only for the conservative Stage 1 disclosure case.
+    """
+
+    if "(" in expression or ")" in expression:
+        return None
+    parser = _Parser(_tokenize(expression))
+    tree = parser.parse()
+    return _pure_or_leaf_options(tree, top_level=True)
+
+
 def fingerprint_expression(
     expression: str,
     leaf_normalizer: LeafNormalizer,
@@ -328,6 +342,18 @@ def _or_operands(
             exception_normalizer=exception_normalizer,
         ),
     )
+
+
+def _pure_or_leaf_options(node: _Node, *, top_level: bool = False) -> tuple[str, ...] | None:
+    if isinstance(node, _LeafNode):
+        return (node.license_id,) if not top_level else None
+    if not isinstance(node, _OrNode):
+        return None
+    left = _pure_or_leaf_options(node.left)
+    right = _pure_or_leaf_options(node.right)
+    if left is None or right is None:
+        return None
+    return left + right
 
 
 def _fingerprint_sort_key(fingerprint: ExpressionFingerprint) -> str:

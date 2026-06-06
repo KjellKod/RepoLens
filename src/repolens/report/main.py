@@ -184,13 +184,7 @@ def render_main_report(
     if not gate.clear:
         raise ReportGateOpen(gate.message)
 
-    selection = report_selection_from_config(config)
-    category_index = build_category_index(_read_discovered_or_empty(root))
-    default_category = _default_category(config)
-
-    records, file_gaps = collect_resolved_records(root, _active_report_repo_refs(root))
-    records = _exclude_rejected_shortlist_records(root, records)
-    split = route_occurrences(records, category_index, selection.include, default_category)
+    split, file_gaps = _split_report_records(root, config)
     rows = aggregate_rows(split.main_records)
     dependency_boundary_summary = build_dependency_boundary_summary(root)
 
@@ -269,8 +263,15 @@ def render_main_report(
         docx_skipped = True
 
     from repolens.report.presentation import render_presentation_artifacts
+    from repolens.report.review import load_review_state
 
-    presentation = render_presentation_artifacts(rows, output_dir, header=header)
+    review_state = load_review_state(root)
+    presentation = render_presentation_artifacts(
+        rows,
+        output_dir,
+        header=header,
+        review_state=review_state,
+    )
 
     return ReportResult(
         markdown_path=markdown_path,
@@ -432,6 +433,26 @@ def _active_report_repo_refs(work_root: Path) -> tuple[str, ...] | None:
     if not (root / "discovered.json").exists() or not (root / "repos.candidate.md").exists():
         return None
     return load_discover_approved_repo_refs(root)
+
+
+def select_main_report_rows(
+    work_root: Path,
+    config: Config | None = None,
+) -> tuple[list[DisclosureRow], list[str]]:
+    """Return the exact main-report rows that final presentation output consumes."""
+
+    split, file_gaps = _split_report_records(Path(work_root), config)
+    return aggregate_rows(split.main_records), file_gaps
+
+
+def _split_report_records(work_root: Path, config: Config | None):
+    selection = report_selection_from_config(config)
+    category_index = build_category_index(_read_discovered_or_empty(work_root))
+    default_category = _default_category(config)
+    records, file_gaps = collect_resolved_records(work_root, _active_report_repo_refs(work_root))
+    records = _exclude_rejected_shortlist_records(work_root, records)
+    split = route_occurrences(records, category_index, selection.include, default_category)
+    return split, file_gaps
 
 
 def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[DisclosureRow]:

@@ -14,6 +14,7 @@ MAX_ARTIFACT_BYTES = {
     "repos_candidate_md": 1 * 1024 * 1024,
     "inventory": 16 * 1024 * 1024,
     "shortlist": 4 * 1024 * 1024,
+    "report_review": 4 * 1024 * 1024,
 }
 #: Single source for the JSON structural-depth cap: the security-primitive default.
 MAX_JSON_DEPTH = DEFAULT_LIMITS.max_structure_depth

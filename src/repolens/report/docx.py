@@ -25,6 +25,8 @@ _COLUMN_WIDTHS_DXA = {
     "name": 1500,
     "spdx_id": 900,
     "software license (spdx)": 1400,
+    "disclosure license (spdx)": 1300,
+    "detected license (spdx)": 1300,
     "description": 2700,
     "version": 950,
     "source_url": 3600,
@@ -36,6 +38,7 @@ _COLUMN_WIDTHS_DXA = {
     "found_in": 1200,
     "evidence_source_layer": 1000,
     "evidence source": 1200,
+    "notes": 1000,
     "coverage_gaps": 1628,
 }
 

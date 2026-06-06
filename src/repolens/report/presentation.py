@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from html import escape as html_escape
 from pathlib import Path
@@ -23,15 +23,17 @@ from repolens.security.sanitize import (
 
 PRESENTATION_COLUMNS = (
     "name",
-    "software license (spdx)",
+    "disclosure license (spdx)",
+    "detected license (spdx)",
     "description",
     "version",
     "source url",
     "evidence source",
+    "notes",
 )
 DATA_LIMITATION_NOTE = "Description is shown when present in resolved metadata; otherwise n/a."
 UNAVAILABLE = "n/a"
-_HTML_COLUMN_WIDTHS = (16, 14, 24, 10, 28, 8)
+_HTML_COLUMN_WIDTHS = (13, 12, 12, 18, 8, 24, 6, 7)
 
 
 @dataclass(frozen=True)
@@ -39,11 +41,13 @@ class PresentationRow:
     """One row in the sibling presentation report."""
 
     name: str
-    spdx_id: str
+    disclosure_spdx: str
+    detected_spdx: str
     description: str
     version: str
     source_urls: tuple[str, ...]
     evidence_source: str
+    review_note: str = ""
 
 
 @dataclass(frozen=True)
@@ -63,10 +67,11 @@ def render_presentation_artifacts(
     out_dir: Path,
     *,
     header: ReportHeader | None = None,
+    review_state: Mapping[str, object] | None = None,
 ) -> PresentationResult:
     """Write presentation markdown/csv/html and optional header-gated docx."""
 
-    presentation_rows = presentation_rows_from_disclosure(rows)
+    presentation_rows = presentation_rows_from_disclosure(rows, review_state=review_state)
     output_dir = Path(out_dir)
     csv_path = output_dir / "report.presentation.csv"
     markdown_path = output_dir / "report.presentation.md"
@@ -98,27 +103,36 @@ def render_presentation_artifacts(
     )
 
 
-def presentation_rows_from_disclosure(rows: Sequence[DisclosureRow]) -> tuple[PresentationRow, ...]:
+def presentation_rows_from_disclosure(
+    rows: Sequence[DisclosureRow],
+    *,
+    review_state: Mapping[str, object] | None = None,
+) -> tuple[PresentationRow, ...]:
     """Map existing main-report rows into flat presentation rows."""
 
+    from repolens.report.review import review_id_for_row
+
+    decisions = review_state or {}
     return tuple(
         sorted(
             (
                 PresentationRow(
                     name=row.name,
-                    spdx_id=row.spdx_id,
+                    disclosure_spdx=_disclosure_spdx(row, decisions, review_id_for_row),
+                    detected_spdx=row.spdx_id,
                     description=_description(row.descriptions),
                     version=_join(row.versions),
                     source_urls=tuple(row.source_urls),
                     evidence_source=_join(row.evidence_source_layers),
+                    review_note=_review_note(row, decisions, review_id_for_row),
                 )
                 for row in rows
             ),
             key=lambda row: (
-                row.spdx_id.casefold(),
+                row.disclosure_spdx.casefold(),
                 row.name.casefold(),
                 row.version.casefold(),
-                row.spdx_id,
+                row.disclosure_spdx,
                 row.name,
                 row.version,
             ),
@@ -146,10 +160,10 @@ def render_presentation_markdown(rows: Sequence[PresentationRow]) -> str:
     grouped = _group_rows(rows)
     if not grouped:
         lines.append("No report rows.")
-    for spdx_id, group_rows in grouped:
+    for disclosure_spdx, group_rows in grouped:
         lines.extend(
             [
-                f"## {spdx_id} ({len(group_rows)})",
+                f"## {disclosure_spdx} ({len(group_rows)})",
                 "",
                 "| " + " | ".join(_markdown_cell(column) for column in PRESENTATION_COLUMNS) + " |",
                 "| " + " | ".join("---" for _ in PRESENTATION_COLUMNS) + " |",
@@ -161,11 +175,13 @@ def render_presentation_markdown(rows: Sequence[PresentationRow]) -> str:
                 + " | ".join(
                     (
                         _markdown_cell(render_code_span(row.name)),
-                        _markdown_cell(row.spdx_id),
+                        _markdown_cell(row.disclosure_spdx),
+                        _markdown_cell(row.detected_spdx),
                         _markdown_cell(row.description),
                         _markdown_cell(row.version),
                         _markdown_cell(_markdown_source_urls(row.source_urls)),
                         _markdown_cell(row.evidence_source),
+                        _markdown_cell(row.review_note),
                     )
                 )
                 + " |"
@@ -238,11 +254,11 @@ def render_presentation_docx(
 
     sections = tuple(
         (
-            f"{spdx_id} ({len(group_rows)})",
+            f"{disclosure_spdx} ({len(group_rows)})",
             PRESENTATION_COLUMNS,
             tuple(_row_values(row) for row in group_rows),
         )
-        for spdx_id, group_rows in _group_rows(rows)
+        for disclosure_spdx, group_rows in _group_rows(rows)
     )
     if not sections:
         sections = (("No report rows", PRESENTATION_COLUMNS, ()),)
@@ -255,7 +271,7 @@ def render_presentation_docx(
 
 
 def _html_group_section(
-    spdx_id: str,
+    disclosure_spdx: str,
     rows: Sequence[PresentationRow],
     colgroup: str,
     header_cells: str,
@@ -265,11 +281,13 @@ def _html_group_section(
         + "".join(
             (
                 f"<td><code>{_html_text(row.name)}</code></td>",
-                f"<td>{_html_text(row.spdx_id)}</td>",
+                f"<td>{_html_text(row.disclosure_spdx)}</td>",
+                f"<td>{_html_text(row.detected_spdx)}</td>",
                 f"<td>{_html_text(row.description)}</td>",
                 f"<td>{_html_text(row.version)}</td>",
                 f"<td>{_html_source_urls(row.source_urls)}</td>",
                 f"<td>{_html_text(row.evidence_source)}</td>",
+                f"<td>{_html_text(row.review_note)}</td>",
             )
         )
         + "</tr>"
@@ -277,7 +295,7 @@ def _html_group_section(
     )
     return (
         "<section>\n"
-        f"<h2>{_html_text(spdx_id)} ({len(rows)})</h2>\n"
+        f"<h2>{_html_text(disclosure_spdx)} ({len(rows)})</h2>\n"
         '<div class="table-wrap"><table>\n'
         f"{colgroup}\n"
         f"<thead><tr>{header_cells}</tr></thead>\n"
@@ -292,7 +310,7 @@ def _group_rows(
 ) -> tuple[tuple[str, tuple[PresentationRow, ...]], ...]:
     groups: dict[str, list[PresentationRow]] = defaultdict(list)
     for row in rows:
-        groups[row.spdx_id].append(row)
+        groups[row.disclosure_spdx].append(row)
     return tuple(
         (spdx_id, tuple(sorted(group_rows, key=_row_sort_key)))
         for spdx_id, group_rows in sorted(
@@ -305,22 +323,48 @@ def _row_sort_key(row: PresentationRow) -> tuple[str, str, str, str, str, str]:
     return (
         row.name.casefold(),
         row.version.casefold(),
-        row.spdx_id.casefold(),
+        row.disclosure_spdx.casefold(),
         row.name,
         row.version,
-        row.spdx_id,
+        row.disclosure_spdx,
     )
 
 
 def _row_values(row: PresentationRow) -> tuple[str, ...]:
     return (
         row.name,
-        row.spdx_id,
+        row.disclosure_spdx,
+        row.detected_spdx,
         row.description,
         row.version,
         _join(row.source_urls),
         row.evidence_source,
+        row.review_note,
     )
+
+
+def _disclosure_spdx(
+    row: DisclosureRow,
+    review_state: Mapping[str, object],
+    review_id_for_row,
+) -> str:
+    decision = review_state.get(review_id_for_row(row))
+    selected = getattr(decision, "selected_spdx", None)
+    if isinstance(selected, str) and selected.strip():
+        return selected.strip()
+    return row.spdx_id
+
+
+def _review_note(
+    row: DisclosureRow,
+    review_state: Mapping[str, object],
+    review_id_for_row,
+) -> str:
+    decision = review_state.get(review_id_for_row(row))
+    note = getattr(decision, "review_note", None)
+    if isinstance(note, str):
+        return note.strip()
+    return ""
 
 
 def _markdown_source_urls(source_urls: Sequence[str]) -> str:

@@ -569,6 +569,112 @@ class CliTests(unittest.TestCase):
             self.assertFalse((out_dir / "report.main.docx").exists())
             self.assertFalse((out_dir / "report.presentation.docx").exists())
 
+    def test_report_review_cli_accepts_work_root_after_review_action(self) -> None:
+        with TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [
+                    {
+                        "schema_version": "1.0",
+                        "name": "acme-lib",
+                        "version": "1.2.3",
+                        "repo": "acme-alpha",
+                        "purl": "pkg:pypi/acme-lib@1.2.3",
+                        "declared_license_raw": "MIT OR Apache-2.0",
+                        "spdx_id": "MIT OR Apache-2.0",
+                        "evidence": {
+                            "source_layer": "syft",
+                            "url": "https://example.invalid/licenses/acme-lib",
+                        },
+                        "tags": {
+                            "origin": "third-party-oss",
+                            "scope": "runtime",
+                            "distribution": "server",
+                        },
+                        "modified": "unknown",
+                    }
+                ],
+            )
+
+            code = cli.main(
+                [
+                    "report",
+                    "review",
+                    "--work-root",
+                    str(work_root),
+                    "--identity",
+                    "reviewer-sentinel",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            self.assertTrue((work_root / "report.review.md").exists())
+            payload = json.loads((work_root / "report.review.json").read_text(encoding="utf-8"))
+            self.assertEqual(payload["open_count"], 1)
+
+    def test_report_review_decision_flows_to_report_presentation(self) -> None:
+        with TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            out_dir = work_root / "out"
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [
+                    {
+                        "schema_version": "1.0",
+                        "name": "acme-lib",
+                        "version": "1.2.3",
+                        "repo": "acme-alpha",
+                        "purl": "pkg:pypi/acme-lib@1.2.3",
+                        "declared_license_raw": "MIT OR Apache-2.0",
+                        "spdx_id": "MIT OR Apache-2.0",
+                        "evidence": {
+                            "source_layer": "syft",
+                            "url": "https://example.invalid/licenses/acme-lib",
+                        },
+                        "tags": {
+                            "origin": "third-party-oss",
+                            "scope": "runtime",
+                            "distribution": "server",
+                        },
+                        "modified": "unknown",
+                    }
+                ],
+            )
+            self.assertEqual(cli.main(["report", "review", "--work-root", str(work_root)]), 0)
+            review_md = work_root / "report.review.md"
+            review_md.write_text(
+                review_md.read_text(encoding="utf-8").replace("- [ ] `MIT`", "- [x] `MIT`", 1),
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                cli.main(
+                    [
+                        "report",
+                        "review",
+                        "--work-root",
+                        str(work_root),
+                        "--identity",
+                        "reviewer-sentinel",
+                    ]
+                ),
+                0,
+            )
+
+            self.assertEqual(
+                cli.main(["report", "--work-root", str(work_root), "--out-dir", str(out_dir)]),
+                0,
+            )
+
+            presentation = (out_dir / "report.presentation.csv").read_text(encoding="utf-8")
+            self.assertIn(
+                '"disclosure license (spdx)","detected license (spdx)"',
+                presentation,
+            )
+            self.assertIn('"MIT","MIT OR Apache-2.0"', presentation)
+
 
 def _fake_clone(options):
     destination = Path(options.destination)

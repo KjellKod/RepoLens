@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repolens.example/schemas/report-review-1.0.json",
+  "title": "RepoLens report disclosure-license review",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "open_count", "items"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "open_count": {"type": "integer", "minimum": 0},
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "review_id",
+          "component_key",
+          "found_in",
+          "policy_tier",
+          "raw_spdx",
+          "options",
+          "selected_spdx",
+          "decision",
+          "review_status",
+          "review_note",
+          "decided_by",
+          "decided_at",
+          "warnings"
+        ],
+        "properties": {
+          "review_id": {"type": "string", "minLength": 1},
+          "component_key": {
+            "type": "object",
+            "required": ["name", "versions", "raw_spdx"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1},
+              "versions": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1}
+              },
+              "raw_spdx": {"type": "string", "minLength": 1}
+            },
+            "additionalProperties": false
+          },
+          "found_in": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          },
+          "policy_tier": {"type": "string", "minLength": 1},
+          "raw_spdx": {"type": "string", "minLength": 1},
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["option_id", "label", "spdx", "decision"],
+              "properties": {
+                "option_id": {"type": "string", "minLength": 1},
+                "label": {"type": "string", "minLength": 1},
+                "spdx": {"type": ["string", "null"]},
+                "decision": {
+                  "type": "string",
+                  "enum": [
+                    "selected_branch",
+                    "keep_full_expression",
+                    "needs_legal_follow_up"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "selected_spdx": {"type": ["string", "null"]},
+          "decision": {
+            "type": ["string", "null"],
+            "enum": [
+              "selected_branch",
+              "keep_full_expression",
+              "needs_legal_follow_up",
+              "blocked_by_shortlist",
+              null
+            ]
+          },
+          "review_status": {"type": "string", "enum": ["open", "approved"]},
+          "review_note": {"type": "string", "maxLength": 600},
+          "decided_by": {"type": ["string", "null"]},
+          "decided_at": {"type": ["string", "null"]},
+          "warnings": {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1}
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
