@@ -18,19 +18,20 @@ stage can be re-run or resumed on its own. You approve twice — once for the re
 for the shortlist — and the final report is gated on a clean shortlist.
 
 ```
-       ┌───────────────────────── you approve twice ─────────────────────────┐
-       │   (1) the repo list                              (2) the shortlist   │
-       ▼                                                                      ▼
+      ┌────────────────────────────────────────────────────────┐
+      │                   you approve twice                    │
+      │ (1) the repo list                    (2) the shortlist │
+      ▼                                                        ▼
  ┌──────────┐   ┌────────┐   ┌──────────┐   ┌────────┐   ┌───────────┐   ┌────────┐
  │ discover │──▶│  scan  │──▶│ resolve  │──▶│  flag  │──▶│ shortlist │──▶│ report │
  └────┬─────┘   └───┬────┘   └────┬─────┘   └───┬────┘   └─────┬─────┘   └───┬────┘
-      │             │             │             │              │            │
+      │             │             │             │              │             │
    gh repo       git clone     license       SPDX norm     verify-first   gate on
   list / view   (hardened)     ladder:       + policy      evidence +     0 open
   + taxonomy    + Syft SBOM    APIs first,    tiers +       human          findings,
    classify     per repo       ScanCode last  dedup         approval       then render
-      │             │             │             │              │            │
-      ▼             ▼             ▼             ▼              ▼            ▼
+      │             │             │             │              │             │
+      ▼             ▼             ▼             ▼              ▼             ▼
   discovered    work/<repo>/  work/<repo>/  inventory.json shortlist.json reports/
     .json       sbom.syft     resolved      shortlist.json shortlist.md   report.main.*
   repos          .json        .ndjson       shortlist.md   (+ contexts/   report.present.*
@@ -59,18 +60,18 @@ The "smart" part is never a scanner — it is the **workflow, policy, evidence, 
 wrapped around trusted tools.
 
 ```
- ┌─────────────────────────────┐        ┌──────────────────────────────────────┐
+ ┌─────────────────────────────┐        ┌────────────────────────────────────────┐
  │ RepoLens builds             │        │ RepoLens conducts (never trusts blind) │
- ├─────────────────────────────┤        ├──────────────────────────────────────┤
- │ • the CLI + stage pipeline  │        │ • gh, git            (discover, clone) │
- │ • the resolution ladder     │ ─────▶ │ • Syft               (SBOM inventory)  │
+ ├─────────────────────────────┤        ├────────────────────────────────────────┤
+ │ • the CLI + stage pipeline  │ ─────▶ │ • gh, git            (discover, clone) │
+ │ • the resolution ladder     │        │ • Syft               (SBOM inventory)  │
  │ • policy engine (SPDX norm, │        │ • ScanCode           (deep detection)  │
  │   compound exprs, tiers)    │        │ • deps.dev / registry / GitHub /       │
  │ • tagging, dedup, category  │        │   ClearlyDefined / ecosyste.ms (APIs)  │
  │ • evidence model + verify   │        │ • AboutLibraries, LicensePlist         │
  │ • report views + docx       │        │   (mobile, sandboxed, opt-in)          │
  │ • security primitives       │        │ • cosign             (tool integrity)  │
- └─────────────────────────────┘        └──────────────────────────────────────┘
+ └─────────────────────────────┘        └────────────────────────────────────────┘
 ```
 
 Every conducted tool is **acquired and integrity-verified** from a pinned manifest
@@ -89,10 +90,10 @@ with a **visible reason**, and writes a checklist for you to approve.
    --owner <OWNER>                      taxonomy (local, untracked):
         │                                 explicit / patterns / topics
         ▼                                 exclude_patterns / dead
- ┌─────────────────┐   gh repo list   ┌─────────────────────────┐
- │    discover     │ ───────────────▶ │ classify + hard-exclude  │
+ ┌─────────────────┐   gh repo list   ┌──────────────────────────┐
+ │     discover    │                  │ classify + hard-exclude  │
  └─────────────────┘   gh repo view   └────────────┬─────────────┘
-                                                    ▼
+                                                   ▼
                             discovered.json   (structured, for later stages)
                             repos.candidate.md  ← YOU untick anything you don't want
 ```
@@ -108,16 +109,16 @@ For each approved repo, RepoLens clones **read-only and sandboxed** and runs Syf
 a Software Bill of Materials. No code from the scanned repo ever executes.
 
 ```
- approved repos
-      │
-      ▼
- ┌──────────────────────────────────────────────┐
- │ scan  (in-process, per repo)                  │
- │  • partial + sparse clone: manifests,         │   no secrets in child env
- │    lockfiles, .gitmodules, LICENSE/COPYING    │   hooks/symlinks/file:// off
- │  • separate clone + Syft wall-clock timeouts  │   ephemeral workdir, always cleaned
+  approved repos
+       │
+       ▼
+ ┌───────────────────────────────────────────────┐
+ │ scan  (in-process, per repo)                  │  no secrets in child env
+ │  • partial + sparse clone: manifests,         │  hooks/symlinks/file:// off
+ │    lockfiles, .gitmodules, LICENSE/COPYING    │  ephemeral workdir, always cleaned
+ │  • separate clone + Syft wall-clock timeouts  │
  │  • Syft = static inventory, never builds      │
- └───────────────────────┬──────────────────────┘
+ └───────────────────────┬───────────────────────┘
                          ▼
          work/<repo>/sbom.syft.json     ← canonical dependency inventory
          work/<repo>/scan.status.json   ← per-repo status (for resume)
@@ -142,35 +143,35 @@ no-clone sources run first so the expensive/human work shrinks to the smallest p
         a dependency from the SBOM (license unknown or uncertain)
                                   │
                                   ▼
-   0 ┌───────────────────────────────────────────────┐  cheap
+   0 ┌─────────────────────────────────────────────────┐  cheap
      │ Syft declared metadata                          │  already in the SBOM
-     └───────────────────────────┬───────────────────┘
+     └────────────────────────────┬────────────────────┘
                                   │ miss
                                   ▼
-   1 ┌───────────────────────────────────────────────┐  cheap · NO clone
+   1 ┌─────────────────────────────────────────────────┐  cheap · NO clone
      │ free license APIs, in precedence order:         │
      │   deps.dev                                      │  ── calls out to ──▶ deps.dev
-     │     → native registry (npm, PyPI, Crates,       │      npmjs / pypi / crates.io /
-     │       RubyGems, NuGet, Maven, Go proxy,         │      rubygems / nuget / maven /
-     │       CocoaPods trunk, SwiftPM GitHub pins)     │      proxy.golang / cocoapods
-     │       → GitHub License API                      │      api.github.com/.../license
-     │         → ClearlyDefined → ecosyste.ms          │      clearlydefined / ecosyste.ms
-     └───────────────────────────┬───────────────────┘
+     │     → native registry (npm, PyPI, Crates,       │  npmjs / pypi / crates.io /
+     │       RubyGems, NuGet, Maven, Go proxy,         │  rubygems / nuget / maven /
+     │       CocoaPods trunk, SwiftPM GitHub pins)     │  proxy.golang / cocoapods
+     │       → GitHub License API                      │  api.github.com/.../license
+     │         → ClearlyDefined → ecosyste.ms          │  clearlydefined / ecosyste.ms
+     └────────────────────────────┬────────────────────┘
                                   │ miss
                                   ▼
-   2 ┌───────────────────────────────────────────────┐  medium · sandboxed · opt-in
+   2 ┌─────────────────────────────────────────────────┐  medium · sandboxed · opt-in
      │ mobile native enrichment (auto-detected only)   │  AboutLibraries / LicensePlist,
      │ metadata/API by default                         │  the one execution-bearing step
-     └───────────────────────────┬───────────────────┘
+     └────────────────────────────┬────────────────────┘
                                   │ miss
                                   ▼
-   3 ┌───────────────────────────────────────────────┐  expensive
+   3 ┌─────────────────────────────────────────────────┐  expensive
      │ ScanCode on the remaining unknowns              │  scoped to a single package dir /
      │                                                 │  LICENSE* files, never the whole repo
-     └───────────────────────────┬───────────────────┘
+     └────────────────────────────┬────────────────────┘
                                   │ still unknown / risky
                                   ▼
-   4 ┌───────────────────────────────────────────────┐  human
+   4 ┌─────────────────────────────────────────────────┐  human
      │ evidence-anchored shortlist (Stage 5)           │  flagged items only — never guessed
      └─────────────────────────────────────────────────┘
                                   │
@@ -191,19 +192,19 @@ every API adapter and demotes any verified disagreement to `CONFLICT` for human 
 splits off the items that need a human.
 
 ```
- work/<repo>/resolved.ndjson (all repos)
+  work/<repo>/resolved.ndjson (all repos)
             │
             ▼
- ┌───────────────────────────────────────────────┐
+ ┌─────────────────────────────────────────────────┐
  │ flag                                            │
- │  • normalize SPDX → apply license-policy tiers  │   tiers: permissive / copyleft /
- │    (risk classification)                        │   network-copyleft / non-commercial /
- │  • tag each component:                          │   source-available …
+ │  • normalize SPDX → apply license-policy tiers  │  tiers: permissive / copyleft /
+ │    (risk classification)                        │  network-copyleft / non-commercial /
+ │  • tag each component:                          │  source-available …
  │      origin · scope · distribution              │
- │  • dedup → one row per (name, normalized-SPDX)  │   keeps found_in[], versions seen,
- │    with provenance                              │   source_url, modified?
- └───────────────┬───────────────────────┬────────┘
-                 ▼                         ▼
+ │  • dedup → one row per (name, normalized-SPDX)  │  keeps found_in[], versions seen,
+ │    with provenance                              │  source_url, modified?
+ └───────────────┬───────────────────────┬─────────┘
+                 ▼                       ▼
          inventory.json            shortlist.json + shortlist.md
        (full tagged dataset       (the open BLOCK / REVIEW / UNKNOWN queue —
         behind every report)       what still needs evidence or judgment)
@@ -244,7 +245,7 @@ trusts a proposal — it re-fetches and verifies every cited URL itself, then a 
                                rationale, sanity_check — all metadata only)
                        │  repolens shortlist --proposals --evidence
                        ▼
-   ┌─────────────────────────────────────────────────────────┐
+   ┌───────────────────────────────────────────────────────────┐
    │ VERIFY, don't trust                                       │
    │  • schema-validate the artifact (fail-closed)             │
    │  • re-fetch each citation through the SSRF-guarded,       │
@@ -252,16 +253,16 @@ trusts a proposal — it re-fetches and verifies every cited URL itself, then a 
    │  • require an EXACT SPDX anchor match                     │
    │  bad / off-allowlist / mismatched / low-confidence /      │
    │  abstained  ⇒  the item stays OPEN                        │
-   └───────────────────────────┬─────────────────────────────┘
+   └───────────────────────────┬───────────────────────────────┘
                                ▼
    grouped review surface in shortlist.md:
-     ┌────────────────────┬──────────────────────┬─────────────────────────┐
+     ┌────────────────────┬───────────────────────┬──────────────────────────┐
      │ ACCEPT-RECOMMENDED │ NEEDS-JUDGMENT        │ LOW-CONFIDENCE / CONFLICT│
      │ verified allow,    │ real block/review or  │ abstentions, conflicts,  │
      │ low-risk class     │ mixed-risk; group +   │ verify failures, invalid │
      │ (group checkbox)   │ drill-in per item     │ proposals (per item)     │
-     └─────────┬──────────┴───────────┬───────────┴────────────┬────────────┘
-               └────────────── you tick [x] approve / [r] reject ───────────┘
+     └─────────┬──────────┴───────────┬───────────┴────────────┬─────────────┘
+               └────────────── you tick [x] approve / [r] reject ────────────┘
                                │
                                ▼
    decisions recorded (status, decided_by, decided_at, decided_via, provenance)
@@ -285,12 +286,12 @@ views over the same gated dataset, driven by category selection.
  inventory.json + resolved + discovered categories + local report config
             │
             ▼
-   ┌──────────────────────────────────────────┐
-   │ GATE: shortlist.json has 0 open items?     │ ── no ──▶ exit 1, write NOTHING
-   └───────────────────┬──────────────────────┘
+   ┌────────────────────────────────────────────┐
+   │ GATE: shortlist.json has 0 open items?     │  ── no ──▶ exit 1, write NOTHING
+   └───────────────────┬────────────────────────┘
                        │ yes
                        ▼
-   ┌───────────────────────────────────────────────────────────────────┐
+   ┌─────────────────────────────────────────────────────────────────────┐
    │ report.main.{md,csv,html}        the shipped disclosure (one row    │
    │                                  per library, nothing silently      │
    │                                  dropped; rejected items excluded)  │
@@ -301,7 +302,7 @@ views over the same gated dataset, driven by category selection.
    │ report.main.docx / report.presentation.docx   optional shareable    │
    │                                  cover (from report.header config   │
    │                                  or an interactive prompt)          │
-   └───────────────────────────────────────────────────────────────────┘
+   └─────────────────────────────────────────────────────────────────────┘
 ```
 
 Re-scoping which categories ship is **config + re-render, never a re-scan**. An optional
@@ -364,5 +365,3 @@ GitHub-token-shaped strings, validates, and atomically replaces the file.
 - **Security guarantees** → [roadmap/rpl_security.md](roadmap/rpl_security.md).
 - **License policy tiers** → [roadmap/rpl_license-policy.md](roadmap/rpl_license-policy.md).
 - **Artifact schemas** → [data-model.md](data-model.md).
-</content>
-</invoke>
