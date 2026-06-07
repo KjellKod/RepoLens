@@ -63,10 +63,7 @@ class ProposalRecord:
 
     def ai_suggestion(self) -> dict[str, Any]:
         source_repo = (
-            dict(self.source_repo)
-            if self.source_repo is not None
-            and _optional_str(self.source_repo.get("provenance")) == "package_metadata"
-            else None
+            _persistable_source_repo(self.source_repo) if self.source_repo is not None else None
         )
         return {
             "component_ref": self.component_ref,
@@ -370,41 +367,46 @@ def _write_github_license_browser_evidence(
     record: dict[str, Any],
     verified: VerifyOutcome,
 ) -> None:
-    """Attach a host-validated, supporting ``browser_evidence`` link to the record.
+    """Record the GitHub-license verification signal and attach a host-validated link.
 
-    Prefers ``html_url`` (the blob page), falling back to ``download_url`` (raw), each only
-    after :func:`_lifted_github_url_ok`. On failure of both the link is dropped — the record
-    falls back to the bare-evidence cell and verification still succeeds. The default-branch
-    caveat rides in the (renderer-escaped) label text because the renderer ignores a ``ref``
-    field; the bold ``review:`` emphasis is emitted by trusted render code keyed on the
-    trusted ``source_type`` marker, never injected into the label (ux-guidebook§2/§4).
+    The machine-verification fields (``machine_verification`` / ``outcome``) are written
+    unconditionally — the item verified, so the rendered shortlist must keep the ``verified``
+    cell and the default-branch review outcome even when no browser link can be attached.
+    The link itself prefers ``html_url`` (the blob page), falling back to ``download_url``
+    (raw), each only after :func:`_lifted_github_url_ok`; if both are absent or off-host the
+    link is dropped but verification still stands. The default-branch caveat rides in the
+    (renderer-escaped) label text because the renderer ignores a ``ref`` field; the bold
+    ``review:`` emphasis is emitted by trusted render code keyed on the trusted
+    ``source_type`` marker, never injected into the label (ux-guidebook§2/§4).
     """
+
+    research_evidence = dict(record.get("research_evidence") or {})
+    research_evidence["machine_verification"] = "verified"
+    research_evidence["outcome"] = verified.reason
 
     if _lifted_github_url_ok(verified.html_url):
         url = verified.html_url
     elif _lifted_github_url_ok(verified.download_url):
         url = verified.download_url
     else:
-        return
+        url = None
 
-    spdx_id = verified.spdx_id
-    if verified.ref_pinned:
-        label = f"GitHub license ({spdx_id})"
-        source_type = GITHUB_LICENSE_PINNED_SOURCE_TYPE
-    else:
-        label = f"🔎 GitHub license ({spdx_id} · default branch, not version-pinned)"
-        source_type = GITHUB_LICENSE_DEFAULT_BRANCH_SOURCE_TYPE
-
-    entry = {
-        "label": label,
-        "url": url,
-        "source_type": source_type,
-        "anchor": spdx_id,
-    }
-    research_evidence = dict(record.get("research_evidence") or {})
-    research_evidence["browser_evidence"] = [entry]
-    research_evidence["machine_verification"] = "verified"
-    research_evidence["outcome"] = verified.reason
+    if url is not None:
+        spdx_id = verified.spdx_id
+        if verified.ref_pinned:
+            label = f"GitHub license ({spdx_id})"
+            source_type = GITHUB_LICENSE_PINNED_SOURCE_TYPE
+        else:
+            label = f"🔎 GitHub license ({spdx_id} · default branch, not version-pinned)"
+            source_type = GITHUB_LICENSE_DEFAULT_BRANCH_SOURCE_TYPE
+        research_evidence["browser_evidence"] = [
+            {
+                "label": label,
+                "url": url,
+                "source_type": source_type,
+                "anchor": spdx_id,
+            }
+        ]
     record["research_evidence"] = research_evidence
 
 
@@ -677,6 +679,51 @@ def _confidence(value: object) -> str | int | float | None:
         text = value.strip()
         return text or None
     return None
+
+
+def _persistable_source_repo(source_repo: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Project a proposal ``source_repo`` onto the persisted shortlist schema, or drop it.
+
+    ``ai_suggestion`` is written to ``shortlist.json`` even when the proposal is rejected, so
+    the stored ``source_repo`` must validate against ``shortlist.schema.json`` (its required
+    keys, the ``ref_kind in {version, commit}`` -> ``ref`` rule, and ``additionalProperties:
+    false``) or ``store.write_shortlist`` aborts the whole stage instead of leaving the item
+    open. A non-conformant ``source_repo`` is dropped (``None``) — losing only the audit echo
+    of a proposal that was going to be rejected anyway. Verification reads the original
+    ``proposal.source_repo``, never this projection, so dropping it never changes a decision.
+    """
+
+    if _optional_str(source_repo.get("provenance")) != "package_metadata":
+        return None
+    if source_repo.get("host") != "github.com":
+        return None
+    owner = _optional_str(source_repo.get("owner"))
+    repo = _optional_str(source_repo.get("repo"))
+    provenance_detail = _optional_str(source_repo.get("provenance_detail"))
+    bound_to_package = source_repo.get("bound_to_package")
+    if owner is None or repo is None or provenance_detail is None:
+        return None
+    if not isinstance(bound_to_package, bool):
+        return None
+    ref_kind = source_repo.get("ref_kind")
+    if ref_kind is not None and ref_kind not in {"version", "commit", "unknown", "default_branch"}:
+        return None
+    ref = _optional_str(source_repo.get("ref"))
+    if ref_kind in {"version", "commit"} and ref is None:
+        return None
+    projected: dict[str, Any] = {
+        "host": "github.com",
+        "owner": owner,
+        "repo": repo,
+        "provenance": "package_metadata",
+        "provenance_detail": provenance_detail,
+        "bound_to_package": bound_to_package,
+    }
+    if ref is not None:
+        projected["ref"] = ref
+    if ref_kind is not None:
+        projected["ref_kind"] = ref_kind
+    return projected
 
 
 __all__ = [

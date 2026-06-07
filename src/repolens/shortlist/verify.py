@@ -199,9 +199,6 @@ def _github_license_api_missing_ref(url: str) -> bool:
 def _github_license_api_ref_mismatch(
     url: str, *, expected_ref: str | None, allow_default_branch: bool = False
 ) -> str | None:
-    expected = _clean_ref(expected_ref)
-    if expected is None:
-        return None
     parsed = urlparse(url)
     if parsed.hostname != "api.github.com":
         return None
@@ -214,8 +211,15 @@ def _github_license_api_ref_mismatch(
     ref = refs[0]
     if _is_immutable_sha(ref):
         return None
+    # Gate mutable default-branch refs BEFORE the ``expected_ref`` comparison so that
+    # ``allow_default_branch`` governs them even when no expected ref is known. The legacy
+    # ``stage.py`` path calls with ``expected_ref=None``; without this ordering a
+    # ``?ref=master`` URL would skip the check and verify as a pinned ``exact_anchor``.
     if ref.casefold() in _MUTABLE_GITHUB_REFS:
         return None if allow_default_branch else "verify:default_branch_rejected"
+    expected = _clean_ref(expected_ref)
+    if expected is None:
+        return None
     if ref not in _acceptable_refs(expected):
         return "verify:ref_mismatch"
     return None

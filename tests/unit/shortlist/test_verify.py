@@ -343,6 +343,24 @@ def test_github_license_api_master_ref_without_flag_still_rejected() -> None:
     assert outcome.reason == "verify:default_branch_rejected"
 
 
+def test_github_license_api_master_ref_without_flag_or_expected_ref_rejected() -> None:
+    """Regression: ?ref=master must fail closed without the flag even when expected_ref is
+    None (the legacy stage.py path). Previously the expected-None early return skipped the
+    mutable-ref check and the URL verified as a pinned exact_anchor.
+    """
+
+    url = "https://api.github.com/repos/o/r/license?ref=master"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=False,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:default_branch_rejected"
+
+
 def test_github_license_api_noassertion_fails_closed() -> None:
     """#6 — NOASSERTION fails closed even with the flag on."""
 

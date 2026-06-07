@@ -786,6 +786,49 @@ def test_attacker_host_lifted_url_dropped(tmp_path: Path) -> None:
     assert item["candidate_spdx"] == "MIT"
     research = item.get("research_evidence") or {}
     assert not research.get("browser_evidence")
+    # The machine-verification signal is recorded even when no browser link is attached, so
+    # the rendered shortlist keeps the verified cell and the default-branch review outcome.
+    assert research["machine_verification"] == "verified"
+    assert research["outcome"] == "verify:exact_anchor_default_branch"
+
+
+def test_malformed_source_repo_does_not_crash_shortlist_write(tmp_path: Path) -> None:
+    """Regression: a rejected proposal whose source_repo violates the persisted schema
+    (ref_kind="version" with no ref) must leave the item open, not abort write_shortlist.
+    The malformed source_repo is sanitized out of the persisted ai_suggestion.
+    """
+
+    _write_shortlist(tmp_path)
+    _write_swift_github_metadata(tmp_path)
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license?ref=main",
+                evidence_kind="github_source_repo",
+                # ref_kind="version" requires a ref; omitting it is schema-invalid for the
+                # persisted ai_suggestion.source_repo.
+                source_repo=_default_branch_source_repo(ref_kind="version"),
+            )
+        ],
+    )
+
+    # Must not raise SchemaValidationError when write_shortlist validates the document.
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(_GITHUB_DEFAULT_BRANCH_BODY),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] is None
+    assert item["note"] == "verify_failed:verify:source_repo_provenance_required"
+    # The malformed source_repo is dropped from the persisted suggestion rather than
+    # corrupting the artifact.
+    assert item["ai_suggestion"]["source_repo"] is None
 
 
 def test_default_branch_proposal_missing_provenance_rejected(tmp_path: Path) -> None:
