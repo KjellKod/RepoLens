@@ -27,7 +27,7 @@ for the shortlist — and the final report is gated on a clean shortlist.
  └────┬─────┘   └───┬────┘   └────┬─────┘   └───┬────┘   └─────┬─────┘   └───┬────┘
       │             │             │             │              │             │
    gh repo       git clone     license       SPDX norm     verify-first   gate on
-  list / view   (hardened)     ladder:       + policy      evidence +     0 open
+  list / view   (hardened)*    ladder:       + policy      evidence +     0 open
   + taxonomy    + Syft SBOM    APIs first,    tiers +       human          findings,
    classify     per repo       ScanCode last  dedup         approval       then render
       │             │             │             │              │             │
@@ -42,6 +42,16 @@ for the shortlist — and the final report is gated on a clean shortlist.
 **Legend** — `┌─┐` boxes are pipeline stages · the middle row is *what each stage does and
 which tools/endpoints it calls* · the bottom row is *the artifacts it leaves on disk* for the
 next stage (and for you) to read.
+
+\* **Not a full clone.** `scan` does a *hardened, sparse + partial* checkout — only dependency
+manifests, lockfiles, `.gitmodules`, and `LICENSE`/`COPYING` files are written to disk (git hooks,
+symlinks, and `file://` access are disabled), so none of the repo's source code runs or even lands
+locally. Detail in **Stage 2** below.
+
+**SPDX** — the industry-standard catalog of short license identifiers (`MIT`, `Apache-2.0`,
+`GPL-3.0-only`, and so on). "Normalize to SPDX" means mapping whatever license string a tool
+reports onto that one canonical id, so every source can be compared apples-to-apples; an "SPDX
+expression" is a compound like `Apache-2.0 OR MIT`.
 
 The fastest way to run all of this is one command:
 
