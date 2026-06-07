@@ -792,6 +792,79 @@ def test_attacker_host_lifted_url_dropped(tmp_path: Path) -> None:
     assert research["outcome"] == "verify:exact_anchor_default_branch"
 
 
+def test_verifier_drops_inherited_browser_evidence_when_no_safe_url(tmp_path: Path) -> None:
+    """Regression: a stale, un-host-validated browser_evidence from a prior research block
+    must not survive under this verifier run's default-branch outcome. Otherwise render would
+    attach the trusted review: prefix to a link this run never host-validated.
+    """
+
+    _write_swift_github_metadata(tmp_path)
+    stale_item = {
+        "component_ref": "acme-lib|MIT",
+        "reason": "REVIEW",
+        "evidence": {"source_layer": "api", "url": _DEPS_DEV_URL, "anchor": "MIT"},
+        "candidate_spdx": None,
+        "status": "open",
+        "decided_by": None,
+        "decided_at": None,
+        "note": None,
+        "research_evidence": {
+            "outcome": "verify:exact_anchor_default_branch",
+            "machine_verification": "verified",
+            "browser_evidence": [
+                {
+                    "label": "🔎 GitHub license (MIT · default branch, not version-pinned)",
+                    "url": "https://github.com/attacker/stale/blob/HEAD/LICENSE",
+                    "source_type": "github_license_api_default_branch",
+                    "anchor": "MIT",
+                }
+            ],
+        },
+    }
+    store.write_shortlist(
+        tmp_path,
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-01-01T00:00:00Z",
+            "open_count": 1,
+            "items": [stale_item],
+        },
+    )
+    proposals_path = tmp_path / "proposals.json"
+    _write_proposals(
+        proposals_path,
+        [
+            _proposal(
+                evidence_url="https://api.github.com/repos/sentinel/acme-lib/license",
+                evidence_kind="github_source_repo",
+                source_repo=_default_branch_source_repo(),
+            )
+        ],
+    )
+    # Verifier confirms MIT, but the API body's lifted URLs are off-host → no safe link.
+    body = (
+        b'{"license":{"spdx_id":"MIT"},'
+        b'"html_url":"https://github.com.attacker.test/x/LICENSE",'
+        b'"download_url":"https://evil.example/raw"}'
+    )
+
+    run_shortlist(
+        tmp_path,
+        agent_client=_ExplodingAgent(),
+        proposals_path=proposals_path,
+        fetcher=_fetcher(body),
+        evidence_resolver=_public_resolver,
+    )
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["candidate_spdx"] == "MIT"
+    research = item["research_evidence"]
+    assert research["machine_verification"] == "verified"
+    assert research["outcome"] == "verify:exact_anchor_default_branch"
+    # The stale inherited link is gone; this run attached no validated link of its own.
+    assert not research.get("browser_evidence")
+
+
 def test_malformed_source_repo_does_not_crash_shortlist_write(tmp_path: Path) -> None:
     """Regression: a rejected proposal whose source_repo violates the persisted schema
     (ref_kind="version" with no ref) must leave the item open, not abort write_shortlist.

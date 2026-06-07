@@ -383,6 +383,11 @@ def _write_github_license_browser_evidence(
     research_evidence = dict(record.get("research_evidence") or {})
     research_evidence["machine_verification"] = "verified"
     research_evidence["outcome"] = verified.reason
+    # Drop any inherited browser_evidence: this verifier run owns the verified/default-branch
+    # outcome, and render.py keys the trusted ``review:`` prefix on it. A stale, un-host-
+    # validated link from a prior research block must not ride under this run's outcome — only
+    # the freshly validated lifted link below may.
+    research_evidence.pop("browser_evidence", None)
 
     if _lifted_github_url_ok(verified.html_url):
         url = verified.html_url

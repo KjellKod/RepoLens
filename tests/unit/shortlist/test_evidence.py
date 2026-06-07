@@ -315,6 +315,37 @@ def test_apply_evidence_does_not_overwrite_machine_verified_proposal(tmp_path: P
     assert research["browser_evidence"][0]["source_type"] == "github_license_api_default_branch"
 
 
+def test_apply_evidence_refreshes_non_verifier_verified_record(tmp_path: Path) -> None:
+    """The precedence guard is scoped to verifier-owned outcomes. A prior record that is
+    'verified' but not a verifier outcome (e.g. an evidence-ingested one) must stay
+    refreshable by a newer evidence artifact, not frozen.
+    """
+
+    prior = {
+        "outcome": "machine_verified",
+        "machine_verification": "verified",
+        "browser_evidence": [
+            {"label": "stale", "url": _PYPI_URL, "source_type": "pypi", "anchor": "MIT"}
+        ],
+    }
+    item = _item(research_evidence=prior)
+    evidence_path = tmp_path / "shortlist.evidence.json"
+    store.atomic_write_json(
+        evidence_path,
+        [
+            _evidence_record(
+                tmp_path, outcome="no_public_evidence", machine_verification="no_public_evidence"
+            )
+        ],
+    )
+
+    [updated] = apply_evidence([item], evidence_path, metadata=_metadata())
+
+    research = updated["research_evidence"]
+    assert research["outcome"] == "no_public_evidence"
+    assert research["machine_verification"] == "no_public_evidence"
+
+
 def test_apply_evidence_ignores_stale_or_mismatched_identity(tmp_path: Path) -> None:
     _write_shortlist(tmp_path)
     evidence_path = tmp_path / "shortlist.evidence.json"
