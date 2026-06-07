@@ -9,7 +9,7 @@ from repolens.data.errors import SchemaValidationError
 from repolens.security.http_client import FetchResult, HttpFetchOptions
 from repolens.shortlist.agent import AgentRequest, AgentResponse
 from repolens.shortlist.contexts import PackageMetadata, ShortlistMetadata, TriageMetadata
-from repolens.shortlist.evidence import identity_for_item, load_evidence
+from repolens.shortlist.evidence import apply_evidence, identity_for_item, load_evidence
 from repolens.shortlist.research import run_research
 from repolens.shortlist.stage import run_shortlist
 
@@ -284,6 +284,35 @@ def test_apply_evidence_preserves_pending_verifier_evidence(tmp_path: Path) -> N
     assert item["status"] == "open"
     assert item["research_evidence"]["machine_verification"] == "pending_verifier_support"
     assert item["research_evidence"]["browser_evidence"][0]["label"] == "PyPI metadata"
+
+
+def test_apply_evidence_does_not_overwrite_machine_verified_proposal(tmp_path: Path) -> None:
+    """A proposal that passed verification is authoritative; a matching evidence artifact
+    must not overwrite the verifier-produced research_evidence (precedence invariant).
+    """
+
+    verified = {
+        "machine_verification": "verified",
+        "outcome": "verify:exact_anchor_default_branch",
+        "browser_evidence": [
+            {
+                "label": "🔎 GitHub license (MIT · default branch, not version-pinned)",
+                "url": "https://github.com/sentinel/acme-lib/blob/HEAD/LICENSE",
+                "source_type": "github_license_api_default_branch",
+                "anchor": "MIT",
+            }
+        ],
+    }
+    item = _item(research_evidence=verified)
+    evidence_path = tmp_path / "shortlist.evidence.json"
+    store.atomic_write_json(evidence_path, [_evidence_record(tmp_path)])
+
+    [updated] = apply_evidence([item], evidence_path, metadata=_metadata())
+
+    research = updated["research_evidence"]
+    assert research["machine_verification"] == "verified"
+    assert research["outcome"] == "verify:exact_anchor_default_branch"
+    assert research["browser_evidence"][0]["source_type"] == "github_license_api_default_branch"
 
 
 def test_apply_evidence_ignores_stale_or_mismatched_identity(tmp_path: Path) -> None:

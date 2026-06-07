@@ -223,10 +223,23 @@ def apply_evidence(
         if record.get("status") == "open":
             identity = identity_for_item(record, metadata)
             evidence = by_identity.get((identity.component_ref, identity.context_fingerprint))
-            if evidence is not None:
+            # Precedence invariant: a proposal that passed the verify-don't-trust closure is
+            # authoritative. Its machine-verified research_evidence (e.g. the
+            # verify:exact_anchor_default_branch outcome) must not be overwritten by researched
+            # evidence, whose stricter schema cannot re-express the verifier outcome. Stating
+            # this here keeps correctness explicit rather than dependent on run_shortlist's
+            # stage order.
+            if evidence is not None and not _is_machine_verified(record.get("research_evidence")):
                 record["research_evidence"] = evidence.to_shortlist_metadata()
         updated.append(record)
     return updated
+
+
+def _is_machine_verified(research_evidence: object) -> bool:
+    return (
+        isinstance(research_evidence, Mapping)
+        and research_evidence.get("machine_verification") == "verified"
+    )
 
 
 def identity_for_item(item: Mapping[str, Any], metadata: ShortlistMetadata) -> EvidenceIdentity:
