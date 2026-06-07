@@ -1,9 +1,11 @@
 # RepoLens — usage
 
 > `repolens run` drives all six shipped stages (`discover → scan → resolve → flag →
-> shortlist → report`) with inline human pauses and resume. For the design behind them see
-> [docs/roadmap](roadmap/rpl_README.md); the original build plan is archived under
-> [docs/roadmap/archive](roadmap/archive/rpl_roadmap.md).
+> shortlist → report`) with inline human pauses and resume. For a picture-first tour of how
+> those stages fit together — with ASCII diagrams of the resolution ladder and the
+> verify-first shortlist loop — see [docs/how-it-works.md](how-it-works.md). For the design
+> behind them see [docs/roadmap](roadmap/rpl_README.md); the original build plan is archived
+> under [docs/roadmap/archive](roadmap/archive/rpl_roadmap.md).
 
 ## Prerequisites
 
