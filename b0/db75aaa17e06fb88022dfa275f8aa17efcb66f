@@ -1,0 +1,30 @@
+tests/unit/shortlist/test_overrides.py
+  s_a374eb5463fa7b::t_fd5e3c8d6d22fd 131-152,163-164
+  s_a374eb5463fa7b::t_f04a105035422b 162
+src/repolens/data/schemas/shortlist_overrides.schema.json
+  s_a374eb5463fa7b::t_a02c41ac8783b7 12
+tests/unit/test_report_main.py
+  s_a374eb5463fa7b::t_887baae2025658 330-410
+src/repolens/shortlist/overrides.py
+  s_a374eb5463fa7b::t_f0395033ab0e26 18,132-137,181
+src/repolens/report/main.py
+  s_a374eb5463fa7b::t_a61500dd63c1e0 20-21,543-544,547,550,553
+  s_a374eb5463fa7b::t_994a923e6ef14b 486-487,493-495,526
+  s_a374eb5463fa7b::t_4b76419c466e67 535-542,545-546,548-549,551-552,554-573
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "b0db75aaa17e06fb88022dfa275f8aa17efcb66f",
+  "prompts": {},
+  "sessions": {
+    "s_a374eb5463fa7b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea83d-05a8-7332-8860-ba8ce954389c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
