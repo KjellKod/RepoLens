@@ -1,0 +1,38 @@
+tests/unit/test_cli_run.py
+  s_70e33e05ea55a8::t_8f47e556b8b208 717-764
+src/repolens/shortlist/verify.py
+  s_45c32d738eb898::t_9a25dc8400a88c 110
+  s_70e33e05ea55a8::t_95746fbebc8ff9 107,109,224
+tests/unit/test_cli_shortlist_research.py
+  s_70e33e05ea55a8::t_8f47e556b8b208 99-156
+src/repolens/cli.py
+  s_70e33e05ea55a8::t_8f47e556b8b208 2972-2984,2986,2989-2991,3000-3003,3008-3012,3015,3017,3021-3033,3035,3284-3294,3307-3309
+  s_70e33e05ea55a8::t_9dcbc6d0c36dd8 3034
+tests/unit/shortlist/test_verify.py
+  s_70e33e05ea55a8::t_5d5e8755b68d7a 155
+  s_70e33e05ea55a8::t_a04f734ec4ece2 316-330,380-403
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "a2830d8017e4e45e577141c447beb3161c44f87d",
+  "prompts": {},
+  "sessions": {
+    "s_45c32d738eb898": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "019ea7bb-8788-7151-af7f-3d2a486b0dd5",
+        "model": "unknown"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_70e33e05ea55a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea7bb-8788-7151-af7f-3d2a486b0dd5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
