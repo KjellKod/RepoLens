@@ -1,0 +1,26 @@
+docs/roadmap/rpl_current_roadmap.md
+  s_70e33e05ea55a8::t_6e5c5230475c12 1-136,140-192,195,207-354,367-407
+  s_70e33e05ea55a8::t_5f9c5b8d99131a 196-206,355-366
+  s_70e33e05ea55a8::t_1f5fe7a0e90217 137-139,193-194
+docs/roadmap/archive/rpl_roadmap.md
+  s_70e33e05ea55a8::t_6e5c5230475c12 3-6
+docs/roadmap/rpl_README.md
+  s_70e33e05ea55a8::t_6e5c5230475c12 40
+  s_70e33e05ea55a8::t_9a6099621bfc27 42
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "d32cb8d9f5db2c76c58c913bf34113fdb83d37bb",
+  "prompts": {},
+  "sessions": {
+    "s_70e33e05ea55a8": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea7bb-8788-7151-af7f-3d2a486b0dd5",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
