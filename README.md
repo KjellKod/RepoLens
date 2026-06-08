@@ -7,8 +7,9 @@ repository under an owner, in any language, and turns the ambiguity they leave b
 into one clean, evidence-backed disclosure. It **doesn't reinvent scanners — it conducts
 them**, and adds the workflow, policy, evidence, and reporting on top.
 
-> All six pipeline stages are shipped and tested end-to-end. See
-> **[docs/usage.md](docs/usage.md)** for how to run it, and
+> All six pipeline stages are shipped and tested end-to-end. New here? Start with
+> **[docs/how-it-works.md](docs/how-it-works.md)** — a visual, step-by-step walkthrough of the
+> whole pipeline. See **[docs/usage.md](docs/usage.md)** for how to run it, and
 > **[docs/roadmap](docs/roadmap/rpl_README.md)** for the design, decisions, and security model.
 
 ## Install
@@ -73,6 +74,10 @@ RepoLens conducts mature, trusted tools and resolves their gaps intelligently:
 The "smart" part is the **ambiguity resolution**: a cheapest-source-first ladder fills
 most licenses without cloning; whatever's left — or is risky — is flagged and resolved
 with **anchored evidence under human approval**, never guessed.
+
+**[See the full visual walkthrough →](docs/how-it-works.md)** — ASCII diagrams of every
+stage, the resolution ladder, the verify-first shortlist loop, and the artifacts that flow
+between them.
 
 ## Usage
 

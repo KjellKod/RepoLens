@@ -714,6 +714,54 @@ def test_shortlist_open_after_context_emit_points_to_skill_next(
     assert f"--proposals {tmp_path / 'shortlist.proposals.json'}" in result.message
 
 
+def test_shortlist_resolves_relative_artifact_paths_against_absolute_work_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, Path | None] = {}
+
+    def fake_shortlist(
+        _work_root: Path,
+        *,
+        emit_contexts_path: Path | None = None,
+        proposals_path: Path | None = None,
+        evidence_path: Path | None = None,
+        **_kwargs: object,
+    ) -> SimpleNamespace:
+        captured["emit_contexts"] = emit_contexts_path
+        captured["proposals"] = proposals_path
+        captured["evidence"] = evidence_path
+        return SimpleNamespace(
+            shortlist_json_path=tmp_path / "shortlist.json",
+            shortlist_md_path=tmp_path / "shortlist.md",
+            open_count=3,
+            item_count=5,
+            contexts_path=emit_contexts_path,
+        )
+
+    monkeypatch.setattr("repolens.shortlist.run_shortlist", fake_shortlist)
+    work_root = tmp_path / "Onfleet"
+
+    result = cli._shortlist_stage(
+        SimpleNamespace(
+            work_root=work_root,
+            identity=None,
+            emit_contexts=Path("work/shortlist.contexts.json"),
+            proposals=Path("work/shortlist.proposals.json"),
+            evidence=Path("work/shortlist.evidence.json"),
+        )
+    )
+
+    assert result.status == cli.CommandStatus.FINDINGS_OPEN
+    assert captured == {
+        "emit_contexts": work_root / "shortlist.contexts.json",
+        "proposals": work_root / "shortlist.proposals.json",
+        "evidence": work_root / "shortlist.evidence.json",
+    }
+    assert str(work_root / "shortlist.contexts.json") in result.message
+    assert f"ingested proposals {work_root / 'shortlist.proposals.json'}" in result.message
+    assert f"ingested evidence {work_root / 'shortlist.evidence.json'}" in result.message
+
+
 def test_shortlist_open_after_proposal_ingest_points_to_review_notes(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

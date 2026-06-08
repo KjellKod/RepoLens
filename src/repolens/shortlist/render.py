@@ -29,8 +29,17 @@ from repolens.shortlist.grouping import (
     build_groups,
     encode_group_key,
 )
+from repolens.shortlist.proposals import GITHUB_LICENSE_DEFAULT_BRANCH_SOURCE_TYPE
 
 _NO_EVIDENCE_URL = "no evidence url"
+
+#: The integrity-protected signal that the surrounding ``research_evidence`` was produced by
+#: the trusted verified-success proposals path, not borrowed by an ingested artifact. The
+#: ``verify:*`` outcomes are NOT in ``evidence._EVIDENCE_OUTCOMES`` (the ingestion allowlist),
+#: so a persisted/ingested evidence artifact cannot forge this outcome through the strict
+#: ingestion schema — making the ``**review:**`` prefix below genuinely trustworthy.
+_VERIFIED_DEFAULT_BRANCH_OUTCOME = "verify:exact_anchor_default_branch"
+_VERIFIED_MACHINE_VERIFICATION = "verified"
 
 #: Stable line-key markers. ``REF_PREFIX``/``REF_SUFFIX`` survive ``sanitize_markdown`` as
 #: ``&lt;!-- … --&gt;`` (the ``<``/``>`` are escaped) — the decisions parser matches the
@@ -237,6 +246,16 @@ def _combined_evidence_cell(
 
 def _research_evidence_links(research: Mapping[str, Any]) -> str | None:
     links: list[str] = []
+    # The **review:** prefix is gated on an integrity-protected signal on the surrounding
+    # research mapping, NOT on the per-entry free-form source_type. The verify:* outcome +
+    # machine_verification=="verified" pair is set only by the trusted verified-success
+    # proposals path and is rejected by the evidence-ingestion outcome allowlist
+    # (evidence._EVIDENCE_OUTCOMES), so an ingested artifact cannot borrow the reviewer
+    # signpost by merely asserting source_type=="github_license_api_default_branch".
+    prefix_trusted = (
+        _non_empty(research.get("outcome")) == _VERIFIED_DEFAULT_BRANCH_OUTCOME
+        and _non_empty(research.get("machine_verification")) == _VERIFIED_MACHINE_VERIFICATION
+    )
     browser_evidence = research.get("browser_evidence")
     if isinstance(browser_evidence, list):
         for entry in browser_evidence:
@@ -245,7 +264,18 @@ def _research_evidence_links(research: Mapping[str, Any]) -> str | None:
             label = _non_empty(entry.get("label"))
             url = _non_empty(entry.get("url"))
             if label is not None and url is not None:
-                links.append(markdown_link(label, url))
+                link = markdown_link(label, url)
+                # Trusted, code-controlled emphasis for the unpinned default-branch row
+                # only: the prefix is a literal here (NOT derived from the entry) and is
+                # emitted OUTSIDE markdown_link so the bold is not escaped. The label is
+                # still escaped by markdown_link; the caveat rides in the (escaped) label
+                # as plain Unicode (ux-guidebook§2 signifier, §3 reserved emphasis).
+                if (
+                    prefix_trusted
+                    and entry.get("source_type") == GITHUB_LICENSE_DEFAULT_BRANCH_SOURCE_TYPE
+                ):
+                    link = f"**review:** {link}"
+                links.append(link)
     conflicts = research.get("conflicts")
     if isinstance(conflicts, list):
         for entry in conflicts:
