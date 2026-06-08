@@ -1,12 +1,9 @@
 # Roadmap — fast, parallel, sequenced
 
-> 📦 **Archived build plan.** M0–M3 were substantially delivered; residual acceptance
-> items (the M2 P4 flagging boxes, the R2 X1/X2/X3 grow-out, the M1 inventory
-> `missing_version` gap, and the final M3 "Round" sign-off) remain open and are tracked
-> in issue #20 — see the milestone checklists below.
-> Kept for historical reference — it is **not** current product documentation. For how
-> RepoLens works today, see the [README](../../../README.md) and [usage guide](../../usage.md);
-> for the live design, the [architecture](../rpl_architecture.md),
+> 📦 **Archived build plan.** This was the original M0-M3 delivery roadmap and is kept for
+> historical reference only. It is **not** current product planning. For the active roadmap,
+> see [current-roadmap.md](../rpl_current_roadmap.md). For how RepoLens works today, see the
+> [README](../../../README.md), [usage guide](../../usage.md), [architecture](../rpl_architecture.md),
 > [security](../rpl_security.md), and [decisions](../rpl_decisions.md) docs.
 
 Strategy: build **foundation in parallel**, freeze the on-disk schemas early so **every
