@@ -19,6 +19,7 @@ from repolens.report import (
     aggregate_rows,
     render_main_report,
 )
+from repolens.shortlist.evidence import EvidenceIdentity
 
 
 def test_render_main_report_writes_md_and_csv_from_resolved_records(
@@ -272,6 +273,315 @@ def test_report_keeps_approved_shortlist_components(
     assert len(rows) == 1
     assert rows[0]["name"] == "acme-lib"
     assert rows[0]["spdx_id"] == "UNKNOWN"
+
+
+def test_report_projects_approved_human_override_with_unverified_provenance(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="ZPL-2.1",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_reason": "manual review",
+                    "override_decided_by": "kjell",
+                    "override_evidence_verified": False,
+                    "browser_evidence": [
+                        {
+                            "label": "PyPI project page",
+                            "url": "https://pypi.org/project/acme-lib/",
+                            "source_type": "human_override",
+                            "anchor": "ZPL-2.1",
+                        }
+                    ],
+                },
+            )
+        ],
+    )
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+    rows = _csv_records(result.csv_path)
+    markdown = result.markdown_path.read_text(encoding="utf-8")
+    html = result.html_path.read_text(encoding="utf-8")
+
+    assert rows[0]["spdx_id"] == "ZPL-2.1"
+    assert rows[0]["evidence_source_layer"] == "human_override_unverified"
+    assert rows[0]["source_url"] == "https://pypi.org/project/acme-lib/"
+    assert "human_override_unverified" in markdown
+    assert "human_override_unverified" in html
+
+
+def test_report_rejects_mismatched_human_override_spdx_provenance(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="MIT",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_reason": "manual review",
+                    "override_decided_by": "kjell",
+                    "override_evidence_verified": False,
+                },
+            )
+        ],
+    )
+
+    with pytest.raises(InputError, match="mismatched"):
+        render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+
+def test_report_rejects_incomplete_human_override_provenance(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="ZPL-2.1",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_evidence_verified": False,
+                },
+            )
+        ],
+    )
+
+    with pytest.raises(InputError, match="override_reason"):
+        render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+
+def test_report_clears_inherited_source_url_when_human_override_has_no_evidence_url(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    stale_url = "https://deps.dev/stale/verifier-evidence"
+    unknown = {
+        **resolved_record,
+        "spdx_id": None,
+        "evidence": {"source_layer": "syft", "url": stale_url, "anchor": "MIT"},
+    }
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="ZPL-2.1",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_reason": "manual review",
+                    "override_decided_by": "kjell",
+                    "override_evidence_verified": False,
+                },
+            )
+        ],
+    )
+
+    rows = _csv_records(render_main_report(tmp_path, tmp_path / "out", _report_config()).csv_path)
+
+    assert rows[0]["spdx_id"] == "ZPL-2.1"
+    assert rows[0]["evidence_source_layer"] == "human_override_unverified"
+    assert rows[0]["source_url"] != stale_url
+    assert rows[0]["source_url"] == "pkg:pypi/acme-lib@1.2.3"
+
+
+@pytest.mark.parametrize(
+    ("browser_evidence", "message"),
+    [
+        (
+            [
+                {
+                    "label": "PyPI project page",
+                    "url": "https://pypi.org/project/acme-lib/",
+                    "source_type": "pypi",
+                    "anchor": "ZPL-2.1",
+                }
+            ],
+            "non-human override",
+        ),
+        (
+            [
+                {
+                    "label": "PyPI project page",
+                    "url": "https://www.google.com/search?q=acme-lib",
+                    "source_type": "human_override",
+                    "anchor": "ZPL-2.1",
+                }
+            ],
+            "invalid evidence URL",
+        ),
+    ],
+)
+def test_report_revalidates_human_override_browser_evidence_before_projection(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+    browser_evidence: list[dict[str, str]],
+    message: str,
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="ZPL-2.1",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_reason": "manual review",
+                    "override_decided_by": "kjell",
+                    "override_evidence_verified": False,
+                    "browser_evidence": browser_evidence,
+                },
+            )
+        ],
+    )
+
+    with pytest.raises(InputError, match=message):
+        render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+
+def test_report_rejects_expired_approved_human_override(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="ZPL-2.1",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_reason": "manual review",
+                    "override_decided_by": "kjell",
+                    "override_evidence_verified": False,
+                    "override_expires_at": "2000-01-01",
+                },
+            )
+        ],
+    )
+
+    with pytest.raises(InputError, match="expired"):
+        render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+
+def test_report_rejects_stale_approved_human_override_context(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="ZPL-2.1",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint(
+                        "acme-lib|UNKNOWN",
+                        version="1.2.3",
+                    ),
+                    "package": "acme-lib",
+                    "version": "1.2.3",
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_reason": "manual review",
+                    "override_decided_by": "kjell",
+                    "override_evidence_verified": False,
+                },
+            )
+        ],
+    )
+
+    with pytest.raises(InputError, match="stale"):
+        render_main_report(tmp_path, tmp_path / "out", _report_config())
 
 
 def test_report_rejected_shortlist_ref_does_not_drop_other_spdx_for_same_name(
@@ -922,13 +1232,39 @@ def _write_shortlist(tmp_path: Path, items: list[dict[str, object]]) -> None:
     )
 
 
-def _shortlist_item(component_ref: str, *, status: str) -> dict[str, object]:
-    return {
+def _shortlist_item(
+    component_ref: str,
+    *,
+    status: str,
+    candidate_spdx: str | None = None,
+    research_evidence: dict[str, object] | None = None,
+) -> dict[str, object]:
+    item: dict[str, object] = {
         "component_ref": component_ref,
         "reason": "UNKNOWN",
         "evidence": {"source_layer": "syft"},
-        "candidate_spdx": None,
+        "candidate_spdx": candidate_spdx,
         "status": status,
         "decided_by": "reviewer",
         "decided_at": "2026-01-01T00:00:00Z",
     }
+    if research_evidence is not None:
+        item["research_evidence"] = research_evidence
+    return item
+
+
+def _override_fingerprint(
+    component_ref: str,
+    *,
+    package: str | None = "acme-lib",
+    version: str | None = None,
+    ecosystem: str | None = None,
+    found_in: tuple[str, ...] = (),
+) -> str:
+    return EvidenceIdentity(
+        component_ref=component_ref,
+        package=package,
+        version=version,
+        ecosystem=ecosystem,
+        found_in=found_in,
+    ).context_fingerprint

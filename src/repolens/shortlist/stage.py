@@ -46,6 +46,7 @@ from repolens.shortlist.contexts import (
 from repolens.shortlist.decisions import apply_decisions, parse_review_decisions
 from repolens.shortlist.evidence import apply_evidence
 from repolens.shortlist.grouping import build_groups, group_membership_by_ref
+from repolens.shortlist.overrides import apply_overrides
 from repolens.shortlist.prescreen import ItemContent
 from repolens.shortlist.proposals import ProposalIngestSummary, apply_proposals_with_summary
 from repolens.shortlist.render import render_shortlist_markdown
@@ -91,6 +92,7 @@ def run_shortlist(
     emit_contexts_path: str | Path | None = None,
     proposals_path: str | Path | None = None,
     evidence_path: str | Path | None = None,
+    overrides_path: str | Path | None = None,
 ) -> ShortlistResult:
     """Settle the flagged items in ``work_root`` and write the artifacts back."""
 
@@ -133,6 +135,8 @@ def run_shortlist(
             Path(evidence_path),
             metadata=metadata,
         )
+    if overrides_path is not None:
+        settled_items = apply_overrides(settled_items, Path(overrides_path), metadata=metadata)
 
     # 2. Run the injected agent path only for the legacy no-artifact mode. The new
     # artifact modes are model-free: context emission writes a file, proposal ingestion
@@ -145,6 +149,7 @@ def run_shortlist(
             emit_contexts_path is None
             and proposals_path is None
             and evidence_path is None
+            and overrides_path is None
             and record.get("status") == "open"
             and not _has_verified_candidate(record)
             and not isinstance(record.get("research_evidence"), Mapping)

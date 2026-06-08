@@ -140,6 +140,7 @@
                   "no_public_evidence",
                   "conflict",
                   "legal_or_vendor_review",
+                  "human_override",
                   "verify:exact_anchor",
                   "verify:exact_anchor_default_branch"
                 ]
@@ -152,7 +153,8 @@
                   "unsupported_evidence_source",
                   "no_public_evidence",
                   "conflict",
-                  "legal_or_vendor_review"
+                  "legal_or_vendor_review",
+                  "human_override_unverified"
                 ]
               },
               "lookups_attempted": {"type": "array", "items": {"type": "string"}},
@@ -219,7 +221,15 @@
                 "additionalProperties": false
               },
               "rationale": {"type": ["string", "null"]},
-              "review_note": {"type": ["string", "null"]}
+              "review_note": {"type": ["string", "null"]},
+              "override_reason": {"type": "string"},
+              "override_decided_by": {"type": "string"},
+              "override_evidence_verified": {"type": "boolean"},
+              "override_policy_tier": {
+                "type": "string",
+                "enum": ["ALLOW", "REVIEW", "BLOCK", "UNKNOWN"]
+              },
+              "override_expires_at": {"type": "string"}
             },
             "additionalProperties": false
           },

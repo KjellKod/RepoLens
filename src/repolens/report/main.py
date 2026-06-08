@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sys
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
 from html import escape as html_escape
 from pathlib import Path
 from typing import Any, TextIO
@@ -13,9 +14,12 @@ from urllib.parse import quote, urlparse
 
 from repolens.config import Config
 from repolens.data import store
+from repolens.data.errors import SchemaValidationError
 from repolens.data.limits import max_bytes_for
 from repolens.discovery.taxonomy import DEFAULT_CATEGORY
 from repolens.exit_codes import InputError
+from repolens.policy import PolicyTier, classify_license_input, load_default_policy
+from repolens.policy.spdx import normalize_license
 from repolens.report.categories import RoutedRecord, build_category_index, route_occurrences
 from repolens.report.dependency_boundaries import (
     build_dependency_boundary_summary,
@@ -37,6 +41,13 @@ from repolens.security.sanitize import (
     render_code_span,
     sanitize_markdown,
     serialize_csv_rows,
+)
+from repolens.shortlist.contexts import load_shortlist_metadata
+from repolens.shortlist.evidence import _validate_direct_link, identity_for_item
+from repolens.shortlist.overrides import (
+    HUMAN_OVERRIDE_MACHINE_VERIFICATION,
+    HUMAN_OVERRIDE_OUTCOME,
+    HUMAN_OVERRIDE_SOURCE_TYPE,
 )
 
 COLUMNS = (
@@ -455,8 +466,202 @@ def _split_report_records(work_root: Path, config: Config | None):
     default_category = _default_category(config)
     records, file_gaps = collect_resolved_records(work_root, _active_report_repo_refs(work_root))
     records = _exclude_rejected_shortlist_records(work_root, records)
+    records = _apply_approved_shortlist_overrides(work_root, records)
     split = route_occurrences(records, category_index, selection.include, default_category)
     return split, file_gaps
+
+
+def _apply_approved_shortlist_overrides(
+    work_root: Path,
+    records: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    overrides = _approved_human_override_items(work_root)
+    if not overrides:
+        return list(records)
+    projected: list[dict[str, Any]] = []
+    for record in records:
+        override = overrides.get(_resolved_component_ref(record))
+        if override is None:
+            projected.append(record)
+            continue
+        updated = dict(record)
+        override_spdx = str(override["candidate_spdx"])
+        updated["spdx_id"] = override_spdx
+        evidence = dict(updated.get("evidence") or {})
+        evidence["source_layer"] = HUMAN_OVERRIDE_MACHINE_VERIFICATION
+        evidence_url = _human_override_evidence_url(override)
+        if evidence_url is not None:
+            evidence["url"] = evidence_url
+        else:
+            evidence.pop("url", None)
+        evidence["anchor"] = override_spdx
+        updated["evidence"] = evidence
+        projected.append(updated)
+    return projected
+
+
+def _approved_human_override_items(work_root: Path) -> dict[str, dict[str, Any]]:
+    shortlist_path = Path(work_root) / "shortlist.json"
+    if not shortlist_path.exists():
+        return {}
+    document = store.read_shortlist(work_root)
+    raw_items = document.get("items", [])
+    if not isinstance(raw_items, list):
+        return {}
+    overrides: dict[str, dict[str, Any]] = {}
+    metadata = None
+    today = datetime.now(UTC).date()
+    for item in raw_items:
+        if not isinstance(item, dict) or item.get("status") != "approved":
+            continue
+        candidate = _optional_text(item.get("candidate_spdx"))
+        component_ref = _optional_text(item.get("component_ref"))
+        research = item.get("research_evidence")
+        if (
+            candidate is None
+            or component_ref is None
+            or not isinstance(research, dict)
+            or research.get("outcome") != HUMAN_OVERRIDE_OUTCOME
+            or research.get("machine_verification") != HUMAN_OVERRIDE_MACHINE_VERIFICATION
+        ):
+            continue
+        _raise_if_human_override_provenance_incomplete(component_ref, research)
+        candidate = _validated_human_override_spdx(component_ref, candidate, research)
+        _raise_if_human_override_expired(component_ref, research, today=today)
+        if metadata is None:
+            metadata = load_shortlist_metadata(work_root)
+        _raise_if_human_override_context_stale(component_ref, item, research, metadata)
+        overrides[component_ref] = item
+    return overrides
+
+
+def _raise_if_human_override_provenance_incomplete(
+    component_ref: str,
+    research: Mapping[str, Any],
+) -> None:
+    for field_name in ("override_reason", "override_decided_by"):
+        if _optional_text(research.get(field_name)) is None:
+            raise InputError(
+                f"shortlist human override for {component_ref} is missing {field_name}; "
+                "rerun shortlist with current overrides before reporting"
+            )
+    if research.get("override_evidence_verified") is not False:
+        raise InputError(
+            f"shortlist human override for {component_ref} is missing "
+            "override_evidence_verified=false; rerun shortlist with current overrides "
+            "before reporting"
+        )
+
+
+def _validated_human_override_spdx(
+    component_ref: str,
+    candidate: str,
+    research: Mapping[str, Any],
+) -> str:
+    normalized_candidate = _normalize_human_override_spdx(
+        component_ref, candidate, field="candidate_spdx"
+    )
+    for spdx_field in ("human_candidate_spdx", "likely_spdx"):
+        value = _optional_text(research.get(spdx_field))
+        if value is None:
+            raise InputError(
+                f"shortlist human override for {component_ref} is missing {spdx_field}; "
+                "rerun shortlist with current overrides before reporting"
+            )
+        normalized_value = _normalize_human_override_spdx(component_ref, value, field=spdx_field)
+        if normalized_value != normalized_candidate:
+            raise InputError(
+                f"shortlist human override for {component_ref} has mismatched {spdx_field}; "
+                "rerun shortlist with current overrides before reporting"
+            )
+    return normalized_candidate
+
+
+def _normalize_human_override_spdx(component_ref: str, value: str, *, field: str) -> str:
+    policy = load_default_policy()
+    normalized = normalize_license(value, policy)
+    if normalized.spdx_id is None:
+        raise InputError(
+            f"shortlist human override for {component_ref} has unsupported {field} {value!r}"
+        )
+    decision = classify_license_input(normalized.spdx_id, policy)
+    if decision.tier == PolicyTier.UNKNOWN:
+        raise InputError(
+            f"shortlist human override for {component_ref} has unsupported {field} {value!r}"
+        )
+    return normalized.spdx_id
+
+
+def _raise_if_human_override_expired(
+    component_ref: str,
+    research: Mapping[str, Any],
+    *,
+    today: date,
+) -> None:
+    expires_at = _optional_text(research.get("override_expires_at"))
+    if expires_at is None:
+        return
+    try:
+        expires = date.fromisoformat(expires_at)
+    except ValueError as exc:
+        raise InputError(
+            f"shortlist human override for {component_ref} has invalid expiry {expires_at!r}"
+        ) from exc
+    if expires < today:
+        raise InputError(
+            f"shortlist human override for {component_ref} expired on {expires_at}; "
+            "rerun shortlist with a current override before reporting"
+        )
+
+
+def _raise_if_human_override_context_stale(
+    component_ref: str,
+    item: Mapping[str, Any],
+    research: Mapping[str, Any],
+    metadata,
+) -> None:
+    fingerprint = _optional_text(research.get("context_fingerprint"))
+    if fingerprint is None:
+        raise InputError(
+            f"shortlist human override for {component_ref} is missing context_fingerprint; "
+            "rerun shortlist with current overrides before reporting"
+        )
+    current = identity_for_item(item, metadata).context_fingerprint
+    if fingerprint != current:
+        raise InputError(
+            f"shortlist human override for {component_ref} is stale; "
+            "rerun shortlist with current overrides before reporting"
+        )
+
+
+def _human_override_evidence_url(item: Mapping[str, Any]) -> str | None:
+    component_ref = _optional_text(item.get("component_ref")) or "unknown component"
+    research = item.get("research_evidence")
+    if not isinstance(research, dict):
+        return None
+    browser_evidence = research.get("browser_evidence")
+    if not isinstance(browser_evidence, list):
+        return None
+    for entry in browser_evidence:
+        if isinstance(entry, dict):
+            url = _optional_text(entry.get("url"))
+            if url is not None:
+                if entry.get("source_type") != HUMAN_OVERRIDE_SOURCE_TYPE:
+                    raise InputError(
+                        f"shortlist human override for {component_ref} has non-human "
+                        "override browser evidence; rerun shortlist with current overrides "
+                        "before reporting"
+                    )
+                label = _optional_text(entry.get("label")) or "Human override evidence"
+                try:
+                    _validate_direct_link(label, url, f"shortlist human override {component_ref}")
+                except SchemaValidationError as exc:
+                    raise InputError(
+                        f"shortlist human override for {component_ref} has invalid evidence URL; "
+                        "rerun shortlist with current overrides before reporting"
+                    ) from exc
+                return url
+    return None
 
 
 def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[DisclosureRow]:

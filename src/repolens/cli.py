@@ -757,6 +757,15 @@ def _configure_shortlist_parser(subparser: argparse.ArgumentParser) -> None:
         metavar="PATH",
         help="Read deterministic research evidence JSON and preserve browser evidence.",
     )
+    subparser.add_argument(
+        "--overrides",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "Read local human license overrides from <work-root>/PATH; records candidates "
+            "as human_override_unverified and never approves rows."
+        ),
+    )
     subparser.set_defaults(handler=_shortlist_stage)
     actions = subparser.add_subparsers(
         dest="shortlist_action",
@@ -805,6 +814,40 @@ def _configure_shortlist_parser(subparser: argparse.ArgumentParser) -> None:
         help="shortlist.review.md to write (default: <work-root>/shortlist.review.md).",
     )
     research_parser.set_defaults(handler=_shortlist_research_stage)
+
+    overrides_parser = actions.add_parser(
+        "overrides",
+        help="Show or validate local human license override artifacts.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Human license overrides are local operator corrections. They can set "
+            "candidate SPDX values, but evidence stays human-supplied and unverified."
+        ),
+    )
+    override_actions = overrides_parser.add_subparsers(
+        dest="shortlist_overrides_action",
+        metavar="<action>",
+        title="override actions",
+        required=True,
+    )
+    schema_parser = override_actions.add_parser(
+        "schema",
+        help="Print the shortlist.overrides.json schema.",
+    )
+    schema_parser.set_defaults(handler=_shortlist_overrides_schema)
+    validate_parser = override_actions.add_parser(
+        "validate",
+        help="Validate an override artifact against the current shortlist.",
+    )
+    validate_parser.add_argument("path", type=Path, metavar="PATH")
+    validate_parser.add_argument(
+        "--work-root",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Work root containing shortlist.json.",
+    )
+    validate_parser.set_defaults(handler=_shortlist_overrides_validate)
 
 
 def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
@@ -2956,6 +2999,7 @@ def _flag_stage(args: argparse.Namespace) -> CommandResult:
 def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.shortlist import run_shortlist
     from repolens.shortlist.agent import AgentRequest, AgentResponse
+    from repolens.shortlist.overrides import resolve_overrides_path
 
     # The default offline agent abstains. RepoLens itself never invokes a model; artifact
     # proposal workflows run outside RepoLens, then this stage re-fetches and verifies
@@ -2973,6 +3017,9 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     emit_contexts_path = _work_root_artifact_path(work_root, args.emit_contexts)
     proposals_path = _work_root_artifact_path(work_root, args.proposals)
     evidence_path = _work_root_artifact_path(work_root, getattr(args, "evidence", None))
+    overrides_path = None
+    if getattr(args, "overrides", None) is not None:
+        overrides_path = resolve_overrides_path(work_root, Path(args.overrides))
     normalized_args = argparse.Namespace(
         **{
             **vars(args),
@@ -2980,6 +3027,7 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
             "emit_contexts": emit_contexts_path,
             "proposals": proposals_path,
             "evidence": evidence_path,
+            "overrides": overrides_path,
         }
     )
     result = run_shortlist(
@@ -2989,6 +3037,7 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
         emit_contexts_path=emit_contexts_path,
         proposals_path=proposals_path,
         evidence_path=evidence_path,
+        overrides_path=overrides_path,
     )
     summary = (
         f"settled shortlist: {result.open_count} open item(s) of {result.item_count}; "
@@ -3001,6 +3050,8 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
         summary = f"{summary}; ingested proposals {proposals_path}"
     if evidence_path is not None:
         summary = f"{summary}; ingested evidence {evidence_path}"
+    if overrides_path is not None:
+        summary = f"{summary}; applied human overrides {overrides_path}"
     proposal_notice = _shortlist_proposal_ingest_notice(getattr(result, "proposal_summary", None))
     if proposal_notice:
         summary = f"{summary}\n{proposal_notice}"
@@ -3016,6 +3067,37 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
         )
     report_command = f"repolens report --work-root {shlex.quote(str(work_root))}"
     return CommandResult(CommandStatus.SUCCESS, f"{summary}\nNext CLI stage: {report_command}")
+
+
+def _shortlist_overrides_schema(_args: argparse.Namespace) -> CommandResult:
+    from repolens.data.validation import load_schema
+
+    return CommandResult(
+        CommandStatus.SUCCESS,
+        json.dumps(load_schema("shortlist_overrides"), indent=2, sort_keys=True),
+    )
+
+
+def _shortlist_overrides_validate(args: argparse.Namespace) -> CommandResult:
+    from repolens.data import store
+    from repolens.shortlist.overrides import load_overrides, resolve_overrides_path
+
+    work_root = Path(args.work_root)
+    path = resolve_overrides_path(work_root, Path(args.path))
+    document = store.read_shortlist(work_root)
+    raw_items = document.get("items", [])
+    items = raw_items if isinstance(raw_items, list) else []
+    records = load_overrides(path, items=items)
+    lines = [
+        "Shortlist overrides OK",
+        f"  file: {path}",
+        f"  entries: {len(records)}",
+        "",
+        "Apply:",
+        f"  repolens shortlist --work-root {shlex.quote(str(work_root))} "
+        f"--overrides {shlex.quote(str(args.path))}",
+    ]
+    return CommandResult(CommandStatus.SUCCESS, "\n".join(lines))
 
 
 def _work_root_artifact_path(work_root: Path, path: Path | None) -> Path | None:
@@ -3105,6 +3187,7 @@ def _shortlist_open_guidance(
     rerun_command = f"repolens shortlist --work-root {work_root_arg}"
     bucket_hint = _shortlist_unresolved_bucket_hint(work_root)
     scancode_retry_hint = _shortlist_scancode_retry_hint(work_root)
+    override_hint = _shortlist_overrides_guidance(work_root)
 
     if args.proposals is not None or getattr(args, "evidence", None) is not None:
         sections = [
@@ -3115,6 +3198,8 @@ def _shortlist_open_guidance(
             sections.extend((bucket_hint, ""))
         if scancode_retry_hint:
             sections.extend((scancode_retry_hint, ""))
+        if override_hint:
+            sections.extend((override_hint, ""))
         sections.extend(_shortlist_review_notes_guidance(work_root, args.proposals))
         sections.extend(
             (
@@ -3136,6 +3221,8 @@ def _shortlist_open_guidance(
             sections.extend((bucket_hint, ""))
         if scancode_retry_hint:
             sections.extend((scancode_retry_hint, ""))
+        if override_hint:
+            sections.extend((override_hint, ""))
         sections.extend(
             (
                 "Ask Codex/Claude:",
@@ -3171,6 +3258,8 @@ def _shortlist_open_guidance(
         sections.extend((bucket_hint, ""))
     if scancode_retry_hint:
         sections.extend((scancode_retry_hint, ""))
+    if override_hint:
+        sections.extend((override_hint, ""))
     sections.extend(_shortlist_review_notes_guidance(work_root, None))
     sections.extend(
         (
@@ -3201,6 +3290,45 @@ def _shortlist_open_guidance(
         )
     )
     return "\n".join(sections)
+
+
+def _shortlist_overrides_guidance(work_root: Path) -> str:
+    unknown_count = _shortlist_open_unknown_count(work_root)
+    if unknown_count <= 0:
+        return ""
+    work_root_arg = shlex.quote(str(work_root))
+    overrides_name = "shortlist.overrides.json"
+    return "\n".join(
+        (
+            f"Human override option: {unknown_count} open UNKNOWN item(s).",
+            f"  Edit local overrides: {work_root / overrides_name}",
+            "  Validate:",
+            "    repolens shortlist overrides validate "
+            f"{overrides_name} --work-root {work_root_arg}",
+            "  Apply without approval:",
+            f"    repolens shortlist --work-root {work_root_arg} --overrides {overrides_name}",
+        )
+    )
+
+
+def _shortlist_open_unknown_count(work_root: Path) -> int:
+    from repolens.data import store
+
+    try:
+        document = store.read_shortlist(work_root)
+    except (ArtifactError, OSError):
+        return 0
+    raw_items = document.get("items")
+    if not isinstance(raw_items, list):
+        return 0
+    count = 0
+    for item in raw_items:
+        if not isinstance(item, dict) or item.get("status") != "open":
+            continue
+        component_ref = str(item.get("component_ref") or "")
+        if item.get("reason") == "UNKNOWN" or component_ref.endswith("|UNKNOWN"):
+            count += 1
+    return count
 
 
 def _shortlist_review_notes_guidance(

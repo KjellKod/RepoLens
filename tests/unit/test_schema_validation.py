@@ -111,6 +111,21 @@ def test_shortlist_proposals_reject_unknown_fields(
         validate_artifact(shortlist_proposals, "shortlist_proposals")
 
 
+def test_shortlist_overrides_reject_unknown_fields() -> None:
+    overrides = [
+        {
+            "component_ref": "zope.site|UNKNOWN",
+            "spdx_id": "ZPL-2.1",
+            "reason": "manual correction",
+            "decided_by": "kjell",
+            "unexpected": "drift",
+        }
+    ]
+
+    with pytest.raises(SchemaValidationError, match="unexpected"):
+        validate_artifact(overrides, "shortlist_overrides")
+
+
 def test_shortlist_accepts_research_evidence_field(shortlist: dict[str, object]) -> None:
     items = shortlist["items"]
     assert isinstance(items, list)

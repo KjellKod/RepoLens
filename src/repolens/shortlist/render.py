@@ -29,6 +29,11 @@ from repolens.shortlist.grouping import (
     build_groups,
     encode_group_key,
 )
+from repolens.shortlist.overrides import (
+    HUMAN_OVERRIDE_MACHINE_VERIFICATION,
+    HUMAN_OVERRIDE_OUTCOME,
+    HUMAN_OVERRIDE_SOURCE_TYPE,
+)
 from repolens.shortlist.proposals import GITHUB_LICENSE_DEFAULT_BRANCH_SOURCE_TYPE
 
 _NO_EVIDENCE_URL = "no evidence url"
@@ -265,6 +270,10 @@ def _research_evidence_links(research: Mapping[str, Any]) -> str | None:
             url = _non_empty(entry.get("url"))
             if label is not None and url is not None:
                 link = markdown_link(label, url)
+                if _is_human_override(research) and entry.get("source_type") == (
+                    HUMAN_OVERRIDE_SOURCE_TYPE
+                ):
+                    link = f"human override evidence (unverified): {link}"
                 # Trusted, code-controlled emphasis for the unpinned default-branch row
                 # only: the prefix is a literal here (NOT derived from the entry) and is
                 # emitted OUTSIDE markdown_link so the bold is not escaped. The label is
@@ -305,6 +314,16 @@ def _lookup_trail(research: Mapping[str, Any]) -> str | None:
 def _machine_verification_cell(research: Mapping[str, Any]) -> str:
     if not research:
         return "machine verification: not researched"
+    if _is_human_override(research):
+        parts = ["machine verification: `human_override_unverified`"]
+        likely_spdx = _non_empty(research.get("likely_spdx"))
+        if likely_spdx is not None:
+            parts.append(f"human override SPDX: {render_code_span(likely_spdx)}")
+        decided_by = _non_empty(research.get("override_decided_by"))
+        if decided_by is not None:
+            parts.append(f"decided by: {render_code_span(decided_by)}")
+        parts.append("evidence verified: `false`")
+        return "; ".join(parts)
     parts = [f"machine verification: {render_code_span(research.get('machine_verification'))}"]
     likely_spdx = _non_empty(research.get("likely_spdx"))
     if likely_spdx is not None:
@@ -316,6 +335,11 @@ def _machine_verification_cell(research: Mapping[str, Any]) -> str:
 
 
 def _source_candidate_cell(research: Mapping[str, Any]) -> str | None:
+    if _is_human_override(research):
+        reason = _non_empty(research.get("override_reason"))
+        if reason is None:
+            return "human override candidate (unverified)"
+        return f"human override candidate (unverified): {render_code_span(reason)}"
     if _human_candidate_spdx(research) is None:
         return None
     source_repo = research.get("source_repo")
@@ -329,6 +353,8 @@ def _source_candidate_cell(research: Mapping[str, Any]) -> str | None:
 
 
 def _human_candidate_spdx(research: Mapping[str, Any]) -> str | None:
+    if _is_human_override(research):
+        return _non_empty(research.get("human_candidate_spdx"))
     candidate = _non_empty(research.get("human_candidate_spdx"))
     if candidate is None:
         return None
@@ -340,6 +366,13 @@ def _human_candidate_spdx(research: Mapping[str, Any]) -> str | None:
     if source_repo.get("bound_to_package") is True:
         return None
     return candidate
+
+
+def _is_human_override(research: Mapping[str, Any]) -> bool:
+    return (
+        _non_empty(research.get("outcome")) == HUMAN_OVERRIDE_OUTCOME
+        and _non_empty(research.get("machine_verification")) == HUMAN_OVERRIDE_MACHINE_VERIFICATION
+    )
 
 
 def _found_in_cell(item: Mapping[str, Any], metadata: ShortlistMetadata) -> str:
