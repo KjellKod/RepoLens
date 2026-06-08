@@ -152,6 +152,7 @@ def test_github_license_api_ref_verifies() -> None:
     resolution = Resolution("MIT", url, "MIT")
     outcome = verify_agent_resolution(
         resolution,
+        expected_ref="1.2.3",
         fetcher=_fetcher_returning(b'{"license":{"spdx_id":"MIT"}}'),
         resolver=_public_resolver,
     )
@@ -312,6 +313,21 @@ def test_github_license_api_master_ref_verifies_default_branch() -> None:
     assert outcome.ref_pinned is False
 
 
+def test_github_license_api_matching_mutable_ref_stays_default_branch() -> None:
+    url = "https://api.github.com/repos/o/r/license?ref=master"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        expected_ref="master",
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert outcome.verified
+    assert outcome.reason == "verify:exact_anchor_default_branch"
+    assert outcome.ref_pinned is False
+
+
 def test_github_license_api_bare_url_without_flag_still_missing_ref() -> None:
     """#4 — without the flag, a bare /license still fails verify:missing_ref."""
 
@@ -359,6 +375,32 @@ def test_github_license_api_master_ref_without_flag_or_expected_ref_rejected() -
 
     assert not outcome.verified
     assert outcome.reason == "verify:default_branch_rejected"
+
+
+def test_github_license_api_unknown_branch_without_expected_ref_rejected() -> None:
+    url = "https://api.github.com/repos/o/r/license?ref=release"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=False,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:ref_mismatch"
+
+
+def test_github_license_api_unknown_branch_with_default_branch_flag_rejected() -> None:
+    url = "https://api.github.com/repos/o/r/license?ref=release"
+    outcome = verify_agent_resolution(
+        Resolution("MIT", url, "MIT"),
+        allow_default_branch=True,
+        fetcher=_fetcher_returning(_GITHUB_LICENSE_BODY),
+        resolver=_public_resolver,
+    )
+
+    assert not outcome.verified
+    assert outcome.reason == "verify:ref_mismatch"
 
 
 def test_github_license_api_noassertion_fails_closed() -> None:

@@ -2969,13 +2969,26 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
 
     if args.work_root is None:
         raise InputError("shortlist requires --work-root")
+    work_root = Path(args.work_root)
+    emit_contexts_path = _work_root_artifact_path(work_root, args.emit_contexts)
+    proposals_path = _work_root_artifact_path(work_root, args.proposals)
+    evidence_path = _work_root_artifact_path(work_root, getattr(args, "evidence", None))
+    normalized_args = argparse.Namespace(
+        **{
+            **vars(args),
+            "work_root": work_root,
+            "emit_contexts": emit_contexts_path,
+            "proposals": proposals_path,
+            "evidence": evidence_path,
+        }
+    )
     result = run_shortlist(
-        args.work_root,
+        work_root,
         agent_client=_AbstainingAgent(),
         identity=args.identity,
-        emit_contexts_path=args.emit_contexts,
-        proposals_path=args.proposals,
-        evidence_path=getattr(args, "evidence", None),
+        emit_contexts_path=emit_contexts_path,
+        proposals_path=proposals_path,
+        evidence_path=evidence_path,
     )
     summary = (
         f"settled shortlist: {result.open_count} open item(s) of {result.item_count}; "
@@ -2984,21 +2997,40 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     contexts_path = getattr(result, "contexts_path", None)
     if contexts_path is not None:
         summary = f"{summary}; emitted contexts {contexts_path}"
-    if args.proposals is not None:
-        summary = f"{summary}; ingested proposals {args.proposals}"
-    evidence_arg = getattr(args, "evidence", None)
-    if evidence_arg is not None:
-        summary = f"{summary}; ingested evidence {evidence_arg}"
+    if proposals_path is not None:
+        summary = f"{summary}; ingested proposals {proposals_path}"
+    if evidence_path is not None:
+        summary = f"{summary}; ingested evidence {evidence_path}"
     proposal_notice = _shortlist_proposal_ingest_notice(getattr(result, "proposal_summary", None))
     if proposal_notice:
         summary = f"{summary}\n{proposal_notice}"
     if result.open_count > 0:
+        guidance = _shortlist_open_guidance(
+            normalized_args,
+            result.shortlist_md_path,
+            contexts_path,
+        )
         return CommandResult(
             CommandStatus.FINDINGS_OPEN,
-            f"{summary}\n{_shortlist_open_guidance(args, result.shortlist_md_path, contexts_path)}",
+            f"{summary}\n{guidance}",
         )
-    report_command = f"repolens report --work-root {shlex.quote(str(args.work_root))}"
+    report_command = f"repolens report --work-root {shlex.quote(str(work_root))}"
     return CommandResult(CommandStatus.SUCCESS, f"{summary}\nNext CLI stage: {report_command}")
+
+
+def _work_root_artifact_path(work_root: Path, path: Path | None) -> Path | None:
+    if path is None:
+        return None
+    path = Path(path)
+    if path.is_absolute():
+        return path
+    work_root = Path(work_root)
+    work_root_parts = work_root.parts
+    if not work_root.is_absolute() and path.parts[: len(work_root_parts)] == work_root_parts:
+        return path
+    if path.parts and path.parts[0] == "work":
+        return work_root / Path(*path.parts[1:])
+    return work_root / path
 
 
 def _shortlist_proposal_ingest_notice(proposal_summary: object | None) -> str:
@@ -3249,10 +3281,17 @@ def _shortlist_research_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.shortlist.research import run_research
 
     work_root = Path(args.work_root)
-    contexts = args.contexts or work_root / "shortlist.contexts.json"
-    proposals = args.proposals or work_root / "shortlist.proposals.json"
-    evidence = args.evidence or work_root / "shortlist.evidence.json"
-    review = args.review or work_root / "shortlist.review.md"
+    contexts = (
+        _work_root_artifact_path(work_root, args.contexts) or work_root / "shortlist.contexts.json"
+    )
+    proposals = (
+        _work_root_artifact_path(work_root, args.proposals)
+        or work_root / "shortlist.proposals.json"
+    )
+    evidence = (
+        _work_root_artifact_path(work_root, args.evidence) or work_root / "shortlist.evidence.json"
+    )
+    review = _work_root_artifact_path(work_root, args.review) or work_root / "shortlist.review.md"
     result = run_research(
         contexts_path=contexts,
         proposals_path=proposals,
@@ -3265,7 +3304,9 @@ def _shortlist_research_stage(args: argparse.Namespace) -> CommandResult:
         (
             f"researched {result.row_count} shortlist context row(s); wrote "
             f"{result.proposals_path.name}, {result.evidence_path.name}, "
-            f"{result.review_path.name}; proposals: {result.proposal_count}"
+            f"{result.review_path.name}; proposals: {result.proposal_count}\n"
+            "Next CLI stage: "
+            f"{_shortlist_ingest_command(work_root, result.proposals_path, result.evidence_path)}"
         ),
     )
 

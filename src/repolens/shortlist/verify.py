@@ -104,8 +104,10 @@ def verify_agent_resolution(
         None,
     )
     _expected = _clean_ref(expected_ref)
+    _ref_is_mutable = _ref is not None and _ref.casefold() in _MUTABLE_GITHUB_REFS
     _ref_is_pinned = _ref is not None and (
-        _is_immutable_sha(_ref) or (_expected is not None and _ref in _acceptable_refs(_expected))
+        _is_immutable_sha(_ref)
+        or (not _ref_is_mutable and _expected is not None and _ref in _acceptable_refs(_expected))
     )
     # ``ref_pinned``/the distinct default-branch reason are meaningful ONLY for the
     # ``api.github.com`` license host accepted via the ``allow_default_branch`` relaxation
@@ -219,7 +221,7 @@ def _github_license_api_ref_mismatch(
         return None if allow_default_branch else "verify:default_branch_rejected"
     expected = _clean_ref(expected_ref)
     if expected is None:
-        return None
+        return "verify:ref_mismatch"
     if ref not in _acceptable_refs(expected):
         return "verify:ref_mismatch"
     return None
