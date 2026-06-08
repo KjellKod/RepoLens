@@ -363,6 +363,40 @@ def test_report_rejects_mismatched_human_override_spdx_provenance(
         render_main_report(tmp_path, tmp_path / "out", _report_config())
 
 
+def test_report_rejects_incomplete_human_override_provenance(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="ZPL-2.1",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_evidence_verified": False,
+                },
+            )
+        ],
+    )
+
+    with pytest.raises(InputError, match="override_reason"):
+        render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+
 def test_report_clears_inherited_source_url_when_human_override_has_no_evidence_url(
     tmp_path: Path,
     resolved_record: dict[str, Any],

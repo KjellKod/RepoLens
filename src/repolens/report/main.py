@@ -523,6 +523,7 @@ def _approved_human_override_items(work_root: Path) -> dict[str, dict[str, Any]]
             or research.get("machine_verification") != HUMAN_OVERRIDE_MACHINE_VERIFICATION
         ):
             continue
+        _raise_if_human_override_provenance_incomplete(component_ref, research)
         candidate = _validated_human_override_spdx(component_ref, candidate, research)
         _raise_if_human_override_expired(component_ref, research, today=today)
         if metadata is None:
@@ -530,6 +531,24 @@ def _approved_human_override_items(work_root: Path) -> dict[str, dict[str, Any]]
         _raise_if_human_override_context_stale(component_ref, item, research, metadata)
         overrides[component_ref] = item
     return overrides
+
+
+def _raise_if_human_override_provenance_incomplete(
+    component_ref: str,
+    research: Mapping[str, Any],
+) -> None:
+    for field_name in ("override_reason", "override_decided_by"):
+        if _optional_text(research.get(field_name)) is None:
+            raise InputError(
+                f"shortlist human override for {component_ref} is missing {field_name}; "
+                "rerun shortlist with current overrides before reporting"
+            )
+    if research.get("override_evidence_verified") is not False:
+        raise InputError(
+            f"shortlist human override for {component_ref} is missing "
+            "override_evidence_verified=false; rerun shortlist with current overrides "
+            "before reporting"
+        )
 
 
 def _validated_human_override_spdx(
