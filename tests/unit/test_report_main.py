@@ -442,6 +442,72 @@ def test_report_clears_inherited_source_url_when_human_override_has_no_evidence_
     assert rows[0]["source_url"] == "pkg:pypi/acme-lib@1.2.3"
 
 
+@pytest.mark.parametrize(
+    ("browser_evidence", "message"),
+    [
+        (
+            [
+                {
+                    "label": "PyPI project page",
+                    "url": "https://pypi.org/project/acme-lib/",
+                    "source_type": "pypi",
+                    "anchor": "ZPL-2.1",
+                }
+            ],
+            "non-human override",
+        ),
+        (
+            [
+                {
+                    "label": "PyPI project page",
+                    "url": "https://www.google.com/search?q=acme-lib",
+                    "source_type": "human_override",
+                    "anchor": "ZPL-2.1",
+                }
+            ],
+            "invalid evidence URL",
+        ),
+    ],
+)
+def test_report_revalidates_human_override_browser_evidence_before_projection(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+    browser_evidence: list[dict[str, str]],
+    message: str,
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="ZPL-2.1",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_reason": "manual review",
+                    "override_decided_by": "kjell",
+                    "override_evidence_verified": False,
+                    "browser_evidence": browser_evidence,
+                },
+            )
+        ],
+    )
+
+    with pytest.raises(InputError, match=message):
+        render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+
 def test_report_rejects_expired_approved_human_override(
     tmp_path: Path,
     resolved_record: dict[str, Any],

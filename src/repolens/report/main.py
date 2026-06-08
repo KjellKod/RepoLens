@@ -14,6 +14,7 @@ from urllib.parse import quote, urlparse
 
 from repolens.config import Config
 from repolens.data import store
+from repolens.data.errors import SchemaValidationError
 from repolens.data.limits import max_bytes_for
 from repolens.discovery.taxonomy import DEFAULT_CATEGORY
 from repolens.exit_codes import InputError
@@ -42,10 +43,11 @@ from repolens.security.sanitize import (
     serialize_csv_rows,
 )
 from repolens.shortlist.contexts import load_shortlist_metadata
-from repolens.shortlist.evidence import identity_for_item
+from repolens.shortlist.evidence import _validate_direct_link, identity_for_item
 from repolens.shortlist.overrides import (
     HUMAN_OVERRIDE_MACHINE_VERIFICATION,
     HUMAN_OVERRIDE_OUTCOME,
+    HUMAN_OVERRIDE_SOURCE_TYPE,
 )
 
 COLUMNS = (
@@ -633,6 +635,7 @@ def _raise_if_human_override_context_stale(
 
 
 def _human_override_evidence_url(item: Mapping[str, Any]) -> str | None:
+    component_ref = _optional_text(item.get("component_ref")) or "unknown component"
     research = item.get("research_evidence")
     if not isinstance(research, dict):
         return None
@@ -643,6 +646,20 @@ def _human_override_evidence_url(item: Mapping[str, Any]) -> str | None:
         if isinstance(entry, dict):
             url = _optional_text(entry.get("url"))
             if url is not None:
+                if entry.get("source_type") != HUMAN_OVERRIDE_SOURCE_TYPE:
+                    raise InputError(
+                        f"shortlist human override for {component_ref} has non-human "
+                        "override browser evidence; rerun shortlist with current overrides "
+                        "before reporting"
+                    )
+                label = _optional_text(entry.get("label")) or "Human override evidence"
+                try:
+                    _validate_direct_link(label, url, f"shortlist human override {component_ref}")
+                except SchemaValidationError as exc:
+                    raise InputError(
+                        f"shortlist human override for {component_ref} has invalid evidence URL; "
+                        "rerun shortlist with current overrides before reporting"
+                    ) from exc
                 return url
     return None
 
