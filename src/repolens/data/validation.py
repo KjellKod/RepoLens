@@ -17,6 +17,7 @@ SCHEMA_NAMES = frozenset(
         "inventory",
         "shortlist",
         "shortlist_evidence",
+        "shortlist_overrides",
         "shortlist_proposals",
         "report_review",
         "local_config",
