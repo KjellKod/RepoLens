@@ -17,6 +17,8 @@ from repolens.data import store
 from repolens.data.limits import max_bytes_for
 from repolens.discovery.taxonomy import DEFAULT_CATEGORY
 from repolens.exit_codes import InputError
+from repolens.policy import PolicyTier, classify_license_input, load_default_policy
+from repolens.policy.spdx import normalize_license
 from repolens.report.categories import RoutedRecord, build_category_index, route_occurrences
 from repolens.report.dependency_boundaries import (
     build_dependency_boundary_summary,
@@ -481,13 +483,16 @@ def _apply_approved_shortlist_overrides(
             projected.append(record)
             continue
         updated = dict(record)
-        updated["spdx_id"] = str(override["candidate_spdx"])
+        override_spdx = str(override["candidate_spdx"])
+        updated["spdx_id"] = override_spdx
         evidence = dict(updated.get("evidence") or {})
         evidence["source_layer"] = HUMAN_OVERRIDE_MACHINE_VERIFICATION
         evidence_url = _human_override_evidence_url(override)
         if evidence_url is not None:
             evidence["url"] = evidence_url
-        evidence["anchor"] = str(override["candidate_spdx"])
+        else:
+            evidence.pop("url", None)
+        evidence["anchor"] = override_spdx
         updated["evidence"] = evidence
         projected.append(updated)
     return projected
@@ -518,12 +523,52 @@ def _approved_human_override_items(work_root: Path) -> dict[str, dict[str, Any]]
             or research.get("machine_verification") != HUMAN_OVERRIDE_MACHINE_VERIFICATION
         ):
             continue
+        candidate = _validated_human_override_spdx(component_ref, candidate, research)
         _raise_if_human_override_expired(component_ref, research, today=today)
         if metadata is None:
             metadata = load_shortlist_metadata(work_root)
         _raise_if_human_override_context_stale(component_ref, item, research, metadata)
         overrides[component_ref] = item
     return overrides
+
+
+def _validated_human_override_spdx(
+    component_ref: str,
+    candidate: str,
+    research: Mapping[str, Any],
+) -> str:
+    normalized_candidate = _normalize_human_override_spdx(
+        component_ref, candidate, field="candidate_spdx"
+    )
+    for spdx_field in ("human_candidate_spdx", "likely_spdx"):
+        value = _optional_text(research.get(spdx_field))
+        if value is None:
+            raise InputError(
+                f"shortlist human override for {component_ref} is missing {spdx_field}; "
+                "rerun shortlist with current overrides before reporting"
+            )
+        normalized_value = _normalize_human_override_spdx(component_ref, value, field=spdx_field)
+        if normalized_value != normalized_candidate:
+            raise InputError(
+                f"shortlist human override for {component_ref} has mismatched {spdx_field}; "
+                "rerun shortlist with current overrides before reporting"
+            )
+    return normalized_candidate
+
+
+def _normalize_human_override_spdx(component_ref: str, value: str, *, field: str) -> str:
+    policy = load_default_policy()
+    normalized = normalize_license(value, policy)
+    if normalized.spdx_id is None:
+        raise InputError(
+            f"shortlist human override for {component_ref} has unsupported {field} {value!r}"
+        )
+    decision = classify_license_input(normalized.spdx_id, policy)
+    if decision.tier == PolicyTier.UNKNOWN:
+        raise InputError(
+            f"shortlist human override for {component_ref} has unsupported {field} {value!r}"
+        )
+    return normalized.spdx_id
 
 
 def _raise_if_human_override_expired(

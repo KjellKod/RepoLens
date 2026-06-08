@@ -327,6 +327,87 @@ def test_report_projects_approved_human_override_with_unverified_provenance(
     assert "human_override_unverified" in html
 
 
+def test_report_rejects_mismatched_human_override_spdx_provenance(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    unknown = {**resolved_record, "spdx_id": None, "evidence": {"source_layer": "syft"}}
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="MIT",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_reason": "manual review",
+                    "override_decided_by": "kjell",
+                    "override_evidence_verified": False,
+                },
+            )
+        ],
+    )
+
+    with pytest.raises(InputError, match="mismatched"):
+        render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+
+def test_report_clears_inherited_source_url_when_human_override_has_no_evidence_url(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    stale_url = "https://deps.dev/stale/verifier-evidence"
+    unknown = {
+        **resolved_record,
+        "spdx_id": None,
+        "evidence": {"source_layer": "syft", "url": stale_url, "anchor": "MIT"},
+    }
+    store.write_resolved(tmp_path, "acme-alpha", [unknown])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                "acme-lib|UNKNOWN",
+                status="approved",
+                candidate_spdx="ZPL-2.1",
+                research_evidence={
+                    "component_ref": "acme-lib|UNKNOWN",
+                    "context_fingerprint": _override_fingerprint("acme-lib|UNKNOWN"),
+                    "package": "acme-lib",
+                    "version": None,
+                    "ecosystem": None,
+                    "found_in": [],
+                    "outcome": "human_override",
+                    "machine_verification": "human_override_unverified",
+                    "likely_spdx": "ZPL-2.1",
+                    "human_candidate_spdx": "ZPL-2.1",
+                    "override_reason": "manual review",
+                    "override_decided_by": "kjell",
+                    "override_evidence_verified": False,
+                },
+            )
+        ],
+    )
+
+    rows = _csv_records(render_main_report(tmp_path, tmp_path / "out", _report_config()).csv_path)
+
+    assert rows[0]["spdx_id"] == "ZPL-2.1"
+    assert rows[0]["evidence_source_layer"] == "human_override_unverified"
+    assert rows[0]["source_url"] != stale_url
+    assert rows[0]["source_url"] == "pkg:pypi/acme-lib@1.2.3"
+
+
 def test_report_rejects_expired_approved_human_override(
     tmp_path: Path,
     resolved_record: dict[str, Any],

@@ -15,7 +15,7 @@ from repolens.data.validation import validate_artifact
 from repolens.policy import PolicyTier, classify_license_input, load_default_policy
 from repolens.policy.spdx import normalize_license
 from repolens.shortlist.contexts import ShortlistMetadata
-from repolens.shortlist.evidence import EvidenceIdentity, identity_for_item
+from repolens.shortlist.evidence import EvidenceIdentity, _validate_direct_link, identity_for_item
 
 HUMAN_OVERRIDE_OUTCOME = "human_override"
 HUMAN_OVERRIDE_MACHINE_VERIFICATION = "human_override_unverified"
@@ -129,6 +129,12 @@ def _parse_override(
     decided_by = _required_text(entry.get("decided_by"), index, "decided_by")
     evidence_url = _optional_text(entry.get("evidence_url"))
     evidence_note = _optional_text(entry.get("evidence_note"))
+    if evidence_url is not None:
+        _validate_direct_link(
+            evidence_note or "Human override evidence",
+            evidence_url,
+            f"shortlist_overrides.{index}.evidence_url",
+        )
     expires_at = _optional_text(entry.get("expires_at"))
     if expires_at is not None:
         _validate_expiry(expires_at, index, today=today)
@@ -172,8 +178,7 @@ def _apply_override(
     *,
     identity: EvidenceIdentity | None,
 ) -> None:
-    previous_candidate = _optional_text(record.get("candidate_spdx"))
-    if previous_candidate != override.spdx_id and record.get("status") in {"approved", "rejected"}:
+    if record.get("status") in {"approved", "rejected"}:
         _reopen(record)
 
     record["candidate_spdx"] = override.spdx_id

@@ -128,6 +128,28 @@ def test_override_reopens_settled_item_when_candidate_changes(tmp_path: Path) ->
     assert item["candidate_spdx"] == "ZPL-2.1"
 
 
+def test_override_reopens_settled_item_when_candidate_is_same(tmp_path: Path) -> None:
+    _write_shortlist(
+        tmp_path,
+        _item(
+            candidate_spdx="ZPL-2.1",
+            status="approved",
+            decided_by="reviewer",
+            decided_at="2026-01-01T00:00:00Z",
+        ),
+    )
+    overrides_path = _write_overrides(tmp_path / "shortlist.overrides.json", [_override()])
+
+    run_shortlist(tmp_path, agent_client=_ExplodingAgent(), overrides_path=overrides_path)
+
+    item = store.read_shortlist(tmp_path)["items"][0]
+    assert item["status"] == "open"
+    assert item["decided_by"] is None
+    assert item["decided_at"] is None
+    assert item["candidate_spdx"] == "ZPL-2.1"
+    assert item["research_evidence"]["machine_verification"] == "human_override_unverified"
+
+
 @pytest.mark.parametrize(
     ("payload", "message"),
     [
@@ -137,6 +159,9 @@ def test_override_reopens_settled_item_when_candidate_changes(tmp_path: Path) ->
         ([_override(decided_by="")], "decided_by"),
         ([_override(component_ref="missing|UNKNOWN")], "does not match shortlist item"),
         ([_override(spdx_id="LicenseRef-Not-Real")], "unsupported SPDX"),
+        ([_override(evidence_url="pkg:pypi/zope.site@6.0")], "evidence_url"),
+        ([_override(evidence_url="https://www.google.com/search?q=zope.site")], "placeholder"),
+        ([_override(evidence_note="placeholder")], "meaningful"),
         ([_override(expires_at="2026/12/31")], "expires_at"),
         ([_override(expires_at="2000-01-01")], "expired"),
     ],
