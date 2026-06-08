@@ -52,13 +52,18 @@ Quest agents must update this file as part of their work:
 
 ## Merge Strategy
 
-Use two product PRs if possible. Parallel work can happen inside each PR through Quest
-subtasks, but merge the product surface in coherent chunks.
+Use two product PRs if possible, but **do not run those two product PRs in parallel**.
+Run one roadmap item at a time. Parallelism belongs inside the active Quest/PR through
+coordinated subtasks that share one branch and one product surface.
 
-| ID | Status | PR | Work | Parallel? |
-| --- | --- | --- | --- | --- |
-| `RPL-NEXT-1` | `LEFT_TODO` | TBD | Presence model plus UX-first shortlist/report split. | Yes: schema/model, npm enrichment, shortlist UX, report UX can build in parallel against fixtures. |
-| `RPL-NEXT-2` | `LEFT_TODO` | TBD | Disclosure-action policy, artifact scan pilot, release outputs, and Sketch2md pilot. | Yes: policy model, artifact scan, release writers, Sketch2md integration can build in parallel after `RPL-NEXT-1` schemas settle. |
+| ID | Status | PR | Start gate | Work | Internal parallelism |
+| --- | --- | --- | --- | --- | --- |
+| `RPL-NEXT-1` | `LEFT_TODO` | TBD | Start next. One active product PR. | Presence model plus UX-first shortlist/report split. | Yes, inside this Quest only: schema/model, npm enrichment, shortlist UX, report UX, and validation can build in parallel against agreed fixtures. |
+| `RPL-NEXT-2` | `LEFT_TODO` | TBD | **Wait. Start only after `RPL-NEXT-1` is `DONE_MERGED`.** | Disclosure-action policy, artifact scan pilot, release outputs, and Sketch2md pilot. | Yes, inside the later `RPL-NEXT-2` Quest only: policy model, artifact scan, release writers, Sketch2md integration, and validation can build in parallel after `RPL-NEXT-1` schemas are merged. |
+
+Do not create an `RPL-NEXT-2` branch while `RPL-NEXT-1` is open. If a useful discovery
+comes up while `RPL-NEXT-1` is active, add a note to this roadmap or to the open PR, but
+do not start implementation until the start gate is satisfied.
 
 If `RPL-NEXT-2` becomes too large, split it once along this boundary:
 
@@ -162,6 +167,7 @@ Reopen behavior:
 
 Before coding
 - Open docs/roadmap/rpl_current_roadmap.md.
+- Confirm `RPL-NEXT-1` is the only active product roadmap item. Do not start this Quest if another `RPL-NEXT-*` row is already INPROGRESS or DONE-PR_OPEN unless the user explicitly tells you to take over that same branch/PR.
 - Change row RPL-NEXT-1 from LEFT_TODO to INPROGRESS.
 - Keep this roadmap updated: when the PR opens, set DONE-PR_OPEN and add the PR number; after merge, set DONE_MERGED and add the merge commit.
 
@@ -316,6 +322,7 @@ Sketch2md pilot:
 
 Before coding
 - Open docs/roadmap/rpl_current_roadmap.md.
+- Confirm `RPL-NEXT-1` is DONE_MERGED. If it is not, stop and report that this Quest is blocked by the start gate.
 - Change row RPL-NEXT-2 from LEFT_TODO to INPROGRESS.
 - If this is split, add RPL-NEXT-2a and RPL-NEXT-2b rows before coding and explain the split in the roadmap.
 - Keep this roadmap updated: when the PR opens, set DONE-PR_OPEN and add the PR number; after merge, set DONE_MERGED and add the merge commit.
