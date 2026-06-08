@@ -64,6 +64,38 @@ def test_render_main_report_defaults_out_dir_under_work_root(
     assert result.presentation_docx_path == tmp_path / "reports" / "report.presentation.docx"
 
 
+def test_aggregate_rows_filters_badge_descriptions_from_stale_resolved_records() -> None:
+    def record(description: str, version: str) -> dict[str, Any]:
+        return {
+            "name": "@smithy/middleware-retry",
+            "version": version,
+            "repo": "web",
+            "spdx_id": "Apache-2.0",
+            "modified": "unknown",
+            "description": description,
+            "purl": f"pkg:npm/%40smithy/middleware-retry@{version}",
+            "evidence": {"source_layer": "syft"},
+            "tags": {
+                "origin": "third-party-oss",
+                "scope": "runtime",
+                "distribution": "server",
+            },
+        }
+
+    rows = aggregate_rows(
+        [
+            record(
+                "[![NPM version](https://img.shields.io/npm/v/@smithy/middleware-retry/"
+                "latest.svg)](https://www.npmjs.com/package/@smithy/middleware-retry)",
+                "4.4.29",
+            ),
+            record("Shared retry utilities to be used in middleware packages.", "4.0.6"),
+        ]
+    )
+
+    assert rows[0].descriptions == ("Shared retry utilities to be used in middleware packages.",)
+
+
 def test_render_main_report_writes_dependency_boundary_artifacts(
     tmp_path: Path, resolved_record: dict[str, Any], sbom: dict[str, Any]
 ) -> None:

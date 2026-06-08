@@ -29,6 +29,7 @@ from repolens.report.selection import (
     report_header_if_configured,
     report_selection_from_config,
 )
+from repolens.resolve.descriptions import brief_description
 from repolens.scan.inputs import load_discover_approved_repo_refs
 from repolens.security.redaction import redact_tokens
 from repolens.security.sanitize import (
@@ -477,7 +478,7 @@ def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[Dis
             group.coverage_gaps.add("missing_version")
         group.found_in.add(str(record["repo"]))
         group.modified.add(_modified_value(record["modified"]))
-        description = _optional_text(record.get("description"))
+        description = brief_description(record.get("description"))
         if description is not None:
             group.descriptions.add(description)
 
