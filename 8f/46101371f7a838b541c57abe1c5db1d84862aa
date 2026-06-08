@@ -1,0 +1,56 @@
+tests/unit/test_schema_validation.py
+  s_a374eb5463fa7b::t_b6e1406aab66d0 114-128
+src/repolens/shortlist/render.py
+  s_a374eb5463fa7b::t_01d34c45505259 32-36,273-276,317-326,338-342,356-357,371-375
+src/repolens/shortlist/overrides.py
+  s_a374eb5463fa7b::t_3242812813d1ab 16,149-152,155
+  s_a374eb5463fa7b::t_f2469bd16539c0 17-18,99,113-114,169-174,181-185,199-200,216-230
+  s_a374eb5463fa7b::t_41cbd23eb8e0bf 190,192-193
+  s_a374eb5463fa7b::t_989d97f7b1c99d 1-15,19-67,69-98,100-112,115-148,153-154,156-168,175,177-180,186-189,191,194-198,201-215,231-277
+  s_a374eb5463fa7b::t_92e39d93e2ae87 68
+  s_a374eb5463fa7b::t_1d6ed662d2993a 176
+src/repolens/report/main.py
+  s_a374eb5463fa7b::t_94e409c55133a6 44-47,465,470-504,507-520,523-524,567-581
+  s_a374eb5463fa7b::t_731932e25fad94 7
+  s_a374eb5463fa7b::t_57f97b00ab7708 9,42-43,505-506,521-522,525-566
+src/repolens/data/schemas/shortlist.schema.json
+  s_a374eb5463fa7b::t_ebfeeb22112735 143,156-157,224-232
+src/repolens/shortlist/stage.py
+  s_a374eb5463fa7b::t_0912f3ac0f7041 49,95,138,152
+  s_a374eb5463fa7b::t_f2469bd16539c0 139
+tests/unit/test_report_main.py
+  s_a374eb5463fa7b::t_dab3ceaf9da71f 278-292,298-329,1054-1061,1065,1070-1072
+  s_a374eb5463fa7b::t_e05dbfeb3d80e7 22,293-297,330-405,1073-1089
+tests/unit/shortlist/test_overrides.py
+  s_a374eb5463fa7b::t_1f68feafd6fdfa 1-86,88-164
+  s_a374eb5463fa7b::t_e05dbfeb3d80e7 87
+tests/e2e/test_cli.py
+  s_a374eb5463fa7b::t_f49c971460f16a 306-348
+  s_a374eb5463fa7b::t_674d51fc0c6edc 213-305
+src/repolens/data/validation.py
+  s_a374eb5463fa7b::t_ebfeeb22112735 20
+src/repolens/cli.py
+  s_a374eb5463fa7b::t_774976c1e207ad 3002,3020-3022,3030,3040,3053-3054,3072-3100
+  s_a374eb5463fa7b::t_887b35601542ce 3306-3307
+  s_a374eb5463fa7b::t_34ce44f9bc7fdf 3190,3201-3202,3224-3225,3261-3262,3295-3305,3308-3314,3317,3320-3331
+  s_a374eb5463fa7b::t_28d005eb30d7e8 3315-3316,3318-3319
+  s_a374eb5463fa7b::t_28ba5df868ba4e 760-768,818-850
+src/repolens/data/schemas/shortlist_overrides.schema.json
+  s_a374eb5463fa7b::t_ebfeeb22112735 1-20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "8f46101371f7a838b541c57abe1c5db1d84862aa",
+  "prompts": {},
+  "sessions": {
+    "s_a374eb5463fa7b": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea83d-05a8-7332-8860-ba8ce954389c",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
