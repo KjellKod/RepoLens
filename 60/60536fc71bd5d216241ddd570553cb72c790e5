@@ -1,0 +1,25 @@
+tests/unit/test_cli_run.py
+  s_9fcc1010a0d047::t_42f6d49137260b 1933-1945
+src/repolens/flag/stage.py
+  s_9fcc1010a0d047::t_f9fd7a62b22def 285-290
+src/repolens/cli.py
+  s_9fcc1010a0d047::t_a12350661cc3fe 2070,2074-2077,2080
+tests/unit/flag/test_flag_policy.py
+  s_9fcc1010a0d047::t_f8eb3265ac4081 452-504
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "6060536fc71bd5d216241ddd570553cb72c790e5",
+  "prompts": {},
+  "sessions": {
+    "s_9fcc1010a0d047": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f6db2ccc-ae3d-428b-a7e2-a6b103532c57",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
