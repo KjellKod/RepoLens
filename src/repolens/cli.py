@@ -2067,11 +2067,15 @@ def _shortlist_open_count(work_root: Path) -> int:
 
 
 def _shortlist_presence_counts(work_root: Path) -> tuple[dict[str, int], int]:
+    from repolens.data.errors import SchemaValidationError
     from repolens.data.store import read_shortlist
 
+    # Presence counts are a display-only enrichment for the follow-along output.
+    # A missing, legacy, or otherwise non-conforming shortlist.json must never
+    # fail the run; degrade to empty counts instead.
     try:
         value = read_shortlist(work_root)
-    except FileNotFoundError:
+    except (FileNotFoundError, SchemaValidationError, ValueError):
         return {}, 0
     raw_items = value.get("items", [])
     if not isinstance(raw_items, list):
