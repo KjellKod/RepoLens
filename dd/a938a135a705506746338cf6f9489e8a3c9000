@@ -1,0 +1,38 @@
+tests/unit/test_report_main.py
+  s_fccc825cab3c2f::t_bf7bcfe03cfcfa 1294-1329
+  s_fccc825cab3c2f::t_bc57883e9c0bd8 15-19,672-706,1288-1289
+tests/unit/presence/test_sections.py
+  s_fccc825cab3c2f::t_c2592e3e2a0c8a 22-55
+src/repolens/flag/stage.py
+  s_fccc825cab3c2f::t_e5d56a1c57c5a4 74,223-224,243-274,303-307
+tests/unit/presence/test_models.py
+  s_fccc825cab3c2f::t_0d21842e95a384 1-26
+src/repolens/presence/sections.py
+  s_fccc825cab3c2f::t_16c18ab51e1636 33-35
+src/repolens/presence/models.py
+  s_fccc825cab3c2f::t_d64a2a566e7a2d 32-37
+tests/unit/flag/test_flag_dedup.py
+  s_fccc825cab3c2f::t_ebaad93181b6db 168-196
+tests/unit/flag/test_flag_policy.py
+  s_fccc825cab3c2f::t_2efe00cb7990aa 186-232
+src/repolens/report/main.py
+  s_fccc825cab3c2f::t_845258d573262d 23,473,477-487,985-987
+src/repolens/flag/dedup.py
+  s_fccc825cab3c2f::t_e1d0cf7ce1e231 141,145,175-178
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "dda938a135a705506746338cf6f9489e8a3c9000",
+  "prompts": {},
+  "sessions": {
+    "s_fccc825cab3c2f": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eaa88-043a-75d1-8e22-8e476df9fb7b",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
