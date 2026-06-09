@@ -1,0 +1,160 @@
+src/repolens/shortlist/render.py
+  s_42029c7d409794::t_687cbd3161931d 23-29,72-77,106,108-111,121-122,124-142,197,204,392-426
+  s_5443c2e367e30a::t_74303fa8124d86 39,185,192
+docs/roadmap/rpl_current_roadmap.md
+  s_9fcc1010a0d047::t_3c181a4b4e6302 61
+tests/unit/flag/test_flag_dedup.py
+  s_42029c7d409794::t_5a18b72f3dff76 136-167
+tests/unit/flag/test_flag_policy.py
+  s_42029c7d409794::t_2ef6e2de6dd666 287-331
+  s_5443c2e367e30a::t_e906970ffa8d47 332-404
+tests/unit/presence/test_defaults.py
+  s_5443c2e367e30a::t_267136b113f0a2 3,31-32,36-46,51-53,57-124
+  s_5443c2e367e30a::t_f0eeac1a3a7b03 47-50,54-56
+  s_42029c7d409794::t_af7c1931a3e169 1-2,4-30,33-35
+src/repolens/shortlist/decisions.py
+  s_5443c2e367e30a::t_5d941764931bab 24,44,65,69,93-94,96-99,134-135,137
+  s_42029c7d409794::t_87435e2b44b17e 162
+docs/usage.md
+  s_42029c7d409794::t_afbb17ea8b1ce3 823-824,871-874,890-899,969-973,1010-1012,1107-1114
+tests/unit/presence/test_sections.py
+  s_42029c7d409794::t_af7c1931a3e169 1-20
+src/repolens/presence/sections.py
+  s_42029c7d409794::t_b933fb0241e826 1-44,47-58
+  s_42029c7d409794::t_c0da916ca135d3 45-46
+src/repolens/presence/models.py
+  s_42029c7d409794::t_b933fb0241e826 1-144
+tests/unit/flag/conftest.py
+  s_42029c7d409794::t_b229b2bedf2e55 24-27,49-58
+tests/unit/test_report_docx.py
+  s_42029c7d409794::t_9b454a41d71c67 91-92,103-116,184-185,199-200
+src/repolens/data/schemas/inventory.schema.json
+  s_42029c7d409794::t_34e3de1fe0cefc 48-102
+src/repolens/shortlist/identity.py
+  s_5443c2e367e30a::t_c60bfa13323281 1-42
+tests/unit/test_schema_validation.py
+  s_42029c7d409794::t_c219d57676a971 4-5,142-149,158-185
+  s_9fcc1010a0d047::t_e3e80029eddb5c 150-157
+docs/data-model.md
+  s_42029c7d409794::t_fc4a381c8cfce8 58-84
+tests/unit/test_report_presentation.py
+  s_5443c2e367e30a::t_e3572637d7a970 165-191,240-241,256-257,279-284
+src/repolens/flag/dedup.py
+  s_42029c7d409794::t_e6f1617125170f 3-6,18-20,51,56,58,62-71,96,114,140-186,231,234-235
+src/repolens/data/models.py
+  s_42029c7d409794::t_4ef73388683a73 8-9,33,36-39,55,58-61
+tests/unit/shortlist/test_grouping.py
+  s_42029c7d409794::t_afed689a84322a 161-162
+  s_42029c7d409794::t_53363a6073bb6d 9,126-160,163-166
+src/repolens/cli.py
+  s_42029c7d409794::t_07c3461abfb0d1 30,106-107,1526,1530-1532,1745-1749,1752-1754,1769,1773,1775-1777,1787-1788,1823-1827,1829-1832,1843-1847,1849-1851,1862-1864,1875,1878,2026-2051,2189-2190,2308-2313,3033,3037,3045-3046
+  s_9fcc1010a0d047::t_e3e80029eddb5c 2053
+  s_42029c7d409794::t_2d80c74dbded08 2231-2234,2266-2269,3542-3543
+  s_42029c7d409794::t_c40bc649e3888b 1750-1751,1774,1828,1848,2052,3036
+src/repolens/report/docx.py
+  s_42029c7d409794::t_bcf53a3dd72023 34-35,197-198
+src/repolens/presence/defaults.py
+  s_42029c7d409794::t_b933fb0241e826 1-56
+src/repolens/shortlist/grouping.py
+  s_5443c2e367e30a::t_16e510c95cbadb 15,107-108
+  s_42029c7d409794::t_1bba134d75284f 13,58,119-121,130,148,151-156,285-289,291
+tests/e2e/test_cli.py
+  s_42029c7d409794::t_0c4a6f07716c29 703-747,749-751
+  s_42029c7d409794::t_055e1a9be98f49 748
+src/repolens/presence/__init__.py
+  s_42029c7d409794::t_b933fb0241e826 1-23
+src/repolens/presence/enrich_npm.py
+  s_42029c7d409794::t_b933fb0241e826 1-118
+src/repolens/resolve/stage.py
+  s_42029c7d409794::t_4ef73388683a73 15-16,711-712,723,725-734
+src/repolens/flag/stage.py
+  s_5443c2e367e30a::t_4bf43cfd738e98 31,74,147,181,222
+  s_5443c2e367e30a::t_f976ac0c7d3a22 265
+  s_42029c7d409794::t_7790f2e5b15f3f 22-26,48-49,77-78,101-102,143-144,151-152,227-231,267-297
+  s_5443c2e367e30a::t_d1f75ed1080632 223-224,241-264,266
+tests/unit/shortlist/test_render_evidence.py
+  s_42029c7d409794::t_348d8b1beb94dd 6-12,338-380,384-385
+  s_9fcc1010a0d047::t_e3e80029eddb5c 381-383
+tests/unit/test_report_categories.py
+  s_42029c7d409794::t_1a9fe221a1b9c5 6-10,112-142,146-148,183,185,194-196
+  s_42029c7d409794::t_59c7487ecc0b99 144-145
+  s_9fcc1010a0d047::t_e3e80029eddb5c 143
+src/repolens/data/schemas/resolved.schema.json
+  s_42029c7d409794::t_34e3de1fe0cefc 44-97
+src/repolens/report/categories.py
+  s_42029c7d409794::t_1cf049495167c0 10,14,102-103
+src/repolens/report/presentation.py
+  s_42029c7d409794::t_cb39fb63e7389c 32,38,52,144,207,333,386,415-427
+tests/unit/test_resolve_stage.py
+  s_42029c7d409794::t_e9527dd360e49a 142-143
+tests/unit/presence/test_enrich_npm.py
+  s_42029c7d409794::t_af7c1931a3e169 1-10,12-86
+  s_9fcc1010a0d047::t_e3e80029eddb5c 11
+tests/unit/shortlist/test_contexts.py
+  s_42029c7d409794::t_ff06022931cf5d 119-120
+tests/unit/presence/__init__.py
+  s_42029c7d409794::t_af7c1931a3e169 1
+tests/unit/shortlist/test_decisions.py
+  s_42029c7d409794::t_ff06022931cf5d 179-181
+  s_5443c2e367e30a::t_7d806f58e9136e 13,41-57,529-608
+tests/unit/test_report_main.py
+  s_5443c2e367e30a::t_58d10e46193d1a 903-943,1063-1068
+  s_7b02d2a7ccba1d::t_ec392376c7bb91 15,23,297-357,1029-1036,1045-1061
+  s_42029c7d409794::t_ff06022931cf5d 596
+src/repolens/shortlist/contexts.py
+  s_42029c7d409794::t_ba7ea578b95f17 12,161,174
+  s_42029c7d409794::t_f94f0d58c2f803 35-36
+  s_5443c2e367e30a::t_24edc9238a44cd 17,80,167,173,179,181,193-194,231,233,284-285,288,300,305-308
+  s_42029c7d409794::t_ab07b8fba71df1 45-46,204-205,216-217,351-354
+  s_5443c2e367e30a::t_c914f7b815fe38 162-166
+src/repolens/data/schemas/shortlist.schema.json
+  s_42029c7d409794::t_34e3de1fe0cefc 35-98,118-119
+  s_5443c2e367e30a::t_986aac7f3a99b7 18
+src/repolens/report/main.py
+  s_42029c7d409794::t_765f8dac83759f 655-656,751-771
+  s_7b02d2a7ccba1d::t_840cc0a62b6822 7,19,42,417-418,420-425,428,431,435-456,460-465,470-474
+  s_42029c7d409794::t_307c8e970e76eb 88-89
+  s_42029c7d409794::t_5e31adfcea7d73 49-50,59,135-136,161-162
+  s_42029c7d409794::t_65aa57993c4cf9 244,544-550,569-570
+  s_42029c7d409794::t_b1a8d34d1dc617 589,597-604,615-616
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "ab815d37fadc2c62f1c56b2c17426d38c0f52563",
+  "prompts": {},
+  "sessions": {
+    "s_42029c7d409794": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea9a3-df0f-7470-80dc-38e30c7f0629",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_5443c2e367e30a": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea9cf-2286-78a3-a1f2-68737b45f9e4",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_7b02d2a7ccba1d": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019ea9e2-f885-7742-9b65-fd84ecf491a9",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_9fcc1010a0d047": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f6db2ccc-ae3d-428b-a7e2-a6b103532c57",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
