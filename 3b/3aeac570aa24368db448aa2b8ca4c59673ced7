@@ -1,0 +1,23 @@
+tests/unit/shortlist/test_grouping.py
+  s_9fcc1010a0d047::t_f4a2eed09718bb 161-165,171-172
+  s_9fcc1010a0d047::t_aefdf1af195094 3
+src/repolens/shortlist/grouping.py
+  s_9fcc1010a0d047::t_19ce900a63a7b0 152-156
+  s_9fcc1010a0d047::t_0c06c72378f1e3 13-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "3b3aeac570aa24368db448aa2b8ca4c59673ced7",
+  "prompts": {},
+  "sessions": {
+    "s_9fcc1010a0d047": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f6db2ccc-ae3d-428b-a7e2-a6b103532c57",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
