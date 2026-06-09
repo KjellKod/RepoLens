@@ -165,3 +165,32 @@ def test_mixed_presence_same_component_survives_dedup_split(make_record, collect
         if outcome.component.presence is not None
     }
     assert sections == {"installed": "direct", "lockfile_only": "optional"}
+
+
+def test_legacy_presence_less_record_uses_default_presence_for_group_key(
+    make_record,
+    collected,
+) -> None:
+    legacy = make_record(
+        name="sharp",
+        spdx_id="LGPL-3.0-only",
+        version="1.0.0",
+        scope="runtime",
+        distribution="server",
+    )
+    legacy.pop("presence")
+    current = make_record(
+        name="sharp",
+        spdx_id="LGPL-3.0-only",
+        version="1.0.1",
+        install_state="installed",
+        delivery_state="not_scanned",
+        relation="direct",
+    )
+
+    outcomes = _outcomes(collected([legacy, current]))
+
+    assert len(outcomes) == 1
+    assert outcomes[0].component.versions == ["1.0.0", "1.0.1"]
+    assert outcomes[0].component.presence.install_state == "installed"
+    assert outcomes[0].component.presence.delivery_state == "not_scanned"

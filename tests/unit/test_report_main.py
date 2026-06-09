@@ -12,7 +12,11 @@ import pytest
 from repolens.config import Config
 from repolens.data import store
 from repolens.exit_codes import InputError
-from repolens.presence.sections import DELIVERED_SECTION, LOCKFILE_MONITOR_SECTION
+from repolens.presence.sections import (
+    DELIVERED_SECTION,
+    INSTALLED_REVIEW_SECTION,
+    LOCKFILE_MONITOR_SECTION,
+)
 from repolens.report import (
     COLUMNS,
     DEFAULT_LEGAL_TEXT,
@@ -665,6 +669,41 @@ def test_report_rejected_presence_split_ref_only_excludes_matching_section(
         assert not appendix_path.exists()
 
 
+def test_report_rejected_legacy_resolved_record_uses_default_presence_identity(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    component_ref = "copyleft-lib|GPL-3.0-only"
+    legacy_resolved = {
+        **resolved_record,
+        "name": "copyleft-lib",
+        "spdx_id": "GPL-3.0-only",
+        "declared_license_raw": "GPL-3.0-only",
+        "tags": {
+            "origin": "third-party-oss",
+            "scope": "runtime",
+            "distribution": "server",
+        },
+    }
+    legacy_resolved.pop("presence", None)
+    store.write_resolved(tmp_path, "acme-alpha", [legacy_resolved])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                component_ref,
+                status="rejected",
+                decision_ref=build_decision_ref(component_ref, INSTALLED_REVIEW_SECTION),
+                presence_section=INSTALLED_REVIEW_SECTION,
+            )
+        ],
+    )
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+    assert _csv_records(result.csv_path) == []
+
+
 def test_missing_evidence_url_without_purl_still_renders_empty_source_url(
     tmp_path: Path, resolved_record: dict[str, Any]
 ) -> None:
@@ -1246,8 +1285,45 @@ def test_not_currently_delivered_appendix_preamble_has_monitor_copy(
     )
     assert result.appendices[0].label == "not-currently-delivered"
     assert monitor_copy in markdown
-    assert "Delivery artifact was not scanned; RepoLens cannot determine" in markdown
+    assert "Current evidence indicates the package is not delivered" in markdown
+    assert "Delivery artifact was not scanned; RepoLens cannot determine" not in markdown
     assert "optional-platform-lib" in markdown
+    _assert_no_obligation_language(markdown)
+
+
+def test_not_currently_delivered_appendix_preamble_covers_artifact_absent_evidence(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            {
+                **resolved_record,
+                "name": "artifact-absent-lib",
+                "spdx_id": "LGPL-3.0-only",
+                "presence": {
+                    "install_state": "installed",
+                    "delivery_state": "not_delivered",
+                    "relation": "direct",
+                    "path": [],
+                    "platform_match": "unknown",
+                    "source": "artifact-scan",
+                    "target": "unknown",
+                    "reopen_on_delivery_change": True,
+                },
+            }
+        ],
+    )
+
+    render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+    appendix = tmp_path / "out" / "report.appendix.not-currently-delivered.md"
+    markdown = appendix.read_text(encoding="utf-8")
+    assert "artifact-absent-lib" in markdown
+    assert "Current evidence indicates the package is not delivered" in markdown
+    assert "Delivery artifact was not scanned; RepoLens cannot determine" not in markdown
     _assert_no_obligation_language(markdown)
 
 

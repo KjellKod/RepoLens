@@ -71,7 +71,7 @@ def run_flag(work_root: Path) -> FlagResult:
         1
         for item in items
         if item.get("status") in {"approved", "rejected"}
-        and decision_ref_for_item(item) in previous_decisions
+        and _has_previous_decision(item, previous_decisions)
     )
     open_count = sum(1 for item in items if item["status"] == "open")
     presence_counts = _presence_counts(items)
@@ -220,6 +220,8 @@ def _carry_forward_decision(
     previous_decisions: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     previous = previous_decisions.get(decision_ref_for_item(item))
+    if previous is None and item.get("presence_section") != DELIVERED_SECTION:
+        previous = _previous_legacy_component_decision(item, previous_decisions)
     if previous is None and item.get("presence_section") == DELIVERED_SECTION:
         previous = _previous_delivery_transition_decision(item, previous_decisions)
     if previous is None:
@@ -236,6 +238,38 @@ def _carry_forward_decision(
     if previous.get("status") in {"approved", "rejected"}:
         carried["note"] = previous.get("note") or carried.get("note")
     return carried
+
+
+def _has_previous_decision(
+    item: dict[str, Any],
+    previous_decisions: dict[str, dict[str, Any]],
+) -> bool:
+    if decision_ref_for_item(item) in previous_decisions:
+        return True
+    return _previous_legacy_component_decision(item, previous_decisions) is not None
+
+
+def _previous_legacy_component_decision(
+    item: dict[str, Any],
+    previous_decisions: dict[str, dict[str, Any]],
+) -> dict[str, Any] | None:
+    component_ref = _non_empty(item.get("component_ref"))
+    if component_ref is None:
+        return None
+    previous = previous_decisions.get(component_ref)
+    if previous is None or _has_section_decision_identity(previous):
+        return None
+    return previous
+
+
+def _has_section_decision_identity(item: dict[str, Any]) -> bool:
+    component_ref = _non_empty(item.get("component_ref"))
+    decision_ref = _non_empty(item.get("decision_ref"))
+    return (
+        _non_empty(item.get("presence_section")) is not None
+        or isinstance(item.get("presence"), dict)
+        or (decision_ref is not None and decision_ref != component_ref)
+    )
 
 
 def _previous_delivery_transition_decision(
@@ -264,6 +298,13 @@ def _presence_transition_matches(current: object, previous: object) -> bool:
         return False
     comparable_fields = ("relation", "platform_match", "target")
     return all(current.get(field) == previous.get(field) for field in comparable_fields)
+
+
+def _non_empty(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _should_reopen_for_delivery(item: dict[str, Any], previous: dict[str, Any]) -> bool:

@@ -29,7 +29,12 @@ class DeliveryArtifact:
     hash: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {key: value for key, value in self.__dict__.items() if value is not None}
+        values = {
+            "kind": self.kind,
+            "path": self.path,
+            "hash": self.hash,
+        }
+        return {key: value for key, value in values.items() if value is not None}
 
     @classmethod
     def from_dict(cls, data: object) -> DeliveryArtifact | None:

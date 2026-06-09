@@ -30,11 +30,9 @@ def section_for_presence(presence: Presence | Mapping[str, object] | None) -> st
     relation = str(data.get("relation") or "unknown")
     if delivery_state == "delivered":
         return DELIVERED_SECTION
-    if (
-        install_state == "lockfile_only"
-        or relation in _MONITOR_RELATIONS
-        or delivery_state == "not_delivered"
-    ):
+    if delivery_state == "not_delivered" or install_state == "lockfile_only":
+        return LOCKFILE_MONITOR_SECTION
+    if relation in _MONITOR_RELATIONS and install_state == "not_installed":
         return LOCKFILE_MONITOR_SECTION
     if install_state == "installed" and delivery_state == "not_scanned":
         return INSTALLED_REVIEW_SECTION

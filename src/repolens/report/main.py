@@ -20,6 +20,7 @@ from repolens.discovery.taxonomy import DEFAULT_CATEGORY
 from repolens.exit_codes import InputError
 from repolens.policy import PolicyTier, classify_license_input, load_default_policy
 from repolens.policy.spdx import normalize_license
+from repolens.presence.defaults import build_presence
 from repolens.presence.sections import MONITOR_APPENDIX_LABEL, section_for_presence
 from repolens.report.categories import RoutedRecord, build_category_index, route_occurrences
 from repolens.report.dependency_boundaries import (
@@ -469,9 +470,19 @@ def _has_section_decision_identity(item: Mapping[str, object]) -> bool:
 
 
 def _decision_ref_for_resolved(record: dict[str, Any]) -> str:
-    presence = record.get("presence")
-    presence_section = section_for_presence(presence) if isinstance(presence, Mapping) else None
+    presence_section = section_for_presence(_presence_for_resolved(record))
     return build_decision_ref(_resolved_component_ref(record), presence_section)
+
+
+def _presence_for_resolved(record: Mapping[str, Any]) -> Mapping[str, object]:
+    presence = record.get("presence")
+    if isinstance(presence, Mapping):
+        return presence
+    tags = record.get("tags")
+    return build_presence(
+        tags=tags if isinstance(tags, Mapping) else None,
+        source="syft",
+    ).to_dict()
 
 
 def _resolved_component_ref(record: dict[str, Any]) -> str:
@@ -971,8 +982,9 @@ def _appendix_preamble(label: str) -> str | None:
         return None
     return (
         "Not currently delivered. Monitor because a platform, feature, dependency, or "
-        "deployment change could install or include this package later. Delivery artifact "
-        "was not scanned; RepoLens cannot determine whether this dependency is delivered."
+        "deployment change could install or include this package later. Current evidence "
+        "indicates the package is not delivered, or delivery has not been confirmed by an "
+        "artifact scan."
     )
 
 

@@ -138,15 +138,11 @@ def _tags(record: CollectedRecord) -> dict[str, Any]:
 
 
 def _presence_section(record: CollectedRecord) -> str:
-    return section_for_presence(record.data.get("presence"))
+    return section_for_presence(_presence_for_record(record))
 
 
 def _fold_presence(records: list[CollectedRecord]) -> Presence:
-    presences = [
-        Presence.from_dict(record.data.get("presence"))
-        or build_presence(tags=_tags(record), source="syft")
-        for record in records
-    ]
+    presences = [_presence_for_record(record) for record in records]
     install_state = _fold_value(
         (presence.install_state for presence in presences),
         ("installed", "lockfile_only", "not_installed", "unknown"),
@@ -173,6 +169,13 @@ def _fold_presence(records: list[CollectedRecord]) -> Presence:
         source="syft",
         target="unknown",
         reopen_on_delivery_change=any(presence.reopen_on_delivery_change for presence in presences),
+    )
+
+
+def _presence_for_record(record: CollectedRecord) -> Presence:
+    return Presence.from_dict(record.data.get("presence")) or build_presence(
+        tags=_tags(record),
+        source="syft",
     )
 
 
