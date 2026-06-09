@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from repolens.presence.sections import NOT_SCANNED_UNKNOWN_SECTION, section_for_presence
 from repolens.shortlist.contexts import ShortlistMetadata, TriageMetadata
 from repolens.shortlist.grouping import (
     ACCEPT_RECOMMENDED,
@@ -157,10 +158,15 @@ def test_group_key_splits_same_license_by_presence_section() -> None:
     }
 
 
-def test_decode_group_key_defaults_missing_presence_section_to_unknown() -> None:
+def test_decode_group_key_defaults_missing_presence_section_to_unknown_section() -> None:
+    # A legacy group marker (encoded before presence existed) lacks
+    # presence_section; it must decode to the same section group_key_for_item()
+    # assigns to a presence-less item, so pre-upgrade group decisions still match
+    # on the first rerun instead of being silently dropped.
     decoded = decode_group_key(
         "eyJkaXN0cmlidXRpb24iOiJzZXJ2ZXIiLCJzY29wZSI6InJ1bnRpbWUiLCJzcGR4X2ZhbWlseSI6Ik1JVCJ9"
     )
 
     assert decoded is not None
-    assert decoded.presence_section == "unknown"
+    assert decoded.presence_section == NOT_SCANNED_UNKNOWN_SECTION
+    assert decoded.presence_section == section_for_presence(None)

@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from repolens.policy import PolicyTier, classify_license_input
-from repolens.presence.sections import PRESENCE_SECTIONS, section_for_presence
+from repolens.presence.sections import (
+    NOT_SCANNED_UNKNOWN_SECTION,
+    PRESENCE_SECTIONS,
+    section_for_presence,
+)
 from repolens.shortlist.contexts import ShortlistMetadata, triage_for_item
 from repolens.shortlist.identity import decision_ref_for_item
 
@@ -145,7 +149,11 @@ def decode_group_key(encoded: str) -> GroupKey | None:
     spdx_family = _non_empty(payload.get("spdx_family"))
     distribution = _non_empty(payload.get("distribution"))
     scope = _non_empty(payload.get("scope"))
-    presence_section = _non_empty(payload.get("presence_section")) or _UNKNOWN
+    # Legacy group markers (encoded before presence existed) have no
+    # presence_section. Default to the same section group_key_for_item() assigns
+    # to a presence-less item (section_for_presence(None)) so pre-upgrade group
+    # decisions still match on the first rerun instead of being silently dropped.
+    presence_section = _non_empty(payload.get("presence_section")) or NOT_SCANNED_UNKNOWN_SECTION
     if spdx_family is None or distribution is None or scope is None:
         return None
     return GroupKey(
