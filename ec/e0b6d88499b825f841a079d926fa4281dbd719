@@ -1,0 +1,23 @@
+tests/unit/test_report_main.py
+  s_9fcc1010a0d047::t_7c1386dac4a78e 707-730,739-763
+  s_9fcc1010a0d047::t_385d3c2c7c3d47 731-738
+src/repolens/report/main.py
+  s_9fcc1010a0d047::t_d09c033fce131c 436-451
+  s_9fcc1010a0d047::t_bab1ff7c81abfb 24-28
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "ece0b6d88499b825f841a079d926fa4281dbd719",
+  "prompts": {},
+  "sessions": {
+    "s_9fcc1010a0d047": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f6db2ccc-ae3d-428b-a7e2-a6b103532c57",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
