@@ -282,6 +282,12 @@ def _previous_delivery_transition_decision(
         for previous in previous_decisions.values()
         if str(previous.get("component_ref") or "") == component_ref
         and previous.get("presence_section") != DELIVERED_SECTION
+        # Only an explicit prior APPROVAL may carry into a delivered transition.
+        # A prior rejection of a monitor/not-scanned row must NOT be copied onto
+        # the newly delivered row (that would suppress a delivered copyleft
+        # finding via report rejection filtering); leaving it unmatched keeps the
+        # delivered row open and visible.
+        and previous.get("status") == "approved"
         and _presence_transition_matches(item.get("presence"), previous.get("presence"))
     ]
     if len(candidates) != 1:

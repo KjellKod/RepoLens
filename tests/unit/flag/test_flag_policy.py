@@ -449,3 +449,56 @@ def test_flag_rerun_keeps_presence_split_decisions_independent(
     assert str(delivered["note"]).startswith("reopened:")
     assert monitor["status"] == "approved"
     assert monitor["decided_by"] == "reviewer-sentinel"
+
+
+def test_flag_rerun_does_not_suppress_delivered_row_from_prior_rejected_decision(
+    tmp_path,
+    make_record,
+) -> None:
+    # A prior REJECTED monitor/not-scanned decision must not be copied onto a
+    # newly delivered row of the same component (that would suppress a delivered
+    # copyleft finding via report rejection filtering). The delivered row must
+    # stay open and visible.
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="lockfile_only",
+                delivery_state="not_scanned",
+                relation="optional",
+            )
+        ],
+    )
+    run_flag(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    item = dict(shortlist["items"][0])
+    item["status"] = "rejected"
+    item["decided_by"] = "reviewer-sentinel"
+    item["decided_at"] = "2026-06-05T12:00:00Z"
+    item["decided_via"] = "item"
+    store.write_shortlist(tmp_path, {**shortlist, "open_count": 0, "items": [item]})
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="installed",
+                delivery_state="delivered",
+                relation="optional",
+            )
+        ],
+    )
+
+    result = run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    delivered = rerun["items"][0]
+    assert delivered["presence_section"] == "DELIVERED / SHIPPED - ACTION REQUIRED"
+    assert delivered["status"] == "open"
+    assert delivered["decided_by"] is None
+    assert result.open_count == 1
