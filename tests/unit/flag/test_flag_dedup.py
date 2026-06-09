@@ -133,3 +133,35 @@ def test_evidence_trimmed_drops_fetched_at(make_record, collected) -> None:
     assert "fetched_at" not in outcome.evidence
     assert set(outcome.evidence) <= {"source_layer", "url", "anchor"}
     assert outcome.evidence["source_layer"] == "syft"
+
+
+def test_mixed_presence_same_component_survives_dedup_split(make_record, collected) -> None:
+    records = collected(
+        [
+            make_record(
+                name="sharp",
+                spdx_id="LGPL-3.0-only",
+                install_state="installed",
+                delivery_state="not_scanned",
+                relation="direct",
+            ),
+            make_record(
+                name="sharp",
+                spdx_id="LGPL-3.0-only",
+                install_state="lockfile_only",
+                delivery_state="not_scanned",
+                relation="optional",
+                version="1.0.1",
+            ),
+        ]
+    )
+
+    outcomes = _outcomes(records)
+
+    assert len(outcomes) == 2
+    sections = {
+        outcome.component.presence.install_state: outcome.component.presence.relation
+        for outcome in outcomes
+        if outcome.component.presence is not None
+    }
+    assert sections == {"installed": "direct", "lockfile_only": "optional"}

@@ -10,7 +10,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from repolens.policy import PolicyTier, classify_license_input
+from repolens.presence.sections import PRESENCE_SECTIONS, section_for_presence
 from repolens.shortlist.contexts import ShortlistMetadata, triage_for_item
+from repolens.shortlist.identity import decision_ref_for_item
 
 ACCEPT_RECOMMENDED = "ACCEPT-RECOMMENDED"
 NEEDS_JUDGMENT = "NEEDS-JUDGMENT"
@@ -53,6 +55,7 @@ class GroupKey:
     spdx_family: str
     distribution: str
     scope: str
+    presence_section: str
 
     def encoded(self) -> str:
         return encode_group_key(self)
@@ -101,8 +104,8 @@ def group_membership_by_ref(
             component_refs=group.component_refs,
             found_in=group.found_in,
         )
-        for component_ref in group.component_refs:
-            memberships[component_ref] = membership
+        for item in group.items:
+            memberships[decision_ref_for_item(item)] = membership
     return memberships
 
 
@@ -113,6 +116,9 @@ def group_key_for_item(item: Mapping[str, Any], metadata: ShortlistMetadata) -> 
         spdx_family=spdx_family(spdx_id),
         distribution=triage.distribution or _UNKNOWN,
         scope=triage.scope or _UNKNOWN,
+        presence_section=triage.presence_section
+        or str(item.get("presence_section") or "")
+        or section_for_presence(item.get("presence")),
     )
 
 
@@ -121,6 +127,7 @@ def encode_group_key(key: GroupKey) -> str:
         "spdx_family": key.spdx_family,
         "distribution": key.distribution,
         "scope": key.scope,
+        "presence_section": key.presence_section,
     }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
@@ -138,9 +145,15 @@ def decode_group_key(encoded: str) -> GroupKey | None:
     spdx_family = _non_empty(payload.get("spdx_family"))
     distribution = _non_empty(payload.get("distribution"))
     scope = _non_empty(payload.get("scope"))
+    presence_section = _non_empty(payload.get("presence_section")) or _UNKNOWN
     if spdx_family is None or distribution is None or scope is None:
         return None
-    return GroupKey(spdx_family=spdx_family, distribution=distribution, scope=scope)
+    return GroupKey(
+        spdx_family=spdx_family,
+        distribution=distribution,
+        scope=scope,
+        presence_section=presence_section,
+    )
 
 
 def spdx_family(spdx_id: str) -> str:
@@ -269,8 +282,13 @@ def _item_sort_key(item: Mapping[str, Any]) -> tuple[str, str]:
     return (value.casefold(), value)
 
 
-def _group_sort_key(group: ShortlistGroup) -> tuple[int, str, str, str]:
+def _group_sort_key(group: ShortlistGroup) -> tuple[int, int, str, str, str]:
+    try:
+        presence_order = PRESENCE_SECTIONS.index(group.key.presence_section)
+    except ValueError:
+        presence_order = len(PRESENCE_SECTIONS)
     return (
+        presence_order,
         TIER_ORDER.index(group.tier),
         group.key.spdx_family.casefold(),
         group.key.distribution.casefold(),

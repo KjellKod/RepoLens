@@ -12,6 +12,7 @@ import pytest
 from repolens.config import Config
 from repolens.data import store
 from repolens.exit_codes import InputError
+from repolens.presence.sections import DELIVERED_SECTION, LOCKFILE_MONITOR_SECTION
 from repolens.report import (
     COLUMNS,
     DEFAULT_LEGAL_TEXT,
@@ -20,6 +21,7 @@ from repolens.report import (
     render_main_report,
 )
 from repolens.shortlist.evidence import EvidenceIdentity
+from repolens.shortlist.identity import build_decision_ref
 
 
 def test_render_main_report_writes_md_and_csv_from_resolved_records(
@@ -602,6 +604,67 @@ def test_report_rejected_shortlist_ref_does_not_drop_other_spdx_for_same_name(
     assert rows[0]["version"] == "1.2.3"
 
 
+@pytest.mark.parametrize(
+    ("rejected_section", "expected_main_names", "expected_appendix_names"),
+    [
+        (LOCKFILE_MONITOR_SECTION, ["copyleft-lib"], []),
+        (DELIVERED_SECTION, [], ["copyleft-lib"]),
+    ],
+)
+def test_report_rejected_presence_split_ref_only_excludes_matching_section(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+    rejected_section: str,
+    expected_main_names: list[str],
+    expected_appendix_names: list[str],
+) -> None:
+    component_ref = "copyleft-lib|GPL-3.0-only"
+    delivered = {
+        **resolved_record,
+        "name": "copyleft-lib",
+        "version": "1.0.0",
+        "spdx_id": "GPL-3.0-only",
+        "declared_license_raw": "GPL-3.0-only",
+        "purl": "pkg:npm/copyleft-lib@1.0.0",
+        "presence": _presence(
+            install_state="installed",
+            delivery_state="delivered",
+            relation="direct",
+        ),
+    }
+    monitor = {
+        **delivered,
+        "version": "2.0.0",
+        "purl": "pkg:npm/copyleft-lib@2.0.0",
+        "presence": _presence(
+            install_state="lockfile_only",
+            delivery_state="not_scanned",
+            relation="optional",
+        ),
+    }
+    store.write_resolved(tmp_path, "acme-alpha", [delivered, monitor])
+    _write_shortlist(
+        tmp_path,
+        [
+            _shortlist_item(
+                component_ref,
+                status="rejected",
+                decision_ref=build_decision_ref(component_ref, rejected_section),
+                presence_section=rejected_section,
+            )
+        ],
+    )
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+    assert [row["name"] for row in _csv_records(result.csv_path)] == expected_main_names
+    appendix_path = tmp_path / "out" / "report.appendix.not-currently-delivered.csv"
+    if expected_appendix_names:
+        assert [row["name"] for row in _csv_records(appendix_path)] == expected_appendix_names
+    else:
+        assert not appendix_path.exists()
+
+
 def test_missing_evidence_url_without_purl_still_renders_empty_source_url(
     tmp_path: Path, resolved_record: dict[str, Any]
 ) -> None:
@@ -840,7 +903,7 @@ def test_html_report_uses_wide_landscape_layout_and_inert_unsafe_urls(
     assert "@page { size: letter landscape;" in html
     assert "table-layout: fixed" in html
     assert "word-break: break-word" in html
-    assert 'style="width: 25%"' in html
+    assert 'style="width: 21%"' in html
     assert "overflow-x: auto" not in html
     assert "acme &lt;widget&gt;" in html
     assert "javascript:" not in html
@@ -1147,6 +1210,47 @@ def test_report_main_md_csv_docx_share_main_row_set_without_build_ci_gap(
     }
 
 
+def test_not_currently_delivered_appendix_preamble_has_monitor_copy(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            {
+                **resolved_record,
+                "name": "optional-platform-lib",
+                "spdx_id": "LGPL-3.0-only",
+                "presence": {
+                    "install_state": "lockfile_only",
+                    "delivery_state": "not_scanned",
+                    "relation": "optional",
+                    "path": [],
+                    "platform_match": "unknown",
+                    "source": "syft",
+                    "target": "unknown",
+                    "reopen_on_delivery_change": True,
+                },
+            }
+        ],
+    )
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+    appendix = tmp_path / "out" / "report.appendix.not-currently-delivered.md"
+    markdown = appendix.read_text(encoding="utf-8")
+    monitor_copy = (
+        "Not currently delivered. Monitor because a platform, feature, dependency, or "
+        "deployment change could install or include this package later."
+    )
+    assert result.appendices[0].label == "not-currently-delivered"
+    assert monitor_copy in markdown
+    assert "Delivery artifact was not scanned; RepoLens cannot determine" in markdown
+    assert "optional-platform-lib" in markdown
+    _assert_no_obligation_language(markdown)
+
+
 def _csv_records(path: Path) -> list[dict[str, str]]:
     with path.open(encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
@@ -1238,6 +1342,8 @@ def _shortlist_item(
     status: str,
     candidate_spdx: str | None = None,
     research_evidence: dict[str, object] | None = None,
+    decision_ref: str | None = None,
+    presence_section: str | None = None,
 ) -> dict[str, object]:
     item: dict[str, object] = {
         "component_ref": component_ref,
@@ -1250,6 +1356,10 @@ def _shortlist_item(
     }
     if research_evidence is not None:
         item["research_evidence"] = research_evidence
+    if decision_ref is not None:
+        item["decision_ref"] = decision_ref
+    if presence_section is not None:
+        item["presence_section"] = presence_section
     return item
 
 
@@ -1268,3 +1378,22 @@ def _override_fingerprint(
         ecosystem=ecosystem,
         found_in=found_in,
     ).context_fingerprint
+
+
+def _presence(*, install_state: str, delivery_state: str, relation: str) -> dict[str, object]:
+    return {
+        "install_state": install_state,
+        "delivery_state": delivery_state,
+        "relation": relation,
+        "path": [],
+        "platform_match": "unknown",
+        "source": "syft",
+        "target": "unknown",
+        "reopen_on_delivery_change": True,
+    }
+
+
+def _assert_no_obligation_language(text: str) -> None:
+    lowered = text.casefold()
+    forbidden = ("obligation", "must disclose", "required to")
+    assert all(phrase not in lowered for phrase in forbidden)

@@ -12,6 +12,8 @@ from repolens.data.limits import SCHEMA_VERSION
 from repolens.data.models import ResolvedItem
 from repolens.policy.config import Policy, load_default_policy
 from repolens.policy.spdx import normalize_license
+from repolens.presence.defaults import build_presence
+from repolens.presence.enrich_npm import enrich as enrich_npm_presence
 from repolens.resolve.adapters import (
     API_ALLOWED_HOSTS,
     build_default_adapters,
@@ -706,6 +708,8 @@ def _record(
     }
     if url is not None:
         evidence["url"] = url
+    tags = _default_tags_for(package)
+    enrichment = enrich_npm_presence(package)
     return ResolvedItem(
         schema_version=SCHEMA_VERSION,
         name=package.name,
@@ -716,8 +720,18 @@ def _record(
         declared_license_raw=package.declared_license_raw,
         spdx_id=spdx_id,
         evidence=evidence,
-        tags=_default_tags_for(package),
+        tags=tags,
         modified="unknown",
+        presence=build_presence(
+            tags=tags,
+            install_state=(
+                enrichment.install_state if enrichment.install_state != "unknown" else None
+            ),
+            relation=enrichment.relation,
+            path=enrichment.path,
+            platform_match=enrichment.platform_match,
+            source="syft",
+        ),
     )
 
 

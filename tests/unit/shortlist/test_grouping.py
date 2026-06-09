@@ -6,6 +6,7 @@ from repolens.shortlist.grouping import (
     LOW_CONFIDENCE,
     NEEDS_JUDGMENT,
     build_groups,
+    decode_group_key,
     spdx_family,
 )
 
@@ -122,3 +123,44 @@ def test_spdx_family_keeps_legally_distinct_families_apart() -> None:
     assert spdx_family("LGPL-3.0-only") == "LGPL-3.0"
     assert spdx_family("AGPL-3.0-only") == "AGPL-3.0"
     assert spdx_family("Apache-2.0") == "Apache"
+
+
+def test_group_key_splits_same_license_by_presence_section() -> None:
+    metadata = ShortlistMetadata(triage_by_ref={})
+
+    groups = build_groups(
+        [
+            _item(
+                "acme-lib|GPL-3.0-only",
+                candidate_spdx="GPL-3.0-only",
+                presence_section="DELIVERED / SHIPPED - ACTION REQUIRED",
+                presence={"delivery_state": "delivered"},
+            ),
+            _item(
+                "acme-lib|GPL-3.0-only",
+                candidate_spdx="GPL-3.0-only",
+                presence_section="LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR",
+                presence={
+                    "install_state": "lockfile_only",
+                    "delivery_state": "not_scanned",
+                    "relation": "optional",
+                },
+            ),
+        ],
+        metadata,
+    )
+
+    assert len(groups) == 2
+    assert {group.key.presence_section for group in groups} == {
+        "DELIVERED / SHIPPED - ACTION REQUIRED",
+        "LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR",
+    }
+
+
+def test_decode_group_key_defaults_missing_presence_section_to_unknown() -> None:
+    decoded = decode_group_key(
+        "eyJkaXN0cmlidXRpb24iOiJzZXJ2ZXIiLCJzY29wZSI6InJ1bnRpbWUiLCJzcGR4X2ZhbWlseSI6Ik1JVCJ9"
+    )
+
+    assert decoded is not None
+    assert decoded.presence_section == "unknown"

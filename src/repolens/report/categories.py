@@ -7,9 +7,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from repolens.exit_codes import InputError
+from repolens.presence.sections import MONITOR_APPENDIX_LABEL, routes_to_monitor_appendix
 
 FIRST_PARTY_APPENDIX = "first-party"
 BUILD_CI_APPENDIX = "build-ci"
+NOT_CURRENTLY_DELIVERED_APPENDIX = MONITOR_APPENDIX_LABEL
 MISSING_CATEGORY_GAP = "missing_category"
 
 
@@ -97,6 +99,8 @@ def route_occurrences(
             appendix_records.setdefault(BUILD_CI_APPENDIX, []).append(routed)
         elif origin == "first-party":
             appendix_records.setdefault(FIRST_PARTY_APPENDIX, []).append(routed)
+        elif routes_to_monitor_appendix(record.get("presence")):
+            appendix_records.setdefault(NOT_CURRENTLY_DELIVERED_APPENDIX, []).append(routed)
         elif included_categories is None or category in included_categories:
             main_records.append(routed)
         else:

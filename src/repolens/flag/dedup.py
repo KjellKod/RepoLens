@@ -1,9 +1,9 @@
 """Grouping, tag folds, and ``InventoryComponent`` construction for the flag stage.
 
-The dedup group key is ``(name, spdx_key or "UNKNOWN")`` where ``spdx_key`` is strip-only
-with a ``None`` guard — byte-for-byte the behavior of ``report._normalized_spdx``. This is
-deliberate: do **not** add case-folding or SPDX canonicalization here, or the key would
-diverge from the frozen dedup contract that P6b consolidation depends on (plan §5).
+The dedup group key is ``(name, spdx_key or "UNKNOWN", presence_section)`` where
+``spdx_key`` is strip-only with a ``None`` guard — byte-for-byte the behavior of
+``report._normalized_spdx``. This keeps mixed-presence occurrences reviewable before
+the inventory fold can collapse them.
 """
 
 from __future__ import annotations
@@ -15,6 +15,9 @@ from typing import Any
 from repolens.data.models import InventoryComponent, Modified
 from repolens.flag.tagging import fold_distribution, fold_modified, fold_origin, fold_scope
 from repolens.policy import Policy, PolicyDecision, classify_license_input
+from repolens.presence.defaults import build_presence
+from repolens.presence.models import Presence
+from repolens.presence.sections import section_for_presence
 
 _UNKNOWN = "UNKNOWN"
 _NOASSERTION = "NOASSERTION"
@@ -45,18 +48,27 @@ class GroupOutcome:
 class _GroupAccumulator:
     name: str
     spdx_key: str
+    presence_section: str
     records: list[CollectedRecord] = field(default_factory=list)
 
 
 def build_group_outcomes(records: Iterable[CollectedRecord], policy: Policy) -> list[GroupOutcome]:
-    """Group records by ``(name, spdx_key or "UNKNOWN")`` and build one outcome per group."""
+    """Group records by name/license/presence and build one outcome per group."""
 
-    groups: dict[tuple[str, str], _GroupAccumulator] = {}
+    groups: dict[tuple[str, str, str], _GroupAccumulator] = {}
     for record in records:
         name = str(record.data["name"])
         spdx_key = _spdx_key(record.data.get("spdx_id"))
-        key = (name, spdx_key or _UNKNOWN)
-        group = groups.setdefault(key, _GroupAccumulator(name=name, spdx_key=spdx_key))
+        presence_section = _presence_section(record)
+        key = (name, spdx_key or _UNKNOWN, presence_section)
+        group = groups.setdefault(
+            key,
+            _GroupAccumulator(
+                name=name,
+                spdx_key=spdx_key,
+                presence_section=presence_section,
+            ),
+        )
         group.records.append(record)
 
     outcomes = [_build_outcome(group, policy) for group in groups.values()]
@@ -81,6 +93,7 @@ def _build_outcome(group: _GroupAccumulator, policy: Policy) -> GroupOutcome:
     modified_values: list[Modified] = [
         _modified(record.data["modified"]) for record in group.records
     ]
+    presence = _fold_presence(group.records)
 
     representative = min(group.records, key=_record_sort_key)
     evidence = _trim_evidence(representative.data["evidence"])
@@ -98,6 +111,7 @@ def _build_outcome(group: _GroupAccumulator, policy: Policy) -> GroupOutcome:
         found_in=_sorted(found_in),
         policy_tier=decision.tier.value,
         evidence_refs=_sorted(evidence_refs),
+        presence=presence,
     )
 
     candidate_spdx = group.spdx_key or None
@@ -121,6 +135,53 @@ def _spdx_key(value: object) -> str:
 
 def _tags(record: CollectedRecord) -> dict[str, Any]:
     return record.data["tags"]
+
+
+def _presence_section(record: CollectedRecord) -> str:
+    return section_for_presence(record.data.get("presence"))
+
+
+def _fold_presence(records: list[CollectedRecord]) -> Presence:
+    presences = [
+        Presence.from_dict(record.data.get("presence"))
+        or build_presence(tags=_tags(record), source="syft")
+        for record in records
+    ]
+    install_state = _fold_value(
+        (presence.install_state for presence in presences),
+        ("installed", "lockfile_only", "not_installed", "unknown"),
+    )
+    delivery_state = _fold_value(
+        (presence.delivery_state for presence in presences),
+        ("delivered", "not_delivered", "not_scanned", "unknown"),
+    )
+    relation_values = {presence.relation for presence in presences}
+    relation = relation_values.pop() if len(relation_values) == 1 else "mixed"
+    platform_values = {presence.platform_match for presence in presences}
+    platform_match = platform_values.pop() if len(platform_values) == 1 else "unknown"
+    paths: list[str] = []
+    for presence in presences:
+        for item in presence.path:
+            if item not in paths:
+                paths.append(item)
+    return Presence(
+        install_state=install_state,
+        delivery_state=delivery_state,
+        relation=relation,
+        path=paths,
+        platform_match=platform_match,
+        source="syft",
+        target="unknown",
+        reopen_on_delivery_change=any(presence.reopen_on_delivery_change for presence in presences),
+    )
+
+
+def _fold_value(values: Iterable[str], precedence: tuple[str, ...]) -> Any:
+    seen = set(values)
+    for value in precedence:
+        if value in seen:
+            return value
+    return precedence[-1]
 
 
 def _modified(value: object) -> Modified:
@@ -167,7 +228,8 @@ def _record_sort_key(record: CollectedRecord) -> tuple[str, str, int]:
     return (str(record.data["repo"]), str(record.data["version"]), record.ordinal)
 
 
-def _outcome_sort_key(outcome: GroupOutcome) -> tuple[str, str, str, str]:
+def _outcome_sort_key(outcome: GroupOutcome) -> tuple[str, str, str, str, str]:
     name = outcome.component.name
     license_id = outcome.component.license
-    return (name.casefold(), license_id.casefold(), name, license_id)
+    presence_section = section_for_presence(outcome.component.presence)
+    return (presence_section, name.casefold(), license_id.casefold(), name, license_id)

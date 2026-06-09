@@ -9,10 +9,12 @@ from typing import Any
 
 from repolens.data import store
 from repolens.data.errors import CorruptArtifactError, LimitExceeded, SchemaValidationError
+from repolens.presence.sections import section_for_presence
 from repolens.resolve.purl import ParsedPurl, parse_purl
 from repolens.security.limits import DEFAULT_LIMITS, SecurityLimits
 from repolens.security.redaction import redact_tokens_from_structure
 from repolens.shortlist.agent import AgentRequest
+from repolens.shortlist.identity import build_decision_ref, decision_ref_for_item
 from repolens.shortlist.prescreen import ItemContent, prescreen_item
 
 ContentLoader = Callable[[Mapping[str, Any]], ItemContent]
@@ -30,6 +32,8 @@ class TriageMetadata:
     evidence_url: str | None
     evidence_anchor: str | None
     found_in: tuple[str, ...]
+    presence_section: str | None = None
+    presence: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -38,6 +42,8 @@ class TriageMetadata:
             "origin": self.origin,
             "scope": self.scope,
             "distribution": self.distribution,
+            "presence_section": self.presence_section,
+            "presence": dict(self.presence) if self.presence is not None else None,
             "evidence_url": self.evidence_url,
             "evidence_anchor": self.evidence_anchor,
             "found_in": list(self.found_in),
@@ -71,7 +77,7 @@ class PackageMetadata:
 
 @dataclass(frozen=True, slots=True)
 class ShortlistMetadata:
-    """Safe inventory-derived metadata indexed by ``component_ref``."""
+    """Safe inventory-derived metadata indexed by the shortlist decision ref."""
 
     triage_by_ref: Mapping[str, TriageMetadata]
     package_by_ref: Mapping[str, PackageMetadata] | None = None
@@ -152,19 +158,27 @@ def load_shortlist_metadata(work_root: Path) -> ShortlistMetadata:
         if name is None or license_id is None:
             continue
         component_ref = f"{name}|{license_id}"
-        triage_by_ref[component_ref] = TriageMetadata(
+        presence = _optional_mapping(component.get("presence"))
+        presence_section = section_for_presence(presence)
+        decision_ref = build_decision_ref(
+            component_ref,
+            presence_section if presence is not None else None,
+        )
+        triage_by_ref[decision_ref] = TriageMetadata(
             spdx_id=license_id,
             tier=_optional_str(component.get("policy_tier")),
             origin=_optional_str(component.get("origin")),
             scope=_optional_str(component.get("scope")),
             distribution=_optional_str(component.get("distribution")),
+            presence_section=presence_section,
+            presence=presence,
             evidence_url=_optional_str(component.get("source_url")),
             evidence_anchor=None,
             found_in=_str_tuple(component.get("found_in")),
         )
-        package_by_ref[component_ref] = _package_metadata_for_component(
+        package_by_ref[decision_ref] = _package_metadata_for_component(
             component,
-            fallback=resolved_by_ref.get(component_ref),
+            fallback=resolved_by_ref.get(decision_ref),
         )
     return ShortlistMetadata(triage_by_ref=triage_by_ref, package_by_ref=package_by_ref)
 
@@ -176,7 +190,8 @@ def triage_for_item(
     """Return safe metadata for ``item`` with shortlist evidence as the fallback."""
 
     component_ref = str(item.get("component_ref", ""))
-    fallback = metadata.triage_by_ref.get(component_ref)
+    decision_ref = decision_ref_for_item(item)
+    fallback = metadata.triage_by_ref.get(decision_ref) or metadata.triage_by_ref.get(component_ref)
     evidence = item.get("evidence") if isinstance(item.get("evidence"), Mapping) else {}
     spdx_id = _optional_str(item.get("candidate_spdx")) or _license_from_ref(component_ref)
     if fallback is None:
@@ -186,6 +201,8 @@ def triage_for_item(
             origin=None,
             scope=None,
             distribution=None,
+            presence_section=_optional_str(item.get("presence_section")),
+            presence=_optional_mapping(item.get("presence")),
             evidence_url=_optional_str(evidence.get("url")),
             evidence_anchor=_optional_str(evidence.get("anchor")),
             found_in=(),
@@ -196,6 +213,8 @@ def triage_for_item(
         origin=fallback.origin,
         scope=fallback.scope,
         distribution=fallback.distribution,
+        presence_section=_optional_str(item.get("presence_section")) or fallback.presence_section,
+        presence=_optional_mapping(item.get("presence")) or fallback.presence,
         evidence_url=_optional_str(evidence.get("url")) or fallback.evidence_url,
         evidence_anchor=_optional_str(evidence.get("anchor")) or fallback.evidence_anchor,
         found_in=fallback.found_in,
@@ -209,8 +228,9 @@ def package_for_item(
     """Return package identity facts for ``item`` with shortlist-safe fallbacks."""
 
     component_ref = str(item.get("component_ref", ""))
+    decision_ref = decision_ref_for_item(item)
     package_by_ref = metadata.package_by_ref or {}
-    fallback = package_by_ref.get(component_ref)
+    fallback = package_by_ref.get(decision_ref) or package_by_ref.get(component_ref)
     package_from_ref, _spdx_id = _split_component_ref(component_ref)
     if fallback is None:
         return PackageMetadata(
@@ -261,11 +281,11 @@ def _load_resolved_package_metadata(work_root: Path) -> dict[str, PackageMetadat
         try:
             records = store.iter_resolved(resolved_path)
             for record in records:
-                component_ref = _component_ref_for_resolved(record)
-                if component_ref is None or component_ref in by_ref:
+                decision_ref = _decision_ref_for_resolved(record)
+                if decision_ref is None or decision_ref in by_ref:
                     continue
                 parsed = parse_purl(_optional_str(record.get("purl")))
-                by_ref[component_ref] = PackageMetadata(
+                by_ref[decision_ref] = PackageMetadata(
                     package=_purl_name(parsed) or _optional_str(record.get("name")),
                     version=_optional_str(record.get("version")),
                     ecosystem=_optional_str(parsed.package_type if parsed is not None else None),
@@ -277,12 +297,15 @@ def _load_resolved_package_metadata(work_root: Path) -> dict[str, PackageMetadat
     return by_ref
 
 
-def _component_ref_for_resolved(record: Mapping[str, Any]) -> str | None:
+def _decision_ref_for_resolved(record: Mapping[str, Any]) -> str | None:
     name = _optional_str(record.get("name"))
     license_id = _optional_str(record.get("spdx_id")) or "UNKNOWN"
     if name is None:
         return None
-    return f"{name}|{license_id}"
+    component_ref = f"{name}|{license_id}"
+    presence = _optional_mapping(record.get("presence"))
+    presence_section = section_for_presence(presence) if presence is not None else None
+    return build_decision_ref(component_ref, presence_section)
 
 
 def _resolved_source_url(record: Mapping[str, Any]) -> str | None:
@@ -323,6 +346,12 @@ def _optional_str(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
+
+
+def _optional_mapping(value: object) -> Mapping[str, Any] | None:
+    if isinstance(value, Mapping):
+        return value
+    return None
 
 
 def _str_tuple(value: object) -> tuple[str, ...]:

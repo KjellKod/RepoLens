@@ -284,3 +284,121 @@ def test_flag_rerun_does_not_carry_decision_to_changed_component_ref(tmp_path, m
     assert rerun["items"][0]["component_ref"] == "acme-lib|GPL-3.0-only"
     assert rerun["items"][0]["status"] == "open"
     assert rerun["items"][0]["decided_by"] is None
+
+
+def test_flag_rerun_reopens_approved_item_when_delivery_becomes_delivered(
+    tmp_path,
+    make_record,
+) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                delivery_state="not_scanned",
+            )
+        ],
+    )
+    run_flag(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    item = dict(shortlist["items"][0])
+    item["status"] = "approved"
+    item["decided_by"] = "reviewer-sentinel"
+    item["decided_at"] = "2026-06-05T12:00:00Z"
+    item["decided_via"] = "item"
+    store.write_shortlist(tmp_path, {**shortlist, "open_count": 0, "items": [item]})
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                delivery_state="delivered",
+            )
+        ],
+    )
+
+    result = run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    assert result.open_count == 1
+    assert rerun["items"][0]["status"] == "open"
+    assert rerun["items"][0]["decided_by"] is None
+    assert rerun["items"][0]["presence_section"] == "DELIVERED / SHIPPED - ACTION REQUIRED"
+    assert str(rerun["items"][0]["note"]).startswith("reopened:")
+
+
+def test_flag_rerun_keeps_presence_split_decisions_independent(
+    tmp_path,
+    make_record,
+) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="installed",
+                delivery_state="not_scanned",
+                relation="direct",
+            ),
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="lockfile_only",
+                delivery_state="not_scanned",
+                relation="optional",
+                version="2.0.0",
+            ),
+        ],
+    )
+    run_flag(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    approved_items = []
+    for item in shortlist["items"]:
+        approved = dict(item)
+        approved["status"] = "approved"
+        approved["decided_by"] = "reviewer-sentinel"
+        approved["decided_at"] = "2026-06-05T12:00:00Z"
+        approved["decided_via"] = "item"
+        approved_items.append(approved)
+    store.write_shortlist(tmp_path, {**shortlist, "open_count": 0, "items": approved_items})
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="installed",
+                delivery_state="delivered",
+                relation="direct",
+            ),
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="lockfile_only",
+                delivery_state="not_scanned",
+                relation="optional",
+                version="2.0.0",
+            ),
+        ],
+    )
+
+    result = run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    by_section = {str(item["presence_section"]): item for item in rerun["items"]}
+    delivered = by_section["DELIVERED / SHIPPED - ACTION REQUIRED"]
+    monitor = by_section["LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR"]
+    assert result.open_count == 1
+    assert delivered["component_ref"] == monitor["component_ref"] == "copyleft-lib|GPL-3.0-only"
+    assert delivered["decision_ref"] != monitor["decision_ref"]
+    assert delivered["status"] == "open"
+    assert str(delivered["note"]).startswith("reopened:")
+    assert monitor["status"] == "approved"
+    assert monitor["decided_by"] == "reviewer-sentinel"

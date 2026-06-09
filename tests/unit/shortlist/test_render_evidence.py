@@ -3,6 +3,13 @@ from __future__ import annotations
 from repolens.shortlist.contexts import ShortlistMetadata, TriageMetadata
 from repolens.shortlist.render import render_shortlist_markdown
 
+_SECTION_HEADERS = (
+    "DELIVERED / SHIPPED - ACTION REQUIRED",
+    "INSTALLED BUT DELIVERY NOT CONFIRMED - REVIEW",
+    "LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR",
+    "DELIVERY ARTIFACT NOT SCANNED - UNKNOWN",
+)
+
 _PYPI_URL = "https://pypi.org/pypi/acme-lib/1.2.3/json"
 _GITHUB_URL = "https://api.github.com/repos/sentinel/acme-lib/license?ref=1.2.3"
 
@@ -328,3 +335,51 @@ def test_render_dropped_attacker_host_has_no_license_link() -> None:
     assert "**review:**" not in markdown
     assert "GitHub license (" not in markdown
     assert "looked up: `GitHub license API`" in markdown
+
+
+def test_render_presence_sections_are_exact_and_ordered() -> None:
+    markdown = render_shortlist_markdown(
+        [
+            {
+                **_item({}),
+                "component_ref": "delivered-lib|GPL-3.0-only",
+                "candidate_spdx": "GPL-3.0-only",
+                "presence_section": _SECTION_HEADERS[0],
+                "presence": {
+                    "install_state": "installed",
+                    "delivery_state": "delivered",
+                    "relation": "direct",
+                    "path": [],
+                    "platform_match": "unknown",
+                    "source": "syft",
+                    "target": "unknown",
+                    "reopen_on_delivery_change": True,
+                },
+            },
+            {
+                **_item({}),
+                "component_ref": "monitor-lib|LGPL-3.0-only",
+                "candidate_spdx": "LGPL-3.0-only",
+                "presence_section": _SECTION_HEADERS[2],
+                "presence": {
+                    "install_state": "lockfile_only",
+                    "delivery_state": "not_scanned",
+                    "relation": "optional",
+                    "path": [],
+                    "platform_match": "unknown",
+                    "source": "syft",
+                    "target": "unknown",
+                    "reopen_on_delivery_change": True,
+                },
+            },
+        ],
+        metadata=ShortlistMetadata(triage_by_ref={}),
+    )
+
+    positions = [markdown.index(f"## {header}") for header in _SECTION_HEADERS]
+    assert positions == sorted(positions)
+    assert [
+        line.removeprefix("## ") for line in markdown.splitlines() if line.startswith("## ")
+    ] == list(_SECTION_HEADERS)
+    assert "delivery: delivered" in markdown
+    assert "install: lockfile only" in markdown

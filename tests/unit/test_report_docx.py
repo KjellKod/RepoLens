@@ -88,6 +88,8 @@ def test_docx_table_emits_tblpr_and_grid_with_one_col_per_column() -> None:
         "900",
         "950",
         "3600",
+        "1000",
+        "1000",
         "760",
         "1300",
         "850",
@@ -96,6 +98,20 @@ def test_docx_table_emits_tblpr_and_grid_with_one_col_per_column() -> None:
         "1000",
         "1628",
     ]
+
+
+def test_docx_includes_delivery_and_install_columns() -> None:
+    xml = _document_xml(
+        render_docx(
+            _header(),
+            COLUMNS,
+            [_row(deliveries=("delivery artifact not scanned",), installs=("installed",))],
+        )
+    )
+
+    assert b"delivery" in xml
+    assert b"install" in xml
+    assert b"delivery artifact not scanned" in xml
 
 
 def test_docx_uses_landscape_page_with_fixed_width_table() -> None:
@@ -165,6 +181,8 @@ def _row(
     *,
     name: str = "acme-lib",
     source_urls: tuple[str, ...] = ("https://example.invalid/license",),
+    deliveries: tuple[str, ...] = ("unknown",),
+    installs: tuple[str, ...] = ("unknown",),
 ) -> DisclosureRow:
     return DisclosureRow(
         name=name,
@@ -178,4 +196,6 @@ def _row(
         found_in=("acme-alpha",),
         evidence_source_layers=("syft",),
         coverage_gaps=(),
+        deliveries=deliveries,
+        installs=installs,
     )
