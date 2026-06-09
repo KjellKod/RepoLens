@@ -21,7 +21,11 @@ from repolens.exit_codes import InputError
 from repolens.policy import PolicyTier, classify_license_input, load_default_policy
 from repolens.policy.spdx import normalize_license
 from repolens.presence.defaults import build_presence
-from repolens.presence.sections import MONITOR_APPENDIX_LABEL, section_for_presence
+from repolens.presence.sections import (
+    DELIVERED_SECTION,
+    MONITOR_APPENDIX_LABEL,
+    section_for_presence,
+)
 from repolens.report.categories import RoutedRecord, build_category_index, route_occurrences
 from repolens.report.dependency_boundaries import (
     build_dependency_boundary_summary,
@@ -429,12 +433,22 @@ def _exclude_rejected_shortlist_records(
     rejected_decision_refs, legacy_component_refs = _rejected_shortlist_refs(work_root)
     if not rejected_decision_refs and not legacy_component_refs:
         return list(records)
-    return [
-        record
-        for record in records
-        if _decision_ref_for_resolved(record) not in rejected_decision_refs
-        and _resolved_component_ref(record) not in legacy_component_refs
-    ]
+    kept: list[dict[str, Any]] = []
+    for record in records:
+        if _decision_ref_for_resolved(record) in rejected_decision_refs:
+            continue
+        # The legacy bare-component_ref fallback must NOT suppress a now-delivered
+        # finding: a delivered row is only excluded by a section-aware delivered
+        # rejection (handled above). Applying the bare fallback to delivered
+        # records would let a pre-upgrade rejection hide a delivered copyleft row
+        # when `report` runs before `flag` rewrites the shortlist.
+        if (
+            section_for_presence(_presence_for_resolved(record)) != DELIVERED_SECTION
+            and _resolved_component_ref(record) in legacy_component_refs
+        ):
+            continue
+        kept.append(record)
+    return kept
 
 
 def _rejected_shortlist_refs(work_root: Path) -> tuple[frozenset[str], frozenset[str]]:

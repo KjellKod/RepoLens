@@ -704,6 +704,63 @@ def test_report_rejected_legacy_resolved_record_uses_default_presence_identity(
     assert _csv_records(result.csv_path) == []
 
 
+def _copyleft_resolved(resolved_record: dict[str, Any], **presence: str) -> dict[str, Any]:
+    record = {
+        **resolved_record,
+        "name": "copyleft-lib",
+        "spdx_id": "GPL-3.0-only",
+        "declared_license_raw": "GPL-3.0-only",
+        "tags": {"origin": "third-party-oss", "scope": "runtime", "distribution": "server"},
+    }
+    record.pop("presence", None)
+    if presence:
+        record["presence"] = _presence(**presence)
+    return record
+
+
+def test_report_legacy_bare_rejection_does_not_suppress_delivered_record(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    # A pre-upgrade rejection keyed only by bare component_ref must NOT suppress a
+    # now-delivered finding when `report` runs before `flag` rewrites the shortlist.
+    component_ref = "copyleft-lib|GPL-3.0-only"
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            _copyleft_resolved(
+                resolved_record,
+                install_state="installed",
+                delivery_state="delivered",
+                relation="direct",
+            )
+        ],
+    )
+    _write_shortlist(tmp_path, [_shortlist_item(component_ref, status="rejected")])
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+    rows = _csv_records(result.csv_path)
+    assert len(rows) == 1
+    assert rows[0]["name"] == "copyleft-lib"
+
+
+def test_report_legacy_bare_rejection_still_excludes_non_delivered_record(
+    tmp_path: Path,
+    resolved_record: dict[str, Any],
+) -> None:
+    # The legacy bare-ref fallback still suppresses a non-delivered presence-less
+    # record (preserves prior behavior for genuinely-rejected legacy rows).
+    component_ref = "copyleft-lib|GPL-3.0-only"
+    store.write_resolved(tmp_path, "acme-alpha", [_copyleft_resolved(resolved_record)])
+    _write_shortlist(tmp_path, [_shortlist_item(component_ref, status="rejected")])
+
+    result = render_main_report(tmp_path, tmp_path / "out", _report_config())
+
+    assert _csv_records(result.csv_path) == []
+
+
 def test_missing_evidence_url_without_purl_still_renders_empty_source_url(
     tmp_path: Path, resolved_record: dict[str, Any]
 ) -> None:
