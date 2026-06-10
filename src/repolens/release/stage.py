@@ -22,7 +22,7 @@ from repolens.release.writers import (
     write_release_review,
 )
 from repolens.report.gate import ReportGateOpen, run_report_gate
-from repolens.report.main import select_disclosure_records
+from repolens.report.main import select_disclosure_record_selection
 
 _SCANNABLE_TARGETS = frozenset({"cloudflare-worker", "js-bundle"})
 
@@ -47,7 +47,8 @@ def run_release_stage(
     gate = run_report_gate(root)
     if not gate.clear:
         raise ReportGateOpen(gate.message)
-    records = select_disclosure_records(root)
+    selection = select_disclosure_record_selection(root)
+    records = selection.records
     delivery_artifact: DeliveryArtifact | None = None
     if artifact is not None and target is not None and target in _SCANNABLE_TARGETS:
         records, delivery_artifact = _apply_bundle_scan(records, artifact=artifact, target=target)
@@ -57,6 +58,7 @@ def run_release_stage(
         approved_decision_refs=load_approved_decision_refs(root),
         target=target,
         artifact=delivery_artifact,
+        file_gaps=selection.file_gaps,
     )
     policy_path = write_release_policy(output_dir, evaluation)
     review_path = write_release_review(output_dir, evaluation)
