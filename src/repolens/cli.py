@@ -73,7 +73,7 @@ class CommandResult:
 CommandHandler = Callable[[argparse.Namespace], CommandResult]
 
 
-STAGE_COMMANDS = ("discover", "scan", "resolve", "flag", "shortlist", "report")
+STAGE_COMMANDS = ("discover", "scan", "resolve", "flag", "shortlist", "report", "release")
 REPORT_MAIN_DATA_FILENAMES = ("report.main.md", "report.main.csv", "report.main.html")
 REPORT_MAIN_DOCX_FILENAME = "report.main.docx"
 REPORT_MAIN_FILENAMES = (*REPORT_MAIN_DATA_FILENAMES, REPORT_MAIN_DOCX_FILENAME)
@@ -263,6 +263,23 @@ _STAGE_HELP = {
             "report.main.{md,csv,html,docx}, report.presentation.{md,csv,html,docx}, "
             "+ report.appendix.<category>.{md,csv}.",
             "review and share it — you are responsible for validating the result.",
+        ),
+    ),
+    "release": StageHelp(
+        help="Evaluate release disclosure policy and emit release-ready artifacts.",
+        description=(
+            "Release gate — evaluate delivered dependencies against disclosure-action policy "
+            "and emit release artifacts."
+        ),
+        epilog=(
+            "Before: resolved.ndjson files, a clear shortlist.json when present, and "
+            "optionally a built JS bundle or Cloudflare Worker artifact.\n"
+            "Example: repolens release --work-root <WORK> --artifact dist/worker.js "
+            "--target js-bundle\n"
+            "Output: release.policy.json, release.review.md, and on pass "
+            "release.licenses.json + release.notices.md + release.notices.txt.\n"
+            "Next: review release.review.md and consume only public_notice=required "
+            "entries on public surfaces."
         ),
     ),
 }
@@ -456,6 +473,8 @@ def build_parser() -> argparse.ArgumentParser:
             _configure_shortlist_parser(subparser)
         elif command_name == "report":
             _configure_report_parser(subparser)
+        elif command_name == "release":
+            _configure_release_parser(subparser)
         else:
             subparser.add_argument(
                 "--findings-open",
@@ -928,6 +947,34 @@ def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
         help="Optional reviewer label override recorded on approved review choices.",
     )
     review_parser.set_defaults(handler=_report_review)
+
+
+def _configure_release_parser(subparser: argparse.ArgumentParser) -> None:
+    subparser.add_argument(
+        "--work-root",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Root containing work/<repo>/resolved.ndjson artifacts.",
+    )
+    subparser.add_argument(
+        "--artifact",
+        type=Path,
+        metavar="PATH",
+        help="Optional release artifact to scan for positive delivered evidence.",
+    )
+    subparser.add_argument(
+        "--target",
+        metavar="TARGET",
+        help="Release target name mapped by disclosure policy, for example js-bundle.",
+    )
+    subparser.add_argument(
+        "--out-dir",
+        type=Path,
+        metavar="PATH",
+        help="Directory for release artifacts (default: <work-root>/release).",
+    )
+    subparser.set_defaults(handler=_release_stage)
 
 
 def _global_config_help_requested(argv: Sequence[str]) -> bool:
@@ -3734,6 +3781,34 @@ def _report(args: argparse.Namespace) -> CommandResult:
         _report_done_message(summary),
         metadata=result,
     )
+
+
+def _release_stage(args: argparse.Namespace) -> CommandResult:
+    from repolens.release import run_release_stage
+
+    if (args.artifact is None) != (args.target is None):
+        raise InputError("--artifact and --target are required together")
+    if args.target is not None and not str(args.target).strip():
+        raise InputError("--target must not be empty")
+    try:
+        result = run_release_stage(
+            Path(args.work_root),
+            artifact=args.artifact,
+            target=args.target,
+            out_dir=args.out_dir,
+            config=args.runtime_config,
+        )
+    except ReportGateOpen as exc:
+        return CommandResult(CommandStatus.FINDINGS_OPEN, str(exc))
+    lines = [
+        f"Release gate result: {result.evaluation.result}",
+        "Written artifacts:",
+        *(f"  {path}" for path in result.paths),
+    ]
+    if result.evaluation.result == "blocked":
+        lines.append("Next: see release.review.md for blockers.")
+        return CommandResult(CommandStatus.FINDINGS_OPEN, "\n".join(lines), metadata=result)
+    return CommandResult(CommandStatus.SUCCESS, "\n".join(lines), metadata=result)
 
 
 def _report_done_message(summary: RunSummary) -> str:

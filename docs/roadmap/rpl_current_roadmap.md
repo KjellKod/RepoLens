@@ -60,7 +60,7 @@ coordinated subtasks that share one branch and one product surface.
 | --- | --- | --- | --- | --- | --- |
 | `RPL-NEXT-1` | `DONE_MERGED` | #71 (merge f730d73) | Start next. One active product PR. | Presence model plus UX-first shortlist/report split. | Yes, inside this Quest only: schema/model, npm enrichment, shortlist UX, report UX, and validation can build in parallel against agreed fixtures. |
 | `RPL-FIX-1` | `DONE_MERGED` | #74 (merge 99e5777) | Allowed concurrently: `RPL-NEXT-1` is `DONE_MERGED`, `RPL-NEXT-2` is `LEFT_TODO`, and no product row is mid-flight. | Resolve auto-provisions work-root ScanCode through pinned+verified tooling readiness. Follow-up: fix `offline-ci` integration tests that assumed the pre-auto-provision degraded path. | No, focused reliability/security fix on the active Quest branch. |
-| `RPL-NEXT-2` | `LEFT_TODO` | TBD | **Wait. Start only after `RPL-NEXT-1` is `DONE_MERGED`.** | Disclosure-action policy, artifact scan pilot, release outputs, and Sketch2md pilot. | Yes, inside the later `RPL-NEXT-2` Quest only: policy model, artifact scan, release writers, Sketch2md integration, and validation can build in parallel after `RPL-NEXT-1` schemas are merged. |
+| `RPL-NEXT-2` | `INPROGRESS` | TBD | **Wait. Start only after `RPL-NEXT-1` is `DONE_MERGED`.** | Disclosure-action policy, artifact scan pilot, release outputs, and Sketch2md pilot. | Yes, inside the later `RPL-NEXT-2` Quest only: policy model, artifact scan, release writers, Sketch2md integration, and validation can build in parallel after `RPL-NEXT-1` schemas are merged. |
 
 Do not create an `RPL-NEXT-2` branch while `RPL-NEXT-1` is open. If a useful discovery
 comes up while `RPL-NEXT-1` is active, add a note to this roadmap or to the open PR, but
