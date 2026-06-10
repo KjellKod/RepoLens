@@ -139,6 +139,8 @@ def test_declared_spdx_license_writes_syft_resolved_record(tmp_path: Path, repo_
     assert record["spdx_id"] == "MIT"
     assert record["declared_license_raw"] == "MIT"
     assert record["evidence"]["source_layer"] == "syft"
+    assert record["presence"]["install_state"] == "installed"
+    assert record["presence"]["delivery_state"] == "not_scanned"
 
 
 def test_declared_spdx_license_writes_brief_description_from_sbom(

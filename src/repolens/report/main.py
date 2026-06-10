@@ -20,6 +20,12 @@ from repolens.discovery.taxonomy import DEFAULT_CATEGORY
 from repolens.exit_codes import InputError
 from repolens.policy import PolicyTier, classify_license_input, load_default_policy
 from repolens.policy.spdx import normalize_license
+from repolens.presence.defaults import build_presence
+from repolens.presence.sections import (
+    DELIVERED_SECTION,
+    MONITOR_APPENDIX_LABEL,
+    section_for_presence,
+)
 from repolens.report.categories import RoutedRecord, build_category_index, route_occurrences
 from repolens.report.dependency_boundaries import (
     build_dependency_boundary_summary,
@@ -44,6 +50,7 @@ from repolens.security.sanitize import (
 )
 from repolens.shortlist.contexts import load_shortlist_metadata
 from repolens.shortlist.evidence import _validate_direct_link, identity_for_item
+from repolens.shortlist.identity import build_decision_ref, decision_ref_for_item
 from repolens.shortlist.overrides import (
     HUMAN_OVERRIDE_MACHINE_VERIFICATION,
     HUMAN_OVERRIDE_OUTCOME,
@@ -55,6 +62,8 @@ COLUMNS = (
     "spdx_id",
     "version",
     "source_url",
+    "delivery",
+    "install",
     "modified?",
     "origin",
     "scope",
@@ -63,7 +72,7 @@ COLUMNS = (
     "evidence_source_layer",
     "coverage_gaps",
 )
-_HTML_COLUMN_WIDTHS = (10, 7, 7, 25, 6, 9, 6, 7, 8, 7, 8)
+_HTML_COLUMN_WIDTHS = (9, 6, 6, 21, 8, 8, 5, 8, 5, 6, 7, 6, 5)
 
 _NONE = "none"
 _UNKNOWN = "UNKNOWN"
@@ -92,6 +101,8 @@ class DisclosureRow:
     evidence_source_layers: tuple[str, ...]
     coverage_gaps: tuple[str, ...]
     descriptions: tuple[str, ...] = ()
+    deliveries: tuple[str, ...] = ("unknown",)
+    installs: tuple[str, ...] = ("unknown",)
 
 
 @dataclass(frozen=True)
@@ -137,6 +148,8 @@ class _DisclosureAccumulator:
     spdx_id: str
     versions: set[str] = field(default_factory=set)
     source_urls: set[str] = field(default_factory=set)
+    deliveries: set[str] = field(default_factory=set)
+    installs: set[str] = field(default_factory=set)
     descriptions: set[str] = field(default_factory=set)
     modified: set[str] = field(default_factory=set)
     origins: set[str] = field(default_factory=set)
@@ -161,6 +174,8 @@ class _DisclosureAccumulator:
             spdx_id=self.spdx_id,
             versions=_sorted_values(self.versions),
             source_urls=_sorted_values(self.source_urls),
+            deliveries=_sorted_values(self.deliveries),
+            installs=_sorted_values(self.installs),
             descriptions=_sorted_values(self.descriptions),
             modified=_sorted_values(self.modified),
             origins=_sorted_values(self.origins),
@@ -242,6 +257,7 @@ def render_main_report(
                 appendix_rows,
                 (),
                 title=f"RepoLens Appendix: {label}",
+                preamble=_appendix_preamble(label),
             )
         )
         store.atomic_write_bytes(appendix_csv_path, appendix_csv.encode("utf-8"))
@@ -414,31 +430,84 @@ def _exclude_rejected_shortlist_records(
     work_root: Path,
     records: Sequence[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    rejected_refs = _rejected_shortlist_component_refs(work_root)
-    if not rejected_refs:
+    rejected_decision_refs, legacy_component_refs = _rejected_shortlist_refs(work_root)
+    if not rejected_decision_refs and not legacy_component_refs:
         return list(records)
-    return [record for record in records if _resolved_component_ref(record) not in rejected_refs]
+    kept: list[dict[str, Any]] = []
+    for record in records:
+        if _decision_ref_for_resolved(record) in rejected_decision_refs:
+            continue
+        # The legacy bare-component_ref fallback must NOT suppress a now-delivered
+        # finding: a delivered row is only excluded by a section-aware delivered
+        # rejection (handled above). Applying the bare fallback to delivered
+        # records would let a pre-upgrade rejection hide a delivered copyleft row
+        # when `report` runs before `flag` rewrites the shortlist.
+        if (
+            section_for_presence(_presence_for_resolved(record)) != DELIVERED_SECTION
+            and _resolved_component_ref(record) in legacy_component_refs
+        ):
+            continue
+        kept.append(record)
+    return kept
 
 
-def _rejected_shortlist_component_refs(work_root: Path) -> frozenset[str]:
+def _rejected_shortlist_refs(work_root: Path) -> tuple[frozenset[str], frozenset[str]]:
     shortlist_path = Path(work_root) / "shortlist.json"
     if not shortlist_path.exists():
-        return frozenset()
+        return frozenset(), frozenset()
     document = store.read_shortlist(work_root)
     raw_items = document.get("items", [])
     if not isinstance(raw_items, list):
-        return frozenset()
-    return frozenset(
-        str(item["component_ref"])
-        for item in raw_items
-        if isinstance(item, dict)
-        and item.get("status") == "rejected"
-        and isinstance(item.get("component_ref"), str)
+        return frozenset(), frozenset()
+    rejected_decision_refs: set[str] = set()
+    legacy_component_refs: set[str] = set()
+    for item in raw_items:
+        if not isinstance(item, dict) or item.get("status") != "rejected":
+            continue
+        if _has_section_decision_identity(item):
+            decision_ref = _non_empty(decision_ref_for_item(item))
+            if decision_ref is not None:
+                rejected_decision_refs.add(decision_ref)
+            continue
+        component_ref = _non_empty(item.get("component_ref"))
+        if component_ref is not None:
+            legacy_component_refs.add(component_ref)
+    return frozenset(rejected_decision_refs), frozenset(legacy_component_refs)
+
+
+def _has_section_decision_identity(item: Mapping[str, object]) -> bool:
+    return (
+        _non_empty(item.get("decision_ref")) is not None
+        or _non_empty(item.get("presence_section")) is not None
+        or isinstance(item.get("presence"), Mapping)
     )
+
+
+def _decision_ref_for_resolved(record: dict[str, Any]) -> str:
+    presence_section = section_for_presence(_presence_for_resolved(record))
+    return build_decision_ref(_resolved_component_ref(record), presence_section)
+
+
+def _presence_for_resolved(record: Mapping[str, Any]) -> Mapping[str, object]:
+    presence = record.get("presence")
+    if isinstance(presence, Mapping):
+        return presence
+    tags = record.get("tags")
+    return build_presence(
+        tags=tags if isinstance(tags, Mapping) else None,
+        source="syft",
+    ).to_dict()
 
 
 def _resolved_component_ref(record: dict[str, Any]) -> str:
     return f"{record['name']}|{_normalized_spdx(record.get('spdx_id'))}"
+
+
+def _non_empty(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _active_report_repo_refs(work_root: Path) -> tuple[str, ...] | None:
@@ -702,6 +771,13 @@ def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[Dis
         group.origins.add(str(tags["origin"]))
         group.scopes.add(str(tags["scope"]))
         group.distributions.add(str(tags["distribution"]))
+        presence = record.get("presence")
+        if isinstance(presence, dict):
+            group.deliveries.add(_delivery_display(presence.get("delivery_state")))
+            group.installs.add(_install_display(presence.get("install_state")))
+        else:
+            group.deliveries.add("unknown")
+            group.installs.add("unknown")
         group.coverage_gaps.update(extra_gaps)
 
     return sorted(
@@ -720,6 +796,8 @@ def render_csv(rows: Sequence[DisclosureRow]) -> str:
             row.spdx_id,
             _join(row.versions),
             _join(row.source_urls),
+            _join(row.deliveries),
+            _join(row.installs),
             _join(row.modified),
             _join(row.origins),
             _join(row.scopes),
@@ -738,15 +816,22 @@ def render_markdown(
     file_gaps: Sequence[str],
     *,
     title: str = "RepoLens Main Report",
+    preamble: str | None = None,
 ) -> str:
     """Render report rows as sanitized Markdown."""
 
     lines = [
         f"# {title.replace(chr(10), ' ')}",
         "",
-        "| " + " | ".join(_markdown_table_cell(column) for column in COLUMNS) + " |",
-        "| " + " | ".join("---" for _ in COLUMNS) + " |",
     ]
+    if preamble:
+        lines.extend([preamble.replace("\n", " "), ""])
+    lines.extend(
+        [
+            "| " + " | ".join(_markdown_table_cell(column) for column in COLUMNS) + " |",
+            "| " + " | ".join("---" for _ in COLUMNS) + " |",
+        ]
+    )
 
     for row in rows:
         lines.append(
@@ -757,6 +842,8 @@ def render_markdown(
                     _markdown_table_cell(row.spdx_id),
                     _markdown_table_cell(_join(row.versions)),
                     _markdown_table_cell(_markdown_source_urls(row.source_urls)),
+                    _markdown_table_cell(_join(row.deliveries)),
+                    _markdown_table_cell(_join(row.installs)),
                     _markdown_table_cell(_join(row.modified)),
                     _markdown_table_cell(_join(row.origins)),
                     _markdown_table_cell(_join(row.scopes)),
@@ -795,6 +882,8 @@ def render_html(
                 f"<td>{_html_text(row.spdx_id)}</td>",
                 f"<td>{_html_text(_join(row.versions))}</td>",
                 f'<td class="col-source">{_html_source_urls(row.source_urls)}</td>',
+                f"<td>{_html_text(_join(row.deliveries))}</td>",
+                f"<td>{_html_text(_join(row.installs))}</td>",
                 f"<td>{_html_text(_join(row.modified))}</td>",
                 f"<td>{_html_text(_join(row.origins))}</td>",
                 f"<td>{_html_text(_join(row.scopes))}</td>",
@@ -887,6 +976,30 @@ def _modified_value(value: object) -> str:
     if value is False:
         return "false"
     return str(value)
+
+
+def _delivery_display(value: object) -> str:
+    text = str(value or "unknown")
+    if text == "not_scanned":
+        return "delivery artifact not scanned"
+    if text == "not_delivered":
+        return "not delivered"
+    return text.replace("_", " ")
+
+
+def _install_display(value: object) -> str:
+    return str(value or "unknown").replace("_", " ")
+
+
+def _appendix_preamble(label: str) -> str | None:
+    if label != MONITOR_APPENDIX_LABEL:
+        return None
+    return (
+        "Not currently delivered. Monitor because a platform, feature, dependency, or "
+        "deployment change could install or include this package later. Current evidence "
+        "indicates the package is not delivered, or delivery has not been confirmed by an "
+        "artifact scan."
+    )
 
 
 def _version_display(record: dict[str, Any]) -> str:

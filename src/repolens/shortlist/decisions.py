@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from repolens.shortlist.grouping import GroupKey, GroupMembership, decode_group_key
+from repolens.shortlist.identity import decision_ref_for_item
 from repolens.shortlist.render import decode_component_ref
 
 # ``sanitize_markdown`` escapes the comment delimiters, so the rendered marker is
@@ -40,7 +41,7 @@ _REJECT_MARKS = frozenset({"r", "R"})
 class Decision:
     """A recovered human decision for one component."""
 
-    component_ref: str
+    decision_ref: str
     status: str  # "approved" | "rejected"
 
 
@@ -61,11 +62,11 @@ class ReviewDecisions:
 
 
 def parse_checkbox_decisions(markdown: str) -> dict[str, Decision]:
-    """Recover ``{component_ref: Decision}`` from a rendered ``shortlist.md`` string.
+    """Recover ``{decision_ref: Decision}`` from a rendered ``shortlist.md`` string.
 
     Only ticked (``[x]``) or rejected (``[r]``) lines with a recoverable ``rpl:ref`` key
     produce a decision; unchecked (``[ ]``) lines and lines without a valid key are skipped.
-    The last decision for a given ``component_ref`` wins (deterministic on duplicates).
+    The last decision for a given ``decision_ref`` wins (deterministic on duplicates).
     """
 
     return parse_review_decisions(markdown).item_decisions
@@ -89,10 +90,13 @@ def parse_review_decisions(markdown: str) -> ReviewDecisions:
             continue  # unchecked or unknown mark -> no decision
         marker = _REF_MARKER_RE.search(line)
         if marker is not None:
-            component_ref = decode_component_ref(marker.group(1))
-            if component_ref is None:
+            decision_ref = decode_component_ref(marker.group(1))
+            if decision_ref is None:
                 continue
-            item_decisions[component_ref] = Decision(component_ref=component_ref, status=status)
+            item_decisions[decision_ref] = Decision(
+                decision_ref=decision_ref,
+                status=status,
+            )
             continue
         group_marker = _GROUP_MARKER_RE.search(line)
         if group_marker is None:
@@ -127,10 +131,10 @@ def apply_decisions(
     memberships = group_membership or {}
     for item in items:
         record = dict(item)
-        component_ref = str(record.get("component_ref"))
-        decision = decisions.get(component_ref)
+        decision_ref = decision_ref_for_item(record)
+        decision = decisions.get(decision_ref)
         decided_via = "item"
-        membership = memberships.get(component_ref)
+        membership = memberships.get(decision_ref)
         if decision is None and membership is not None:
             decision = groups.get(membership.key)
             decided_via = "group"
@@ -155,6 +159,7 @@ def apply_decisions(
                         "spdx_family": membership.key.spdx_family,
                         "distribution": membership.key.distribution,
                         "scope": membership.key.scope,
+                        "presence_section": membership.key.presence_section,
                     },
                 }
             else:

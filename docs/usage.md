@@ -820,6 +820,8 @@ Outputs land under `--work-root`:
 - `inventory.json` — the complete, deduplicated, tagged component dataset.
 - `shortlist.json` + `shortlist.md` — the review queue `shortlist` consumes; its
   `open_count` is what gates the final report.
+- Non-quiet output includes presence counts and a not-scanned count so the operator can
+  see delivered, installed-review, monitor, and unknown delivery buckets before report.
 
 The default policy tiers live in [license-policy.md](roadmap/rpl_license-policy.md). They
 are not runtime-configurable through local config today.
@@ -866,8 +868,10 @@ Rerunning `flag` does not rerun scan or resolve, and it does not delete
 `shortlist.md` from the resolved records. Before rebuilding, `flag` ingests pending
 checkboxes from the existing `shortlist.md` and carries forward matching
 approved/rejected decisions by exact `component_ref`, so settled rows should not be
-silently reopened. New or materially changed rows stay open. Rich research metadata and
-proposal annotations are separate artifacts; if you need them after a policy rebuild,
+silently reopened. If a previously approved item moves from monitored, unknown, or
+not-scanned delivery state to delivered, it reopens with a `reopened:` note. New or
+materially changed rows stay open. Rich research metadata and proposal annotations are
+separate artifacts; if you need them after a policy rebuild,
 rerun or reingest the relevant `shortlist.evidence.json` and `shortlist.proposals.json`.
 
 Paid/vendor software is a separate decision from SPDX policy. A commercial SDK can still
@@ -882,6 +886,16 @@ as a `REVIEW`/`BLOCK` row and `flag` is rerun.
 `repolens shortlist --work-root work` reads the `shortlist.json`
 and `shortlist.md` that `flag` produced, renders a grouped review surface, and settles only
 the items a human approved or rejected:
+
+`shortlist.md` is grouped first by dependency presence, then by the existing review tiers:
+
+1. `DELIVERED / SHIPPED - ACTION REQUIRED`
+2. `INSTALLED BUT DELIVERY NOT CONFIRMED - REVIEW`
+3. `LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR`
+4. `DELIVERY ARTIFACT NOT SCANNED - UNKNOWN`
+
+Monitor and unknown rows are visible review rows, not suppressions. Their row copy shows
+delivery state, install state, relation, dependency path when known, and platform match.
 
 If you later retry resolution and rerun `flag`, RepoLens first ingests any pending
 `shortlist.md` checkbox decisions and then preserves approved/rejected decisions for
@@ -952,6 +966,11 @@ repolens shortlist --work-root <WORK> \
   --evidence <WORK>/shortlist.evidence.json
 ```
 
+The same console output includes presence counts plus the not-scanned count. If any
+not-scanned findings remain, the final run summary points to report review and calls out a
+release policy review before publishing final artifacts; it does not prescribe disclosure
+actions.
+
 If any open rows came from `unresolved:scancode_tool_unavailable`, the console also prints
 the deterministic retry path first:
 
@@ -988,8 +1007,9 @@ any item whose `status` is `open`, the command exits with findings-open status a
 no report artifacts. A missing shortlist does not block assembly.
 
 When `--out-dir` is omitted, report writes to `<WORK>/reports`. The finish summary lists
-the resolved report directory, main row count, appendix row counts by label, and coverage
-gaps worth human review. Review `report.main.html`/`.md`/`.csv`/`.docx` when present,
+the resolved report directory, main row count, appendix row counts by label, presence
+counts, not-scanned count, and coverage gaps worth human review. Review
+`report.main.html`/`.md`/`.csv`/`.docx` when present,
 review `report.presentation.html`/`.md`/`.csv`/`.docx` when present, review appendices
 especially when `build-ci` rows have `UNKNOWN`, `missing_spdx_id`, `missing_source_url`,
 or `missing_version`, and generate the docx files later by adding `report.header` config
@@ -1084,7 +1104,14 @@ optional `.docx`; excluded third-party categories go to `report.appendix.<catego
 `scope: build` and `distribution: not-distributed` always go to
 `report.appendix.build-ci.{md,csv}` instead of the shipped main report.
 
-The main markdown and CSV keep the frozen P6a columns. The presentation report is a
+The main markdown, CSV, HTML, and DOCX include `delivery` and `install` columns. Explicit
+lockfile-only, optional, or unscanned delivery rows route to
+`report.appendix.not-currently-delivered.{md,csv}` after first-party and build/CI routing;
+the appendix preamble explains that these rows are monitored because future platform,
+feature, dependency, or deployment changes could install or include them later. The
+presentation report includes a matching presence note column.
+
+The presentation report is a
 sibling view of the same gated main row set: Markdown, HTML, and DOCX group by exact SPDX
 expression/value, while CSV stays flat and sorted by SPDX, name, then version. Presentation
 rows include a brief `description` when the resolve stage captured one from Syft artifact

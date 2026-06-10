@@ -162,6 +162,33 @@ def test_presentation_csv_neutralizes_formula_fields() -> None:
     assert '"\t+1"' in data
 
 
+def test_presentation_presence_notes_cover_delivery_states_without_obligation_copy() -> None:
+    rows = presentation_rows_from_disclosure(
+        (
+            _row(name="delivered-lib", deliveries=("delivered",), installs=("installed",)),
+            _row(
+                name="not-scanned-lib",
+                deliveries=("delivery artifact not scanned",),
+                installs=("installed",),
+            ),
+            _row(name="monitor-lib", deliveries=("not delivered",), installs=("lockfile only",)),
+            _row(name="unknown-lib", deliveries=("unknown",), installs=("unknown",)),
+        )
+    )
+
+    markdown = render_presentation_markdown(rows)
+    html = render_presentation_html(rows)
+    csv_text = render_presentation_csv(rows)
+
+    assert "Delivered or shipped; review before release." in markdown
+    assert "Delivery artifact was not scanned; RepoLens cannot determine delivery." in markdown
+    assert "Not currently delivered. Monitor because" in markdown
+    assert "Delivery status unknown; review before publishing final artifacts." in markdown
+    _assert_no_obligation_language(markdown)
+    _assert_no_obligation_language(html)
+    _assert_no_obligation_language(csv_text)
+
+
 def test_presentation_docx_groups_rows_escapes_text_and_redacts_tokens() -> None:
     token = "ghp_" + "A" * 24
     rows = presentation_rows_from_disclosure(
@@ -210,6 +237,8 @@ def _row(
     versions: tuple[str, ...] = ("1.0.0",),
     source_urls: tuple[str, ...] = ("https://example.invalid/license",),
     descriptions: tuple[str, ...] = (),
+    deliveries: tuple[str, ...] = ("unknown",),
+    installs: tuple[str, ...] = ("unknown",),
 ) -> DisclosureRow:
     return DisclosureRow(
         name=name,
@@ -224,6 +253,8 @@ def _row(
         evidence_source_layers=("syft",),
         coverage_gaps=(),
         descriptions=descriptions,
+        deliveries=deliveries,
+        installs=installs,
     )
 
 
@@ -245,3 +276,9 @@ def _report_config() -> Config:
 
 def _no_header_config() -> Config:
     return Config(values={"report": {}}, sources=())
+
+
+def _assert_no_obligation_language(text: str) -> None:
+    lowered = text.casefold()
+    forbidden = ("obligation", "must disclose", "required to")
+    assert all(phrase not in lowered for phrase in forbidden)

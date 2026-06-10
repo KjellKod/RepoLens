@@ -183,6 +183,53 @@ def test_flag_rerun_carries_forward_ingested_human_decisions(tmp_path, make_reco
     assert rerun["items"][0]["decided_at"] == "2026-06-05T12:00:00Z"
 
 
+def test_flag_rerun_carries_forward_legacy_bare_ref_decision_for_non_delivered_row(
+    tmp_path,
+    make_record,
+) -> None:
+    record = make_record(
+        name="copyleft-lib",
+        spdx_id="GPL-3.0-only",
+        scope="runtime",
+        distribution="server",
+    )
+    record.pop("presence")
+    store.write_resolved(tmp_path, "acme-alpha", [record])
+    store.write_shortlist(
+        tmp_path,
+        {
+            "schema_version": "1.0",
+            "generated_at": "2026-06-05T12:00:00Z",
+            "open_count": 0,
+            "items": [
+                {
+                    "component_ref": "copyleft-lib|GPL-3.0-only",
+                    "reason": "BLOCK",
+                    "evidence": {"source_layer": "syft"},
+                    "candidate_spdx": "GPL-3.0-only",
+                    "status": "approved",
+                    "decided_by": "reviewer-sentinel",
+                    "decided_at": "2026-06-05T12:00:00Z",
+                    "decided_via": "item",
+                    "note": "legacy approval",
+                }
+            ],
+        },
+    )
+
+    result = run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    item = rerun["items"][0]
+    assert result.open_count == 0
+    assert result.preserved_decision_count == 1
+    assert item["component_ref"] == "copyleft-lib|GPL-3.0-only"
+    assert item["decision_ref"] != item["component_ref"]
+    assert item["status"] == "approved"
+    assert item["decided_by"] == "reviewer-sentinel"
+    assert item["note"] == "legacy approval"
+
+
 def test_flag_rerun_ingests_pending_shortlist_markdown_ticks(
     tmp_path, make_record, monkeypatch
 ) -> None:
@@ -284,3 +331,174 @@ def test_flag_rerun_does_not_carry_decision_to_changed_component_ref(tmp_path, m
     assert rerun["items"][0]["component_ref"] == "acme-lib|GPL-3.0-only"
     assert rerun["items"][0]["status"] == "open"
     assert rerun["items"][0]["decided_by"] is None
+
+
+def test_flag_rerun_reopens_approved_item_when_delivery_becomes_delivered(
+    tmp_path,
+    make_record,
+) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                delivery_state="not_scanned",
+            )
+        ],
+    )
+    run_flag(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    item = dict(shortlist["items"][0])
+    item["status"] = "approved"
+    item["decided_by"] = "reviewer-sentinel"
+    item["decided_at"] = "2026-06-05T12:00:00Z"
+    item["decided_via"] = "item"
+    store.write_shortlist(tmp_path, {**shortlist, "open_count": 0, "items": [item]})
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                delivery_state="delivered",
+            )
+        ],
+    )
+
+    result = run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    assert result.open_count == 1
+    assert rerun["items"][0]["status"] == "open"
+    assert rerun["items"][0]["decided_by"] is None
+    assert rerun["items"][0]["presence_section"] == "DELIVERED / SHIPPED - ACTION REQUIRED"
+    assert str(rerun["items"][0]["note"]).startswith("reopened:")
+
+
+def test_flag_rerun_keeps_presence_split_decisions_independent(
+    tmp_path,
+    make_record,
+) -> None:
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="installed",
+                delivery_state="not_scanned",
+                relation="direct",
+            ),
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="lockfile_only",
+                delivery_state="not_scanned",
+                relation="optional",
+                version="2.0.0",
+            ),
+        ],
+    )
+    run_flag(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    approved_items = []
+    for item in shortlist["items"]:
+        approved = dict(item)
+        approved["status"] = "approved"
+        approved["decided_by"] = "reviewer-sentinel"
+        approved["decided_at"] = "2026-06-05T12:00:00Z"
+        approved["decided_via"] = "item"
+        approved_items.append(approved)
+    store.write_shortlist(tmp_path, {**shortlist, "open_count": 0, "items": approved_items})
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="installed",
+                delivery_state="delivered",
+                relation="direct",
+            ),
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="lockfile_only",
+                delivery_state="not_scanned",
+                relation="optional",
+                version="2.0.0",
+            ),
+        ],
+    )
+
+    result = run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    by_section = {str(item["presence_section"]): item for item in rerun["items"]}
+    delivered = by_section["DELIVERED / SHIPPED - ACTION REQUIRED"]
+    monitor = by_section["LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR"]
+    assert result.open_count == 1
+    assert delivered["component_ref"] == monitor["component_ref"] == "copyleft-lib|GPL-3.0-only"
+    assert delivered["decision_ref"] != monitor["decision_ref"]
+    assert delivered["status"] == "open"
+    assert str(delivered["note"]).startswith("reopened:")
+    assert monitor["status"] == "approved"
+    assert monitor["decided_by"] == "reviewer-sentinel"
+
+
+def test_flag_rerun_does_not_suppress_delivered_row_from_prior_rejected_decision(
+    tmp_path,
+    make_record,
+) -> None:
+    # A prior REJECTED monitor/not-scanned decision must not be copied onto a
+    # newly delivered row of the same component (that would suppress a delivered
+    # copyleft finding via report rejection filtering). The delivered row must
+    # stay open and visible.
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="lockfile_only",
+                delivery_state="not_scanned",
+                relation="optional",
+            )
+        ],
+    )
+    run_flag(tmp_path)
+    shortlist = store.read_shortlist(tmp_path)
+    item = dict(shortlist["items"][0])
+    item["status"] = "rejected"
+    item["decided_by"] = "reviewer-sentinel"
+    item["decided_at"] = "2026-06-05T12:00:00Z"
+    item["decided_via"] = "item"
+    store.write_shortlist(tmp_path, {**shortlist, "open_count": 0, "items": [item]})
+    store.write_resolved(
+        tmp_path,
+        "acme-alpha",
+        [
+            make_record(
+                name="copyleft-lib",
+                spdx_id="GPL-3.0-only",
+                install_state="installed",
+                delivery_state="delivered",
+                relation="optional",
+            )
+        ],
+    )
+
+    result = run_flag(tmp_path)
+
+    rerun = store.read_shortlist(tmp_path)
+    delivered = rerun["items"][0]
+    assert delivered["presence_section"] == "DELIVERED / SHIPPED - ACTION REQUIRED"
+    assert delivered["status"] == "open"
+    assert delivered["decided_by"] is None
+    assert result.open_count == 1

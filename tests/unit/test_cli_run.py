@@ -1930,3 +1930,16 @@ def _empty_sbom(repo_ref: str) -> dict[str, object]:
         "source": "https://example.invalid/sentinel-source",
         "artifacts": [],
     }
+
+
+def test_shortlist_presence_counts_degrade_on_corrupt_shortlist(tmp_path: Path) -> None:
+    # Presence counts are display-only; a corrupt/unreadable shortlist.json must
+    # not abort `run` — it degrades to empty counts.
+    work_root = tmp_path / "work"
+    work_root.mkdir()
+    (work_root / "shortlist.json").write_text("{ not valid json", encoding="utf-8")
+
+    counts, not_scanned = cli._shortlist_presence_counts(work_root)
+
+    assert counts == {}
+    assert not_scanned == 0

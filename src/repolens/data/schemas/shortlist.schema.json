@@ -15,6 +15,7 @@
         "required": ["component_ref", "reason", "evidence", "status"],
         "properties": {
           "component_ref": {"type": "string", "minLength": 1},
+          "decision_ref": {"type": "string", "minLength": 1},
           "reason": {"type": "string", "enum": ["BLOCK", "REVIEW", "UNKNOWN", "CONFLICT"]},
           "evidence": {
             "type": "object",
@@ -31,6 +32,70 @@
             "additionalProperties": false
           },
           "candidate_spdx": {"type": ["string", "null"]},
+          "presence": {
+            "type": "object",
+            "required": [
+              "install_state",
+              "delivery_state",
+              "relation",
+              "path",
+              "platform_match",
+              "source",
+              "target",
+              "reopen_on_delivery_change"
+            ],
+            "properties": {
+              "install_state": {
+                "type": "string",
+                "enum": ["installed", "not_installed", "lockfile_only", "unknown"]
+              },
+              "delivery_state": {
+                "type": "string",
+                "enum": ["delivered", "not_delivered", "not_scanned", "unknown"]
+              },
+              "relation": {
+                "type": "string",
+                "enum": [
+                  "direct",
+                  "transitive",
+                  "peer",
+                  "optional",
+                  "dev",
+                  "devOptional",
+                  "mixed",
+                  "unknown"
+                ]
+              },
+              "path": {"type": "array", "items": {"type": "string"}},
+              "platform_match": {
+                "type": "string",
+                "enum": ["target", "host", "cross_platform", "no", "unknown"]
+              },
+              "source": {"type": "string", "minLength": 1},
+              "target": {"type": "string", "minLength": 1},
+              "reopen_on_delivery_change": {"type": "boolean"},
+              "delivery_artifact": {
+                "type": "object",
+                "properties": {
+                  "kind": {"type": "string"},
+                  "path": {"type": "string"},
+                  "hash": {"type": "string"}
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          },
+          "presence_section": {
+            "type": "string",
+            "enum": [
+              "DELIVERED / SHIPPED - ACTION REQUIRED",
+              "INSTALLED BUT DELIVERY NOT CONFIRMED - REVIEW",
+              "LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR",
+              "DELIVERY ARTIFACT NOT SCANNED - UNKNOWN",
+              "unknown"
+            ]
+          },
           "status": {"type": "string", "enum": ["open", "approved", "rejected"]},
           "decided_by": {"type": ["string", "null"]},
           "decided_at": {"type": ["string", "null"]},
@@ -50,7 +115,8 @@
                 "properties": {
                   "spdx_family": {"type": "string", "minLength": 1},
                   "distribution": {"type": "string", "minLength": 1},
-                  "scope": {"type": "string", "minLength": 1}
+                  "scope": {"type": "string", "minLength": 1},
+                  "presence_section": {"type": "string", "minLength": 1}
                 },
                 "additionalProperties": false
               }

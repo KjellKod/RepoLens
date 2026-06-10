@@ -27,6 +27,7 @@ from repolens.bootstrap.cache import (
     load_syft_pin,
 )
 from repolens.bootstrap.errors import IntegrityError, UsageError
+from repolens.presence.sections import PRESENCE_SECTIONS
 from repolens.report import ReportGateOpen, ReportResult, render_main_report
 from repolens.security.redaction import redact_tokens
 
@@ -102,6 +103,8 @@ class RunSummary:
     appendix_rows_by_label: dict[str, int] = field(default_factory=dict)
     appendix_paths_by_label: dict[str, tuple[Path, Path]] = field(default_factory=dict)
     coverage_gaps_by_label: dict[str, dict[str, int]] = field(default_factory=dict)
+    presence_counts: dict[str, int] = field(default_factory=dict)
+    not_scanned_count: int = 0
     docx_skipped: bool = False
 
     @property
@@ -1563,9 +1566,13 @@ def _run_command(args: argparse.Namespace) -> CommandResult:
 
     if _flag_outputs_current(work_root, resolved_refs):
         _run_banner(args, "flag", "skipped (inventory/shortlist current)")
+        summary.presence_counts, summary.not_scanned_count = _shortlist_presence_counts(work_root)
     else:
         flag_result = _flag_stage(_stage_args(args, work_root=work_root))
         _run_banner(args, "flag", _first_line(flag_result.message))
+        if hasattr(flag_result.metadata, "presence_counts"):
+            summary.presence_counts = dict(flag_result.metadata.presence_counts or {})
+            summary.not_scanned_count = int(flag_result.metadata.not_scanned_count)
     _run_step_pause(args, "flag")
 
     shortlist_result = _run_shortlist_loop(args, work_root, interactive=interactive)
@@ -1778,7 +1785,16 @@ def _run_shortlist_loop(
     while True:
         _shortlist_stage(_stage_args(args, work_root=work_root, emit_contexts_path=contexts_path))
         open_count = _shortlist_open_count(work_root)
-        _run_banner(args, "shortlist", f"{open_count} open item(s); contexts at {contexts_path}")
+        presence_counts, not_scanned_count = _shortlist_presence_counts(work_root)
+        _run_banner(
+            args,
+            "shortlist",
+            (
+                f"{open_count} open item(s); presence counts: "
+                f"{_presence_counts_label(presence_counts)}; "
+                f"not-scanned={not_scanned_count}; contexts at {contexts_path}"
+            ),
+        )
         if open_count == 0:
             return None
 
@@ -1793,10 +1809,15 @@ def _run_shortlist_loop(
                     )
                 )
                 open_count = _shortlist_open_count(work_root)
+                presence_counts, not_scanned_count = _shortlist_presence_counts(work_root)
                 _run_banner(
                     args,
                     "shortlist",
-                    f"{open_count} open item(s) after research artifacts",
+                    (
+                        f"{open_count} open item(s) after research artifacts; presence counts: "
+                        f"{_presence_counts_label(presence_counts)}; "
+                        f"not-scanned={not_scanned_count}"
+                    ),
                 )
                 if open_count == 0:
                     return None
@@ -1806,6 +1827,8 @@ def _run_shortlist_loop(
                 contexts_path,
                 proposals_path,
                 evidence_path,
+                presence_counts=presence_counts,
+                not_scanned_count=not_scanned_count,
             )
             return CommandResult(CommandStatus.FINDINGS_OPEN, instruction)
 
@@ -1840,7 +1863,16 @@ def _run_shortlist_loop(
                 )
             )
             open_count = _shortlist_open_count(work_root)
-            _run_banner(args, "shortlist", f"{open_count} open item(s) after research artifacts")
+            presence_counts, not_scanned_count = _shortlist_presence_counts(work_root)
+            _run_banner(
+                args,
+                "shortlist",
+                (
+                    f"{open_count} open item(s) after research artifacts; presence counts: "
+                    f"{_presence_counts_label(presence_counts)}; "
+                    f"not-scanned={not_scanned_count}"
+                ),
+            )
             if open_count == 0:
                 return None
 
@@ -1851,7 +1883,15 @@ def _run_shortlist_loop(
         )
         _shortlist_stage(_stage_args(args, work_root=work_root))
         open_count = _shortlist_open_count(work_root)
-        _run_banner(args, "shortlist", f"{open_count} open item(s) after human decisions")
+        presence_counts, not_scanned_count = _shortlist_presence_counts(work_root)
+        _run_banner(
+            args,
+            "shortlist",
+            (
+                f"{open_count} open item(s) after human decisions; presence counts: "
+                f"{_presence_counts_label(presence_counts)}; not-scanned={not_scanned_count}"
+            ),
+        )
         if open_count == 0:
             return None
 
@@ -1862,6 +1902,9 @@ def _shortlist_artifact_instruction(
     contexts_path: Path,
     proposals_path: Path,
     evidence_path: Path,
+    *,
+    presence_counts: dict[str, int] | None = None,
+    not_scanned_count: int = 0,
 ) -> str:
     review_path = work_root / "shortlist.review.md"
     research_command = _shortlist_research_command(
@@ -1872,8 +1915,10 @@ def _shortlist_artifact_instruction(
         review_path,
     )
     ingest_command = _shortlist_ingest_command(work_root, proposals_path, evidence_path)
+    counts_line = _presence_counts_label(presence_counts or {})
     return (
         f"Open shipped-license findings: {open_count}; report is halted before disclosure.\n"
+        f"Presence counts: {counts_line}; not-scanned={not_scanned_count}.\n"
         f"Contexts: {contexts_path}\n"
         f"Optional proposals: {proposals_path}\n"
         f"Research evidence: {evidence_path}\n"
@@ -2021,6 +2066,42 @@ def _shortlist_open_count(work_root: Path) -> int:
     return open_count if isinstance(open_count, int) else 0
 
 
+def _shortlist_presence_counts(work_root: Path) -> tuple[dict[str, int], int]:
+    from repolens.data.errors import ArtifactError
+    from repolens.data.store import read_shortlist
+
+    # Presence counts are a display-only enrichment for the follow-along output.
+    # A missing, legacy, corrupt, oversized, or otherwise non-conforming
+    # shortlist.json must never fail the run; degrade to empty counts instead.
+    # ArtifactError covers SchemaValidationError / LimitExceeded /
+    # CorruptArtifactError; OSError covers FileNotFoundError and unreadable files.
+    try:
+        value = read_shortlist(work_root)
+    except (ArtifactError, OSError, ValueError):
+        return {}, 0
+    raw_items = value.get("items", [])
+    if not isinstance(raw_items, list):
+        return {}, 0
+    counts = {section: 0 for section in PRESENCE_SECTIONS}
+    not_scanned = 0
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        section = str(item.get("presence_section") or "")
+        if section:
+            counts[section] = counts.get(section, 0) + 1
+        presence = item.get("presence")
+        if isinstance(presence, dict) and presence.get("delivery_state") == "not_scanned":
+            not_scanned += 1
+    return counts, not_scanned
+
+
+def _presence_counts_label(counts: dict[str, int]) -> str:
+    if not counts:
+        return "none"
+    return ", ".join(f"{section}={counts.get(section, 0)}" for section in PRESENCE_SECTIONS)
+
+
 def _report_work_root(work_root: Path, resolved_refs: set[str], summary: RunSummary) -> Path:
     if not summary.has_failures:
         return work_root
@@ -2154,6 +2235,8 @@ def _run_done_message(summary: RunSummary) -> str:
         f"Repos included: {len(summary.repo_refs)}",
         f"Main report rows: {summary.report_rows}",
         f"Appendix rows: {_format_counts(summary.appendix_rows_by_label)}",
+        f"Presence counts: {_presence_counts_label(summary.presence_counts)}",
+        f"Not-scanned findings: {summary.not_scanned_count}",
         f"Resume skips: {summary.skipped}",
         f"Failures: {len(summary.failures)}",
         f"Reports directory: {_resolved_path(reports)}",
@@ -2194,6 +2277,10 @@ def _apply_report_result(summary: RunSummary, result: ReportResult) -> None:
     }
     for appendix in result.appendices:
         summary.coverage_gaps_by_label[appendix.label] = dict(appendix.coverage_gaps)
+    if summary.work_root is not None:
+        summary.presence_counts, summary.not_scanned_count = _shortlist_presence_counts(
+            summary.work_root
+        )
 
 
 def _load_existing_report_summary(summary: RunSummary, out_dir: Path) -> None:
@@ -2225,6 +2312,10 @@ def _load_existing_report_summary(summary: RunSummary, out_dir: Path) -> None:
         gaps = _coverage_gaps_from_csv(csv_path)
         if gaps:
             summary.coverage_gaps_by_label[label] = gaps
+    if summary.work_root is not None:
+        summary.presence_counts, summary.not_scanned_count = _shortlist_presence_counts(
+            summary.work_root
+        )
 
 
 def _csv_data_row_count(path: Path) -> int:
@@ -2263,6 +2354,12 @@ def _review_guidance(summary: RunSummary) -> list[str]:
         "artifacts."
     )
     lines.append(f"      {report_review_command}")
+    if summary.not_scanned_count:
+        lines.append(
+            "  - Release policy review required before publishing final artifacts for "
+            f"{summary.not_scanned_count} not-scanned finding(s). Use the report review output "
+            "to record the review."
+        )
     existing_main_paths = [path for path in summary.report_paths if path.exists()]
     if existing_main_paths:
         lines.append("  - Main and presentation reports:")
@@ -2982,9 +3079,11 @@ def _flag_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.flag import run_flag
 
     result = run_flag(args.work_root)
+    presence_counts = result.presence_counts or {}
     summary = (
         f"flagged {result.open_count} open item(s) across {result.component_count} "
-        f"component(s); wrote {result.inventory_path.name}, "
+        f"component(s); presence counts: {_presence_counts_label(presence_counts)}; "
+        f"not-scanned={result.not_scanned_count}; wrote {result.inventory_path.name}, "
         f"{result.shortlist_json_path.name}, {result.shortlist_md_path.name}"
     )
     if result.preserved_decision_count:
@@ -2992,8 +3091,8 @@ def _flag_stage(args: argparse.Namespace) -> CommandResult:
     shortlist_command = f"repolens shortlist --work-root {shlex.quote(str(args.work_root))}"
     summary = f"{summary}\nNext CLI stage: {shortlist_command}"
     if result.open_count > 0:
-        return CommandResult(CommandStatus.FINDINGS_OPEN, summary)
-    return CommandResult(CommandStatus.SUCCESS, summary)
+        return CommandResult(CommandStatus.FINDINGS_OPEN, summary, metadata=result)
+    return CommandResult(CommandStatus.SUCCESS, summary, metadata=result)
 
 
 def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
@@ -3574,6 +3673,8 @@ def _report_done_message(summary: RunSummary) -> str:
             "Report written.",
             f"Main report rows: {summary.report_rows}",
             f"Appendix rows: {_format_counts(summary.appendix_rows_by_label)}",
+            f"Presence counts: {_presence_counts_label(summary.presence_counts)}",
+            f"Not-scanned findings: {summary.not_scanned_count}",
             f"Reports directory: {_resolved_path(reports)}",
             *_review_guidance(summary),
         )

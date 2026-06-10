@@ -836,6 +836,55 @@ class CliTests(unittest.TestCase):
             self.assertIn("<h1>Acme Third-Party Notices</h1>", presentation_html)
             self.assertIn("Prepared for final legal review.", presentation_html)
 
+    def test_flag_cli_prints_presence_counts_and_not_scanned_count(self) -> None:
+        with TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [
+                    {
+                        "schema_version": "1.0",
+                        "name": "copyleft-lib",
+                        "version": "1.2.3",
+                        "repo": "acme-alpha",
+                        "purl": "pkg:npm/copyleft-lib@1.2.3",
+                        "declared_license_raw": "GPL-3.0-only",
+                        "spdx_id": "GPL-3.0-only",
+                        "evidence": {
+                            "source_layer": "syft",
+                            "url": "https://example.invalid/licenses/gpl",
+                        },
+                        "tags": {
+                            "origin": "third-party-oss",
+                            "scope": "runtime",
+                            "distribution": "server",
+                        },
+                        "presence": {
+                            "install_state": "installed",
+                            "delivery_state": "not_scanned",
+                            "relation": "direct",
+                            "path": [],
+                            "platform_match": "unknown",
+                            "source": "syft",
+                            "target": "unknown",
+                            "reopen_on_delivery_change": True,
+                        },
+                        "modified": "unknown",
+                    }
+                ],
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main(["flag", "--work-root", str(work_root)])
+
+            output = stdout.getvalue()
+            self.assertEqual(code, 1)
+            self.assertIn("presence counts:", output)
+            self.assertIn("INSTALLED BUT DELIVERY NOT CONFIRMED - REVIEW=1", output)
+            self.assertIn("not-scanned=1", output)
+
 
 def _fake_clone(options):
     destination = Path(options.destination)

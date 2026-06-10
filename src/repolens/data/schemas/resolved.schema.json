@@ -41,6 +41,60 @@
       },
       "additionalProperties": false
     },
+    "presence": {
+      "type": "object",
+      "required": [
+        "install_state",
+        "delivery_state",
+        "relation",
+        "path",
+        "platform_match",
+        "source",
+        "target",
+        "reopen_on_delivery_change"
+      ],
+      "properties": {
+        "install_state": {
+          "type": "string",
+          "enum": ["installed", "not_installed", "lockfile_only", "unknown"]
+        },
+        "delivery_state": {
+          "type": "string",
+          "enum": ["delivered", "not_delivered", "not_scanned", "unknown"]
+        },
+        "relation": {
+          "type": "string",
+          "enum": [
+            "direct",
+            "transitive",
+            "peer",
+            "optional",
+            "dev",
+            "devOptional",
+            "mixed",
+            "unknown"
+          ]
+        },
+        "path": {"type": "array", "items": {"type": "string"}},
+        "platform_match": {
+          "type": "string",
+          "enum": ["target", "host", "cross_platform", "no", "unknown"]
+        },
+        "source": {"type": "string", "minLength": 1},
+        "target": {"type": "string", "minLength": 1},
+        "reopen_on_delivery_change": {"type": "boolean"},
+        "delivery_artifact": {
+          "type": "object",
+          "properties": {
+            "kind": {"type": "string"},
+            "path": {"type": "string"},
+            "hash": {"type": "string"}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "modified": {
       "anyOf": [
         {"type": "boolean"},
