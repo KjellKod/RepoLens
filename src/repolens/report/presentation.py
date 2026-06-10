@@ -29,12 +29,13 @@ PRESENTATION_COLUMNS = (
     "version",
     "source url",
     "evidence source",
+    "presence",
     "notes",
 )
 DEFAULT_PRESENTATION_TITLE = "RepoLens Presentation Report"
 DATA_LIMITATION_NOTE = "Description is shown when present in resolved metadata; otherwise n/a."
 UNAVAILABLE = "n/a"
-_HTML_COLUMN_WIDTHS = (13, 12, 12, 18, 8, 24, 6, 7)
+_HTML_COLUMN_WIDTHS = (12, 11, 11, 17, 8, 22, 6, 6, 7)
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class PresentationRow:
     version: str
     source_urls: tuple[str, ...]
     evidence_source: str
+    presence_note: str
     review_note: str = ""
 
 
@@ -139,6 +141,7 @@ def presentation_rows_from_disclosure(
                     version=_join(row.versions),
                     source_urls=tuple(row.source_urls),
                     evidence_source=_join(row.evidence_source_layers),
+                    presence_note=_presence_note(row),
                     review_note=_review_note(row, decisions, review_id_for_row),
                 )
                 for row in rows
@@ -201,6 +204,7 @@ def render_presentation_markdown(
                         _markdown_cell(row.version),
                         _markdown_cell(_markdown_source_urls(row.source_urls)),
                         _markdown_cell(row.evidence_source),
+                        _markdown_cell(row.presence_note),
                         _markdown_cell(row.review_note),
                     )
                 )
@@ -326,6 +330,7 @@ def _html_group_section(
                 f"<td>{_html_text(row.version)}</td>",
                 f"<td>{_html_source_urls(row.source_urls)}</td>",
                 f"<td>{_html_text(row.evidence_source)}</td>",
+                f"<td>{_html_text(row.presence_note)}</td>",
                 f"<td>{_html_text(row.review_note)}</td>",
             )
         )
@@ -378,6 +383,7 @@ def _row_values(row: PresentationRow) -> tuple[str, ...]:
         row.version,
         _join(row.source_urls),
         row.evidence_source,
+        row.presence_note,
         row.review_note,
     )
 
@@ -404,6 +410,21 @@ def _review_note(
     if isinstance(note, str):
         return note.strip()
     return ""
+
+
+def _presence_note(row: DisclosureRow) -> str:
+    deliveries = set(row.deliveries)
+    installs = set(row.installs)
+    if "delivered" in deliveries:
+        return "Delivered or shipped; review before release."
+    if "delivery artifact not scanned" in deliveries:
+        return "Delivery artifact was not scanned; RepoLens cannot determine delivery."
+    if "not delivered" in deliveries or "lockfile only" in installs:
+        return (
+            "Not currently delivered. Monitor because a platform, feature, dependency, "
+            "or deployment change could install or include this package later."
+        )
+    return "Delivery status unknown; review before publishing final artifacts."
 
 
 def _markdown_source_urls(source_urls: Sequence[str]) -> str:

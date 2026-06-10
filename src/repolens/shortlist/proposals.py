@@ -19,7 +19,18 @@ from repolens.resolve.purl import parse_purl
 from repolens.security.http_client import Resolver, fetch_url
 from repolens.shortlist.agent import MAX_FETCHES_PER_ITEM, Resolution
 from repolens.shortlist.contexts import ShortlistMetadata, package_for_item
-from repolens.shortlist.verify import verify_agent_resolution
+from repolens.shortlist.verify import VerifyOutcome, verify_agent_resolution
+
+#: Trusted ``browser_evidence`` source markers shared with the renderer
+#: (:func:`repolens.shortlist.render._research_evidence_links`). The ``_default_branch``
+#: variant opts the entry into the code-controlled bold ``review:`` render prefix; the
+#: plain variant renders exactly as any other pinned browser-evidence row. A single source
+#: of truth here prevents the producer and consumer literals from drifting silently
+#: (ux-guidebook§4 consistency).
+GITHUB_LICENSE_DEFAULT_BRANCH_SOURCE_TYPE = "github_license_api_default_branch"
+GITHUB_LICENSE_PINNED_SOURCE_TYPE = "github_license_api"
+
+_LIFTED_GITHUB_HOSTS = frozenset({"github.com", "raw.githubusercontent.com"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,10 +63,7 @@ class ProposalRecord:
 
     def ai_suggestion(self) -> dict[str, Any]:
         source_repo = (
-            dict(self.source_repo)
-            if self.source_repo is not None
-            and _optional_str(self.source_repo.get("provenance")) == "package_metadata"
-            else None
+            _persistable_source_repo(self.source_repo) if self.source_repo is not None else None
         )
         return {
             "component_ref": self.component_ref,
@@ -220,6 +228,10 @@ def _apply_item_proposals(
             record["note"] = f"verify_failed:{source_repo_reason}"
             record["verify_reason"] = source_repo_reason
             continue
+        # Only the provenance-bound GitHub-license path (the gate returned ``None`` above)
+        # may opt into the default-branch relaxation in the verifier; every other caller
+        # (including the legacy ``stage.py`` path) stays fail-closed (plan-03).
+        is_github_license = _is_github_license_proposal(proposal)
         verified = verify_agent_resolution(
             Resolution(
                 spdx_id=proposal.spdx_id,
@@ -227,6 +239,7 @@ def _apply_item_proposals(
                 evidence_anchor=proposal.evidence_anchor,
             ),
             expected_ref=_expected_ref_for_item(record, metadata),
+            allow_default_branch=is_github_license,
             fetcher=fetcher,
             resolver=evidence_resolver,
         )
@@ -243,6 +256,8 @@ def _apply_item_proposals(
         if verified.evidence_anchor:
             evidence["anchor"] = verified.evidence_anchor
         record["evidence"] = evidence
+        if is_github_license:
+            _write_github_license_browser_evidence(record, verified)
         record["note"] = "agent:verified_awaiting_human"
         record["verify_reason"] = verified.reason
         return
@@ -288,20 +303,116 @@ def _github_source_repo_proposal_mismatch(
     owner = _optional_str(source_repo.get("owner"))
     repo = _optional_str(source_repo.get("repo"))
     ref = _optional_str(source_repo.get("ref"))
-    if owner is None or repo is None or ref is None:
+    ref_kind = _optional_str(source_repo.get("ref_kind"))
+    if owner is None or repo is None:
+        return "verify:source_repo_provenance_required"
+    # A provenance-bound proposal expresses "default branch" by setting
+    # ``ref_kind == "default_branch"`` with ``ref`` absent. A bare missing ref with no
+    # such marker still fails closed (fail-closed default preserved).
+    is_default_branch = ref is None and ref_kind == "default_branch"
+    if ref is None and not is_default_branch:
         return "verify:source_repo_provenance_required"
     if parts[1] != owner or parts[2] != repo:
         return "verify:source_repo_mismatch"
-    refs = [value.strip() for value in parse_qs(parsed.query).get("ref", []) if value.strip()]
-    if not refs or refs[0] != ref:
-        return "verify:source_repo_ref_mismatch"
     current = _current_package_source_repos(record, metadata)
     if (owner, repo) not in current:
         return "verify:source_repo_mismatch"
+    urls_refs = [value.strip() for value in parse_qs(parsed.query).get("ref", []) if value.strip()]
+    if is_default_branch:
+        # Symmetric only: source_repo says default branch, so the URL must also be
+        # unpinned. A pinned URL is an asymmetric mismatch — never silently downgraded.
+        if urls_refs:
+            return "verify:source_repo_ref_mismatch"
+        return None
+    # Pinned proposal (``ref`` present): URL must pin the same ref, and the known-version
+    # enforcement in ``_proposal_ref_allowed`` is unchanged.
+    if not urls_refs or urls_refs[0] != ref:
+        return "verify:source_repo_ref_mismatch"
     expected_ref = _expected_ref_for_item(record, metadata)
     if not _proposal_ref_allowed(ref, expected_ref, current[(owner, repo)]):
         return "verify:source_repo_ref_mismatch"
     return None
+
+
+def _is_github_license_proposal(proposal: ProposalRecord) -> bool:
+    """True for an ``api.github.com/repos/O/R/license`` proposal evidence URL.
+
+    Shared predicate used by both the provenance gate precondition and the success path
+    that opts the proposal into the verifier's ``allow_default_branch`` relaxation.
+    """
+
+    parsed = urlparse(proposal.evidence_url or "")
+    if parsed.hostname != "api.github.com":
+        return False
+    parts = [part for part in parsed.path.split("/") if part]
+    return len(parts) == 4 and parts[0] == "repos" and parts[3] == "license"
+
+
+def _lifted_github_url_ok(url: str | None) -> bool:
+    """Exact-match host guard for a lifted ``html_url``/``download_url``.
+
+    Returns ``True`` only for an ``https`` URL whose ``hostname`` is *exactly* one of the
+    human-facing GitHub hosts. Exact equality (not substring) rejects look-alikes such as
+    ``github.com.attacker.test`` and ``evil-github.com``. ``api.github.com`` is excluded —
+    the lifted link is a blob/raw browser link, not the API endpoint.
+    """
+
+    if not isinstance(url, str) or not url:
+        return False
+    parsed = urlparse(url)
+    return parsed.scheme == "https" and parsed.hostname in _LIFTED_GITHUB_HOSTS
+
+
+def _write_github_license_browser_evidence(
+    record: dict[str, Any],
+    verified: VerifyOutcome,
+) -> None:
+    """Record the GitHub-license verification signal and attach a host-validated link.
+
+    The machine-verification fields (``machine_verification`` / ``outcome``) are written
+    unconditionally — the item verified, so the rendered shortlist must keep the ``verified``
+    cell and the default-branch review outcome even when no browser link can be attached.
+    The link itself prefers ``html_url`` (the blob page), falling back to ``download_url``
+    (raw), each only after :func:`_lifted_github_url_ok`; if both are absent or off-host the
+    link is dropped but verification still stands. The default-branch caveat rides in the
+    (renderer-escaped) label text because the renderer ignores a ``ref`` field; the bold
+    ``review:`` emphasis is emitted by trusted render code keyed on the trusted
+    ``source_type`` marker, never injected into the label (ux-guidebook§2/§4).
+    """
+
+    research_evidence = dict(record.get("research_evidence") or {})
+    research_evidence["machine_verification"] = "verified"
+    research_evidence["outcome"] = verified.reason
+    # Drop any inherited browser_evidence: this verifier run owns the verified/default-branch
+    # outcome, and render.py keys the trusted ``review:`` prefix on it. A stale, un-host-
+    # validated link from a prior research block must not ride under this run's outcome — only
+    # the freshly validated lifted link below may.
+    research_evidence.pop("browser_evidence", None)
+
+    if _lifted_github_url_ok(verified.html_url):
+        url = verified.html_url
+    elif _lifted_github_url_ok(verified.download_url):
+        url = verified.download_url
+    else:
+        url = None
+
+    if url is not None:
+        spdx_id = verified.spdx_id
+        if verified.ref_pinned:
+            label = f"GitHub license ({spdx_id})"
+            source_type = GITHUB_LICENSE_PINNED_SOURCE_TYPE
+        else:
+            label = f"🔎 GitHub license ({spdx_id} · default branch, not version-pinned)"
+            source_type = GITHUB_LICENSE_DEFAULT_BRANCH_SOURCE_TYPE
+        research_evidence["browser_evidence"] = [
+            {
+                "label": label,
+                "url": url,
+                "source_type": source_type,
+                "anchor": spdx_id,
+            }
+        ]
+    record["research_evidence"] = research_evidence
 
 
 def _current_package_source_repos(
@@ -573,6 +684,51 @@ def _confidence(value: object) -> str | int | float | None:
         text = value.strip()
         return text or None
     return None
+
+
+def _persistable_source_repo(source_repo: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Project a proposal ``source_repo`` onto the persisted shortlist schema, or drop it.
+
+    ``ai_suggestion`` is written to ``shortlist.json`` even when the proposal is rejected, so
+    the stored ``source_repo`` must validate against ``shortlist.schema.json`` (its required
+    keys, the ``ref_kind in {version, commit}`` -> ``ref`` rule, and ``additionalProperties:
+    false``) or ``store.write_shortlist`` aborts the whole stage instead of leaving the item
+    open. A non-conformant ``source_repo`` is dropped (``None``) — losing only the audit echo
+    of a proposal that was going to be rejected anyway. Verification reads the original
+    ``proposal.source_repo``, never this projection, so dropping it never changes a decision.
+    """
+
+    if _optional_str(source_repo.get("provenance")) != "package_metadata":
+        return None
+    if source_repo.get("host") != "github.com":
+        return None
+    owner = _optional_str(source_repo.get("owner"))
+    repo = _optional_str(source_repo.get("repo"))
+    provenance_detail = _optional_str(source_repo.get("provenance_detail"))
+    bound_to_package = source_repo.get("bound_to_package")
+    if owner is None or repo is None or provenance_detail is None:
+        return None
+    if not isinstance(bound_to_package, bool):
+        return None
+    ref_kind = source_repo.get("ref_kind")
+    if ref_kind is not None and ref_kind not in {"version", "commit", "unknown", "default_branch"}:
+        return None
+    ref = _optional_str(source_repo.get("ref"))
+    if ref_kind in {"version", "commit"} and ref is None:
+        return None
+    projected: dict[str, Any] = {
+        "host": "github.com",
+        "owner": owner,
+        "repo": repo,
+        "provenance": "package_metadata",
+        "provenance_detail": provenance_detail,
+        "bound_to_package": bound_to_package,
+    }
+    if ref is not None:
+        projected["ref"] = ref
+    if ref_kind is not None:
+        projected["ref_kind"] = ref_kind
+    return projected
 
 
 __all__ = [

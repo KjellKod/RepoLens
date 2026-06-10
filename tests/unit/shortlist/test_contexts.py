@@ -116,6 +116,8 @@ def test_emit_contexts_matches_agent_request_wrapped_context(tmp_path: Path) -> 
         "origin": "third-party-oss",
         "scope": "runtime",
         "distribution": "server",
+        "presence_section": "DELIVERY ARTIFACT NOT SCANNED - UNKNOWN",
+        "presence": None,
         "evidence_url": _DEPS_DEV_URL,
         "evidence_anchor": "MIT",
         "found_in": ["acme-alpha"],

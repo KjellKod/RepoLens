@@ -20,6 +20,13 @@ import base64
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+from repolens.presence.sections import (
+    DELIVERED_SECTION,
+    INSTALLED_REVIEW_SECTION,
+    LOCKFILE_MONITOR_SECTION,
+    NOT_SCANNED_UNKNOWN_SECTION,
+    PRESENCE_SECTIONS,
+)
 from repolens.security.sanitize import markdown_link, render_code_span, sanitize_markdown
 from repolens.shortlist.contexts import ShortlistMetadata, triage_for_item
 from repolens.shortlist.grouping import (
@@ -29,8 +36,23 @@ from repolens.shortlist.grouping import (
     build_groups,
     encode_group_key,
 )
+from repolens.shortlist.identity import decision_ref_for_item
+from repolens.shortlist.overrides import (
+    HUMAN_OVERRIDE_MACHINE_VERIFICATION,
+    HUMAN_OVERRIDE_OUTCOME,
+    HUMAN_OVERRIDE_SOURCE_TYPE,
+)
+from repolens.shortlist.proposals import GITHUB_LICENSE_DEFAULT_BRANCH_SOURCE_TYPE
 
 _NO_EVIDENCE_URL = "no evidence url"
+
+#: The integrity-protected signal that the surrounding ``research_evidence`` was produced by
+#: the trusted verified-success proposals path, not borrowed by an ingested artifact. The
+#: ``verify:*`` outcomes are NOT in ``evidence._EVIDENCE_OUTCOMES`` (the ingestion allowlist),
+#: so a persisted/ingested evidence artifact cannot forge this outcome through the strict
+#: ingestion schema — making the ``**review:**`` prefix below genuinely trustworthy.
+_VERIFIED_DEFAULT_BRANCH_OUTCOME = "verify:exact_anchor_default_branch"
+_VERIFIED_MACHINE_VERIFICATION = "verified"
 
 #: Stable line-key markers. ``REF_PREFIX``/``REF_SUFFIX`` survive ``sanitize_markdown`` as
 #: ``&lt;!-- … --&gt;`` (the ``<``/``>`` are escaped) — the decisions parser matches the
@@ -51,6 +73,12 @@ _EMPTY_TIER_HINTS = {
     "LOW-CONFIDENCE / CONFLICT": (
         "_none - no unresolved, abstained, failed-verification, or low-confidence items._"
     ),
+}
+_EMPTY_SECTION_HINTS = {
+    DELIVERED_SECTION: "_none - no delivered findings in this run._",
+    INSTALLED_REVIEW_SECTION: "_none - no installed findings need delivery review in this run._",
+    LOCKFILE_MONITOR_SECTION: "_none - no lockfile-only or optional future risks in this run._",
+    NOT_SCANNED_UNKNOWN_SECTION: "_none - no unclassified delivery-artifact findings in this run._",
 }
 
 
@@ -80,9 +108,12 @@ def render_shortlist_markdown(
 
     resolved_metadata = metadata or ShortlistMetadata(triage_by_ref={})
     groups = build_groups(items, resolved_metadata)
-    by_tier: dict[str, list[ShortlistGroup]] = {tier: [] for tier in TIER_ORDER}
+    by_section: dict[str, list[ShortlistGroup]] = {section: [] for section in PRESENCE_SECTIONS}
     for group in groups:
-        by_tier.setdefault(group.tier, []).append(group)
+        section = group.key.presence_section
+        if section not in by_section:
+            section = NOT_SCANNED_UNKNOWN_SECTION
+        by_section.setdefault(section, []).append(group)
 
     lines = [
         "# RepoLens Shortlist",
@@ -92,16 +123,28 @@ def render_shortlist_markdown(
         "decisions. Do not edit the `rpl:group` or `rpl:ref` markers.",
         "",
     ]
-    for tier in TIER_ORDER:
-        lines.append(f"## {tier}")
+    for section in PRESENCE_SECTIONS:
+        lines.append(f"## {section}")
         lines.append("")
-        tier_groups = by_tier.get(tier, [])
-        if not tier_groups:
-            lines.append(_EMPTY_TIER_HINTS.get(tier, "_none_"))
-        else:
-            for group in tier_groups:
-                lines.extend(_render_group(group, metadata=resolved_metadata))
-                lines.append("")
+        section_groups = by_section.get(section, [])
+        if not section_groups:
+            lines.append(_EMPTY_SECTION_HINTS[section])
+            lines.append("")
+            continue
+        by_tier: dict[str, list[ShortlistGroup]] = {tier: [] for tier in TIER_ORDER}
+        for group in section_groups:
+            by_tier.setdefault(group.tier, []).append(group)
+        for tier in TIER_ORDER:
+            lines.append(f"### {tier}")
+            lines.append("")
+            tier_groups = by_tier.get(tier, [])
+            if not tier_groups:
+                lines.append(_EMPTY_TIER_HINTS.get(tier, "_none_"))
+            else:
+                for group in tier_groups:
+                    lines.extend(_render_group(group, metadata=resolved_metadata))
+                    lines.append("")
+            lines.append("")
         lines.append("")
 
     return sanitize_markdown("\n".join(lines).rstrip() + "\n")
@@ -144,24 +187,26 @@ def _render_item(
     metadata: ShortlistMetadata,
 ) -> str:
     component_ref = str(item["component_ref"])
+    decision_ref = decision_ref_for_item(item)
     label = _component_label(component_ref, item)
     note = item.get("note") or str(item["reason"])
     evidence = item["evidence"] if isinstance(item.get("evidence"), Mapping) else {}
     research = (
         item.get("research_evidence") if isinstance(item.get("research_evidence"), Mapping) else {}
     )
-    key = f"{REF_PREFIX}{encode_component_ref(component_ref)}{REF_SUFFIX}"
+    key = f"{REF_PREFIX}{encode_component_ref(decision_ref)}{REF_SUFFIX}"
     status = str(item.get("status") or "open")
     checkbox = _checkbox_for_status(status)
     decided = _decided_suffix(item)
     found_in = _found_in_cell(item, metadata)
+    presence = _presence_cell(item)
     evidence_cell = _combined_evidence_cell(evidence, research)
     verifier = _machine_verification_cell(research)
     provenance = _source_candidate_cell(research)
     provenance_text = f" — {provenance}" if provenance else ""
     return (
         f"{indent}- {checkbox} {label} — found in {found_in} — {note} — "
-        f"{evidence_cell}{provenance_text} — {verifier}{decided} {key}"
+        f"{presence} — {evidence_cell}{provenance_text} — {verifier}{decided} {key}"
     )
 
 
@@ -237,6 +282,16 @@ def _combined_evidence_cell(
 
 def _research_evidence_links(research: Mapping[str, Any]) -> str | None:
     links: list[str] = []
+    # The **review:** prefix is gated on an integrity-protected signal on the surrounding
+    # research mapping, NOT on the per-entry free-form source_type. The verify:* outcome +
+    # machine_verification=="verified" pair is set only by the trusted verified-success
+    # proposals path and is rejected by the evidence-ingestion outcome allowlist
+    # (evidence._EVIDENCE_OUTCOMES), so an ingested artifact cannot borrow the reviewer
+    # signpost by merely asserting source_type=="github_license_api_default_branch".
+    prefix_trusted = (
+        _non_empty(research.get("outcome")) == _VERIFIED_DEFAULT_BRANCH_OUTCOME
+        and _non_empty(research.get("machine_verification")) == _VERIFIED_MACHINE_VERIFICATION
+    )
     browser_evidence = research.get("browser_evidence")
     if isinstance(browser_evidence, list):
         for entry in browser_evidence:
@@ -245,7 +300,22 @@ def _research_evidence_links(research: Mapping[str, Any]) -> str | None:
             label = _non_empty(entry.get("label"))
             url = _non_empty(entry.get("url"))
             if label is not None and url is not None:
-                links.append(markdown_link(label, url))
+                link = markdown_link(label, url)
+                if _is_human_override(research) and entry.get("source_type") == (
+                    HUMAN_OVERRIDE_SOURCE_TYPE
+                ):
+                    link = f"human override evidence (unverified): {link}"
+                # Trusted, code-controlled emphasis for the unpinned default-branch row
+                # only: the prefix is a literal here (NOT derived from the entry) and is
+                # emitted OUTSIDE markdown_link so the bold is not escaped. The label is
+                # still escaped by markdown_link; the caveat rides in the (escaped) label
+                # as plain Unicode (ux-guidebook§2 signifier, §3 reserved emphasis).
+                if (
+                    prefix_trusted
+                    and entry.get("source_type") == GITHUB_LICENSE_DEFAULT_BRANCH_SOURCE_TYPE
+                ):
+                    link = f"**review:** {link}"
+                links.append(link)
     conflicts = research.get("conflicts")
     if isinstance(conflicts, list):
         for entry in conflicts:
@@ -275,6 +345,16 @@ def _lookup_trail(research: Mapping[str, Any]) -> str | None:
 def _machine_verification_cell(research: Mapping[str, Any]) -> str:
     if not research:
         return "machine verification: not researched"
+    if _is_human_override(research):
+        parts = ["machine verification: `human_override_unverified`"]
+        likely_spdx = _non_empty(research.get("likely_spdx"))
+        if likely_spdx is not None:
+            parts.append(f"human override SPDX: {render_code_span(likely_spdx)}")
+        decided_by = _non_empty(research.get("override_decided_by"))
+        if decided_by is not None:
+            parts.append(f"decided by: {render_code_span(decided_by)}")
+        parts.append("evidence verified: `false`")
+        return "; ".join(parts)
     parts = [f"machine verification: {render_code_span(research.get('machine_verification'))}"]
     likely_spdx = _non_empty(research.get("likely_spdx"))
     if likely_spdx is not None:
@@ -286,6 +366,11 @@ def _machine_verification_cell(research: Mapping[str, Any]) -> str:
 
 
 def _source_candidate_cell(research: Mapping[str, Any]) -> str | None:
+    if _is_human_override(research):
+        reason = _non_empty(research.get("override_reason"))
+        if reason is None:
+            return "human override candidate (unverified)"
+        return f"human override candidate (unverified): {render_code_span(reason)}"
     if _human_candidate_spdx(research) is None:
         return None
     source_repo = research.get("source_repo")
@@ -299,6 +384,8 @@ def _source_candidate_cell(research: Mapping[str, Any]) -> str | None:
 
 
 def _human_candidate_spdx(research: Mapping[str, Any]) -> str | None:
+    if _is_human_override(research):
+        return _non_empty(research.get("human_candidate_spdx"))
     candidate = _non_empty(research.get("human_candidate_spdx"))
     if candidate is None:
         return None
@@ -310,6 +397,13 @@ def _human_candidate_spdx(research: Mapping[str, Any]) -> str | None:
     if source_repo.get("bound_to_package") is True:
         return None
     return candidate
+
+
+def _is_human_override(research: Mapping[str, Any]) -> bool:
+    return (
+        _non_empty(research.get("outcome")) == HUMAN_OVERRIDE_OUTCOME
+        and _non_empty(research.get("machine_verification")) == HUMAN_OVERRIDE_MACHINE_VERIFICATION
+    )
 
 
 def _found_in_cell(item: Mapping[str, Any], metadata: ShortlistMetadata) -> str:
@@ -326,6 +420,43 @@ def _found_in_cell(item: Mapping[str, Any], metadata: ShortlistMetadata) -> str:
         return render_code_span("unknown repo")
     display = (*found_in[:5], "...") if len(found_in) > 5 else found_in
     return ", ".join(render_code_span(value) for value in display)
+
+
+def _presence_cell(item: Mapping[str, Any]) -> str:
+    presence = item.get("presence") if isinstance(item.get("presence"), Mapping) else {}
+    if not presence:
+        return "delivery artifact not scanned"
+    install_state = _non_empty(presence.get("install_state")) or "unknown"
+    delivery_state = _non_empty(presence.get("delivery_state")) or "unknown"
+    relation = _non_empty(presence.get("relation")) or "unknown"
+    platform = _non_empty(presence.get("platform_match")) or "unknown"
+    path = presence.get("path")
+    path_text = (
+        " > ".join(str(value) for value in path if str(value).strip())
+        if isinstance(path, list)
+        else ""
+    )
+    if {
+        install_state,
+        delivery_state,
+        relation,
+        platform,
+    } == {"unknown"} and not path_text:
+        return "delivery artifact not scanned"
+    delivery_text = (
+        "delivery artifact not scanned"
+        if delivery_state == "not_scanned"
+        else delivery_state.replace("_", " ")
+    )
+    parts = [
+        f"delivery: {delivery_text}",
+        f"install: {install_state.replace('_', ' ')}",
+        f"relation: {relation}",
+    ]
+    if path_text:
+        parts.append(f"path: {path_text}")
+    parts.append(f"platform: {platform.replace('_', ' ')}")
+    return "; ".join(parts)
 
 
 def _non_empty(value: object) -> str | None:

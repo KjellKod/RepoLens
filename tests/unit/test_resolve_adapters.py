@@ -193,6 +193,35 @@ def test_package_description_reads_official_registry_metadata() -> None:
     assert seen == ["https://pypi.org/pypi/acme-lib/1.2.3/json"]
 
 
+def test_package_description_skips_badge_description_for_summary() -> None:
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del url, options
+        return FetchResult(
+            url="https://registry.npmjs.org/@smithy%2Fmiddleware-retry/4.4.29",
+            status=200,
+            headers=(),
+            body=(
+                b'{"description":"[![NPM version](https://img.shields.io/npm/v/'
+                b"@smithy/middleware-retry/latest.svg)](https://www.npmjs.com/package/"
+                b'@smithy/middleware-retry)","summary":"Shared retry utilities."}'
+            ),
+        )
+
+    description = package_description(
+        PackageFact(
+            name="@smithy/middleware-retry",
+            version="4.4.29",
+            package_type="npm",
+            repo="acme-alpha",
+            purl="pkg:npm/%40smithy/middleware-retry@4.4.29",
+            declared_license_raw=None,
+        ),
+        fetcher=fetcher,
+    )
+
+    assert description == "Shared retry utilities."
+
+
 def test_python_adapter_reads_exact_license_expression_field() -> None:
     def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
         del options

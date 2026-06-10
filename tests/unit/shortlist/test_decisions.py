@@ -10,6 +10,7 @@ from repolens.shortlist.decisions import (
     parse_review_decisions,
 )
 from repolens.shortlist.grouping import build_groups, group_membership_by_ref
+from repolens.shortlist.identity import build_decision_ref
 from repolens.shortlist.render import encode_component_ref, render_shortlist_markdown
 
 
@@ -29,6 +30,23 @@ def _tick_first_group(markdown: str, mark: str) -> str:
     out = []
     for line in markdown.splitlines():
         if "rpl:group=" in line and "- [ ] " in line:
+            line = line.replace("- [ ] ", f"- [{mark}] ", 1)
+            out.append(line)
+            out.extend(markdown.splitlines()[len(out) :])
+            return "\n".join(out) + "\n"
+        out.append(line)
+    return markdown
+
+
+def _tick_group_in_section(markdown: str, section: str, mark: str) -> str:
+    out: list[str] = []
+    in_section = False
+    for line in markdown.splitlines():
+        if line == f"## {section}":
+            in_section = True
+        elif in_section and line.startswith("## "):
+            in_section = False
+        if in_section and "rpl:group=" in line and "- [ ] " in line:
             line = line.replace("- [ ] ", f"- [{mark}] ", 1)
             out.append(line)
             out.extend(markdown.splitlines()[len(out) :])
@@ -158,9 +176,9 @@ def test_reject_mark_recovered() -> None:
 def test_empty_tiers_explain_when_they_fill() -> None:
     markdown = render_shortlist_markdown([])
 
-    assert "this fills after RepoLens verifies low-risk allow proposals" in markdown
-    assert "this fills for review/block items with enough evidence" in markdown
-    assert "no unresolved, abstained, failed-verification" in markdown
+    assert "_none - no delivered findings in this run._" in markdown
+    assert "_none - no lockfile-only or optional future risks in this run._" in markdown
+    assert "this fills after RepoLens verifies low-risk allow proposals" not in markdown
 
 
 def test_group_label_distinguishes_open_from_total_items() -> None:
@@ -508,3 +526,83 @@ def test_item_reject_does_not_promote_external_human_candidate() -> None:
 
     assert updated[0]["status"] == "rejected"
     assert updated[0]["candidate_spdx"] is None
+
+
+def test_item_decision_only_applies_to_matching_presence_split_ref() -> None:
+    component_ref = "sharp|LGPL-3.0-only"
+    delivered_ref = build_decision_ref(component_ref, "DELIVERED / SHIPPED - ACTION REQUIRED")
+    monitor_ref = build_decision_ref(
+        component_ref,
+        "LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR",
+    )
+    items = [
+        {
+            **_needs_judgment_items()[0],
+            "component_ref": component_ref,
+            "decision_ref": delivered_ref,
+            "presence_section": "DELIVERED / SHIPPED - ACTION REQUIRED",
+        },
+        {
+            **_needs_judgment_items()[0],
+            "component_ref": component_ref,
+            "decision_ref": monitor_ref,
+            "presence_section": "LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR",
+        },
+    ]
+    markdown = render_shortlist_markdown(items)
+    parsed = parse_review_decisions(_tick(markdown, delivered_ref, "x"))
+
+    updated = apply_decisions(
+        items,
+        parsed.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+    )
+
+    by_ref = {str(item["decision_ref"]): item for item in updated}
+    assert by_ref[delivered_ref]["status"] == "approved"
+    assert by_ref[monitor_ref]["status"] == "open"
+
+
+def test_group_decision_only_applies_to_matching_presence_section() -> None:
+    component_ref = "sharp|LGPL-3.0-only"
+    delivered_section = "DELIVERED / SHIPPED - ACTION REQUIRED"
+    monitor_section = "LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR"
+    delivered_ref = build_decision_ref(component_ref, delivered_section)
+    monitor_ref = build_decision_ref(component_ref, monitor_section)
+    items = [
+        {
+            **_needs_judgment_items()[0],
+            "component_ref": component_ref,
+            "decision_ref": delivered_ref,
+            "presence_section": delivered_section,
+        },
+        {
+            **_needs_judgment_items()[0],
+            "component_ref": component_ref,
+            "decision_ref": monitor_ref,
+            "presence_section": monitor_section,
+        },
+    ]
+    metadata = ShortlistMetadata(triage_by_ref={})
+    groups = build_groups(items, metadata)
+    markdown = _tick_group_in_section(
+        render_shortlist_markdown(items, metadata=metadata),
+        monitor_section,
+        "x",
+    )
+    parsed = parse_review_decisions(markdown)
+
+    updated = apply_decisions(
+        items,
+        parsed.item_decisions,
+        identity="reviewer-sentinel",
+        now="2026-06-02T00:00:00Z",
+        group_decisions=parsed.group_decisions,
+        group_membership=group_membership_by_ref(groups),
+    )
+
+    by_ref = {str(item["decision_ref"]): item for item in updated}
+    assert by_ref[delivered_ref]["status"] == "open"
+    assert by_ref[monitor_ref]["status"] == "approved"
+    assert by_ref[monitor_ref]["decided_via"] == "group"

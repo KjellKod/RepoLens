@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import json
+from pathlib import Path
 
 import pytest
 
@@ -111,6 +113,21 @@ def test_shortlist_proposals_reject_unknown_fields(
         validate_artifact(shortlist_proposals, "shortlist_proposals")
 
 
+def test_shortlist_overrides_reject_unknown_fields() -> None:
+    overrides = [
+        {
+            "component_ref": "zope.site|UNKNOWN",
+            "spdx_id": "ZPL-2.1",
+            "reason": "manual correction",
+            "decided_by": "kjell",
+            "unexpected": "drift",
+        }
+    ]
+
+    with pytest.raises(SchemaValidationError, match="unexpected"):
+        validate_artifact(overrides, "shortlist_overrides")
+
+
 def test_shortlist_accepts_research_evidence_field(shortlist: dict[str, object]) -> None:
     items = shortlist["items"]
     assert isinstance(items, list)
@@ -136,4 +153,49 @@ def test_shortlist_accepts_research_evidence_field(shortlist: dict[str, object])
         ],
     }
 
+    validate_artifact(shortlist, "shortlist")
+
+
+def test_presence_schema_copies_stay_identical(repo_root: Path) -> None:
+    schema_dir = repo_root / "src" / "repolens" / "data" / "schemas"
+    resolved = json.loads((schema_dir / "resolved.schema.json").read_text(encoding="utf-8"))
+    inventory = json.loads((schema_dir / "inventory.schema.json").read_text(encoding="utf-8"))
+    shortlist = json.loads((schema_dir / "shortlist.schema.json").read_text(encoding="utf-8"))
+
+    assert (
+        resolved["properties"]["presence"]
+        == inventory["properties"]["components"]["items"]["properties"]["presence"]
+    )
+    assert (
+        resolved["properties"]["presence"]
+        == shortlist["properties"]["items"]["items"]["properties"]["presence"]
+    )
+
+
+def test_presence_blocks_are_valid_when_present(
+    resolved_record: dict[str, object],
+    inventory: dict[str, object],
+    shortlist: dict[str, object],
+) -> None:
+    presence = {
+        "install_state": "installed",
+        "delivery_state": "not_scanned",
+        "relation": "direct",
+        "path": ["root", "acme-lib"],
+        "platform_match": "unknown",
+        "source": "syft",
+        "target": "unknown",
+        "reopen_on_delivery_change": True,
+    }
+    resolved_record["presence"] = presence
+    components = inventory["components"]
+    assert isinstance(components, list)
+    components[0]["presence"] = presence
+    items = shortlist["items"]
+    assert isinstance(items, list)
+    items[0]["presence"] = presence
+    items[0]["presence_section"] = "INSTALLED BUT DELIVERY NOT CONFIRMED - REVIEW"
+
+    validate_artifact(resolved_record, "resolved")
+    validate_artifact(inventory, "inventory")
     validate_artifact(shortlist, "shortlist")

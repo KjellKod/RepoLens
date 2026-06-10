@@ -27,6 +27,7 @@ from repolens.bootstrap.cache import (
     load_syft_pin,
 )
 from repolens.bootstrap.errors import IntegrityError, UsageError
+from repolens.presence.sections import PRESENCE_SECTIONS
 from repolens.report import ReportGateOpen, ReportResult, render_main_report
 from repolens.security.redaction import redact_tokens
 
@@ -102,6 +103,8 @@ class RunSummary:
     appendix_rows_by_label: dict[str, int] = field(default_factory=dict)
     appendix_paths_by_label: dict[str, tuple[Path, Path]] = field(default_factory=dict)
     coverage_gaps_by_label: dict[str, dict[str, int]] = field(default_factory=dict)
+    presence_counts: dict[str, int] = field(default_factory=dict)
+    not_scanned_count: int = 0
     docx_skipped: bool = False
 
     @property
@@ -757,6 +760,15 @@ def _configure_shortlist_parser(subparser: argparse.ArgumentParser) -> None:
         metavar="PATH",
         help="Read deterministic research evidence JSON and preserve browser evidence.",
     )
+    subparser.add_argument(
+        "--overrides",
+        type=Path,
+        metavar="PATH",
+        help=(
+            "Read local human license overrides from <work-root>/PATH; records candidates "
+            "as human_override_unverified and never approves rows."
+        ),
+    )
     subparser.set_defaults(handler=_shortlist_stage)
     actions = subparser.add_subparsers(
         dest="shortlist_action",
@@ -805,6 +817,40 @@ def _configure_shortlist_parser(subparser: argparse.ArgumentParser) -> None:
         help="shortlist.review.md to write (default: <work-root>/shortlist.review.md).",
     )
     research_parser.set_defaults(handler=_shortlist_research_stage)
+
+    overrides_parser = actions.add_parser(
+        "overrides",
+        help="Show or validate local human license override artifacts.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Human license overrides are local operator corrections. They can set "
+            "candidate SPDX values, but evidence stays human-supplied and unverified."
+        ),
+    )
+    override_actions = overrides_parser.add_subparsers(
+        dest="shortlist_overrides_action",
+        metavar="<action>",
+        title="override actions",
+        required=True,
+    )
+    schema_parser = override_actions.add_parser(
+        "schema",
+        help="Print the shortlist.overrides.json schema.",
+    )
+    schema_parser.set_defaults(handler=_shortlist_overrides_schema)
+    validate_parser = override_actions.add_parser(
+        "validate",
+        help="Validate an override artifact against the current shortlist.",
+    )
+    validate_parser.add_argument("path", type=Path, metavar="PATH")
+    validate_parser.add_argument(
+        "--work-root",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Work root containing shortlist.json.",
+    )
+    validate_parser.set_defaults(handler=_shortlist_overrides_validate)
 
 
 def _configure_report_parser(subparser: argparse.ArgumentParser) -> None:
@@ -1520,9 +1566,13 @@ def _run_command(args: argparse.Namespace) -> CommandResult:
 
     if _flag_outputs_current(work_root, resolved_refs):
         _run_banner(args, "flag", "skipped (inventory/shortlist current)")
+        summary.presence_counts, summary.not_scanned_count = _shortlist_presence_counts(work_root)
     else:
         flag_result = _flag_stage(_stage_args(args, work_root=work_root))
         _run_banner(args, "flag", _first_line(flag_result.message))
+        if hasattr(flag_result.metadata, "presence_counts"):
+            summary.presence_counts = dict(flag_result.metadata.presence_counts or {})
+            summary.not_scanned_count = int(flag_result.metadata.not_scanned_count)
     _run_step_pause(args, "flag")
 
     shortlist_result = _run_shortlist_loop(args, work_root, interactive=interactive)
@@ -1735,7 +1785,16 @@ def _run_shortlist_loop(
     while True:
         _shortlist_stage(_stage_args(args, work_root=work_root, emit_contexts_path=contexts_path))
         open_count = _shortlist_open_count(work_root)
-        _run_banner(args, "shortlist", f"{open_count} open item(s); contexts at {contexts_path}")
+        presence_counts, not_scanned_count = _shortlist_presence_counts(work_root)
+        _run_banner(
+            args,
+            "shortlist",
+            (
+                f"{open_count} open item(s); presence counts: "
+                f"{_presence_counts_label(presence_counts)}; "
+                f"not-scanned={not_scanned_count}; contexts at {contexts_path}"
+            ),
+        )
         if open_count == 0:
             return None
 
@@ -1750,10 +1809,15 @@ def _run_shortlist_loop(
                     )
                 )
                 open_count = _shortlist_open_count(work_root)
+                presence_counts, not_scanned_count = _shortlist_presence_counts(work_root)
                 _run_banner(
                     args,
                     "shortlist",
-                    f"{open_count} open item(s) after research artifacts",
+                    (
+                        f"{open_count} open item(s) after research artifacts; presence counts: "
+                        f"{_presence_counts_label(presence_counts)}; "
+                        f"not-scanned={not_scanned_count}"
+                    ),
                 )
                 if open_count == 0:
                     return None
@@ -1763,6 +1827,8 @@ def _run_shortlist_loop(
                 contexts_path,
                 proposals_path,
                 evidence_path,
+                presence_counts=presence_counts,
+                not_scanned_count=not_scanned_count,
             )
             return CommandResult(CommandStatus.FINDINGS_OPEN, instruction)
 
@@ -1797,7 +1863,16 @@ def _run_shortlist_loop(
                 )
             )
             open_count = _shortlist_open_count(work_root)
-            _run_banner(args, "shortlist", f"{open_count} open item(s) after research artifacts")
+            presence_counts, not_scanned_count = _shortlist_presence_counts(work_root)
+            _run_banner(
+                args,
+                "shortlist",
+                (
+                    f"{open_count} open item(s) after research artifacts; presence counts: "
+                    f"{_presence_counts_label(presence_counts)}; "
+                    f"not-scanned={not_scanned_count}"
+                ),
+            )
             if open_count == 0:
                 return None
 
@@ -1808,7 +1883,15 @@ def _run_shortlist_loop(
         )
         _shortlist_stage(_stage_args(args, work_root=work_root))
         open_count = _shortlist_open_count(work_root)
-        _run_banner(args, "shortlist", f"{open_count} open item(s) after human decisions")
+        presence_counts, not_scanned_count = _shortlist_presence_counts(work_root)
+        _run_banner(
+            args,
+            "shortlist",
+            (
+                f"{open_count} open item(s) after human decisions; presence counts: "
+                f"{_presence_counts_label(presence_counts)}; not-scanned={not_scanned_count}"
+            ),
+        )
         if open_count == 0:
             return None
 
@@ -1819,6 +1902,9 @@ def _shortlist_artifact_instruction(
     contexts_path: Path,
     proposals_path: Path,
     evidence_path: Path,
+    *,
+    presence_counts: dict[str, int] | None = None,
+    not_scanned_count: int = 0,
 ) -> str:
     review_path = work_root / "shortlist.review.md"
     research_command = _shortlist_research_command(
@@ -1829,8 +1915,10 @@ def _shortlist_artifact_instruction(
         review_path,
     )
     ingest_command = _shortlist_ingest_command(work_root, proposals_path, evidence_path)
+    counts_line = _presence_counts_label(presence_counts or {})
     return (
         f"Open shipped-license findings: {open_count}; report is halted before disclosure.\n"
+        f"Presence counts: {counts_line}; not-scanned={not_scanned_count}.\n"
         f"Contexts: {contexts_path}\n"
         f"Optional proposals: {proposals_path}\n"
         f"Research evidence: {evidence_path}\n"
@@ -1978,6 +2066,42 @@ def _shortlist_open_count(work_root: Path) -> int:
     return open_count if isinstance(open_count, int) else 0
 
 
+def _shortlist_presence_counts(work_root: Path) -> tuple[dict[str, int], int]:
+    from repolens.data.errors import ArtifactError
+    from repolens.data.store import read_shortlist
+
+    # Presence counts are a display-only enrichment for the follow-along output.
+    # A missing, legacy, corrupt, oversized, or otherwise non-conforming
+    # shortlist.json must never fail the run; degrade to empty counts instead.
+    # ArtifactError covers SchemaValidationError / LimitExceeded /
+    # CorruptArtifactError; OSError covers FileNotFoundError and unreadable files.
+    try:
+        value = read_shortlist(work_root)
+    except (ArtifactError, OSError, ValueError):
+        return {}, 0
+    raw_items = value.get("items", [])
+    if not isinstance(raw_items, list):
+        return {}, 0
+    counts = {section: 0 for section in PRESENCE_SECTIONS}
+    not_scanned = 0
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        section = str(item.get("presence_section") or "")
+        if section:
+            counts[section] = counts.get(section, 0) + 1
+        presence = item.get("presence")
+        if isinstance(presence, dict) and presence.get("delivery_state") == "not_scanned":
+            not_scanned += 1
+    return counts, not_scanned
+
+
+def _presence_counts_label(counts: dict[str, int]) -> str:
+    if not counts:
+        return "none"
+    return ", ".join(f"{section}={counts.get(section, 0)}" for section in PRESENCE_SECTIONS)
+
+
 def _report_work_root(work_root: Path, resolved_refs: set[str], summary: RunSummary) -> Path:
     if not summary.has_failures:
         return work_root
@@ -2111,6 +2235,8 @@ def _run_done_message(summary: RunSummary) -> str:
         f"Repos included: {len(summary.repo_refs)}",
         f"Main report rows: {summary.report_rows}",
         f"Appendix rows: {_format_counts(summary.appendix_rows_by_label)}",
+        f"Presence counts: {_presence_counts_label(summary.presence_counts)}",
+        f"Not-scanned findings: {summary.not_scanned_count}",
         f"Resume skips: {summary.skipped}",
         f"Failures: {len(summary.failures)}",
         f"Reports directory: {_resolved_path(reports)}",
@@ -2151,6 +2277,10 @@ def _apply_report_result(summary: RunSummary, result: ReportResult) -> None:
     }
     for appendix in result.appendices:
         summary.coverage_gaps_by_label[appendix.label] = dict(appendix.coverage_gaps)
+    if summary.work_root is not None:
+        summary.presence_counts, summary.not_scanned_count = _shortlist_presence_counts(
+            summary.work_root
+        )
 
 
 def _load_existing_report_summary(summary: RunSummary, out_dir: Path) -> None:
@@ -2182,6 +2312,10 @@ def _load_existing_report_summary(summary: RunSummary, out_dir: Path) -> None:
         gaps = _coverage_gaps_from_csv(csv_path)
         if gaps:
             summary.coverage_gaps_by_label[label] = gaps
+    if summary.work_root is not None:
+        summary.presence_counts, summary.not_scanned_count = _shortlist_presence_counts(
+            summary.work_root
+        )
 
 
 def _csv_data_row_count(path: Path) -> int:
@@ -2220,6 +2354,12 @@ def _review_guidance(summary: RunSummary) -> list[str]:
         "artifacts."
     )
     lines.append(f"      {report_review_command}")
+    if summary.not_scanned_count:
+        lines.append(
+            "  - Release policy review required before publishing final artifacts for "
+            f"{summary.not_scanned_count} not-scanned finding(s). Use the report review output "
+            "to record the review."
+        )
     existing_main_paths = [path for path in summary.report_paths if path.exists()]
     if existing_main_paths:
         lines.append("  - Main and presentation reports:")
@@ -2939,9 +3079,11 @@ def _flag_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.flag import run_flag
 
     result = run_flag(args.work_root)
+    presence_counts = result.presence_counts or {}
     summary = (
         f"flagged {result.open_count} open item(s) across {result.component_count} "
-        f"component(s); wrote {result.inventory_path.name}, "
+        f"component(s); presence counts: {_presence_counts_label(presence_counts)}; "
+        f"not-scanned={result.not_scanned_count}; wrote {result.inventory_path.name}, "
         f"{result.shortlist_json_path.name}, {result.shortlist_md_path.name}"
     )
     if result.preserved_decision_count:
@@ -2949,13 +3091,14 @@ def _flag_stage(args: argparse.Namespace) -> CommandResult:
     shortlist_command = f"repolens shortlist --work-root {shlex.quote(str(args.work_root))}"
     summary = f"{summary}\nNext CLI stage: {shortlist_command}"
     if result.open_count > 0:
-        return CommandResult(CommandStatus.FINDINGS_OPEN, summary)
-    return CommandResult(CommandStatus.SUCCESS, summary)
+        return CommandResult(CommandStatus.FINDINGS_OPEN, summary, metadata=result)
+    return CommandResult(CommandStatus.SUCCESS, summary, metadata=result)
 
 
 def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.shortlist import run_shortlist
     from repolens.shortlist.agent import AgentRequest, AgentResponse
+    from repolens.shortlist.overrides import resolve_overrides_path
 
     # The default offline agent abstains. RepoLens itself never invokes a model; artifact
     # proposal workflows run outside RepoLens, then this stage re-fetches and verifies
@@ -2969,13 +3112,31 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
 
     if args.work_root is None:
         raise InputError("shortlist requires --work-root")
+    work_root = Path(args.work_root)
+    emit_contexts_path = _work_root_artifact_path(work_root, args.emit_contexts)
+    proposals_path = _work_root_artifact_path(work_root, args.proposals)
+    evidence_path = _work_root_artifact_path(work_root, getattr(args, "evidence", None))
+    overrides_path = None
+    if getattr(args, "overrides", None) is not None:
+        overrides_path = resolve_overrides_path(work_root, Path(args.overrides))
+    normalized_args = argparse.Namespace(
+        **{
+            **vars(args),
+            "work_root": work_root,
+            "emit_contexts": emit_contexts_path,
+            "proposals": proposals_path,
+            "evidence": evidence_path,
+            "overrides": overrides_path,
+        }
+    )
     result = run_shortlist(
-        args.work_root,
+        work_root,
         agent_client=_AbstainingAgent(),
         identity=args.identity,
-        emit_contexts_path=args.emit_contexts,
-        proposals_path=args.proposals,
-        evidence_path=getattr(args, "evidence", None),
+        emit_contexts_path=emit_contexts_path,
+        proposals_path=proposals_path,
+        evidence_path=evidence_path,
+        overrides_path=overrides_path,
     )
     summary = (
         f"settled shortlist: {result.open_count} open item(s) of {result.item_count}; "
@@ -2984,21 +3145,73 @@ def _shortlist_stage(args: argparse.Namespace) -> CommandResult:
     contexts_path = getattr(result, "contexts_path", None)
     if contexts_path is not None:
         summary = f"{summary}; emitted contexts {contexts_path}"
-    if args.proposals is not None:
-        summary = f"{summary}; ingested proposals {args.proposals}"
-    evidence_arg = getattr(args, "evidence", None)
-    if evidence_arg is not None:
-        summary = f"{summary}; ingested evidence {evidence_arg}"
+    if proposals_path is not None:
+        summary = f"{summary}; ingested proposals {proposals_path}"
+    if evidence_path is not None:
+        summary = f"{summary}; ingested evidence {evidence_path}"
+    if overrides_path is not None:
+        summary = f"{summary}; applied human overrides {overrides_path}"
     proposal_notice = _shortlist_proposal_ingest_notice(getattr(result, "proposal_summary", None))
     if proposal_notice:
         summary = f"{summary}\n{proposal_notice}"
     if result.open_count > 0:
+        guidance = _shortlist_open_guidance(
+            normalized_args,
+            result.shortlist_md_path,
+            contexts_path,
+        )
         return CommandResult(
             CommandStatus.FINDINGS_OPEN,
-            f"{summary}\n{_shortlist_open_guidance(args, result.shortlist_md_path, contexts_path)}",
+            f"{summary}\n{guidance}",
         )
-    report_command = f"repolens report --work-root {shlex.quote(str(args.work_root))}"
+    report_command = f"repolens report --work-root {shlex.quote(str(work_root))}"
     return CommandResult(CommandStatus.SUCCESS, f"{summary}\nNext CLI stage: {report_command}")
+
+
+def _shortlist_overrides_schema(_args: argparse.Namespace) -> CommandResult:
+    from repolens.data.validation import load_schema
+
+    return CommandResult(
+        CommandStatus.SUCCESS,
+        json.dumps(load_schema("shortlist_overrides"), indent=2, sort_keys=True),
+    )
+
+
+def _shortlist_overrides_validate(args: argparse.Namespace) -> CommandResult:
+    from repolens.data import store
+    from repolens.shortlist.overrides import load_overrides, resolve_overrides_path
+
+    work_root = Path(args.work_root)
+    path = resolve_overrides_path(work_root, Path(args.path))
+    document = store.read_shortlist(work_root)
+    raw_items = document.get("items", [])
+    items = raw_items if isinstance(raw_items, list) else []
+    records = load_overrides(path, items=items)
+    lines = [
+        "Shortlist overrides OK",
+        f"  file: {path}",
+        f"  entries: {len(records)}",
+        "",
+        "Apply:",
+        f"  repolens shortlist --work-root {shlex.quote(str(work_root))} "
+        f"--overrides {shlex.quote(str(args.path))}",
+    ]
+    return CommandResult(CommandStatus.SUCCESS, "\n".join(lines))
+
+
+def _work_root_artifact_path(work_root: Path, path: Path | None) -> Path | None:
+    if path is None:
+        return None
+    path = Path(path)
+    if path.is_absolute():
+        return path
+    work_root = Path(work_root)
+    work_root_parts = work_root.parts
+    if not work_root.is_absolute() and path.parts[: len(work_root_parts)] == work_root_parts:
+        return path
+    if path.parts and path.parts[0] == "work":
+        return work_root / Path(*path.parts[1:])
+    return work_root / path
 
 
 def _shortlist_proposal_ingest_notice(proposal_summary: object | None) -> str:
@@ -3073,6 +3286,7 @@ def _shortlist_open_guidance(
     rerun_command = f"repolens shortlist --work-root {work_root_arg}"
     bucket_hint = _shortlist_unresolved_bucket_hint(work_root)
     scancode_retry_hint = _shortlist_scancode_retry_hint(work_root)
+    override_hint = _shortlist_overrides_guidance(work_root)
 
     if args.proposals is not None or getattr(args, "evidence", None) is not None:
         sections = [
@@ -3083,6 +3297,8 @@ def _shortlist_open_guidance(
             sections.extend((bucket_hint, ""))
         if scancode_retry_hint:
             sections.extend((scancode_retry_hint, ""))
+        if override_hint:
+            sections.extend((override_hint, ""))
         sections.extend(_shortlist_review_notes_guidance(work_root, args.proposals))
         sections.extend(
             (
@@ -3104,6 +3320,8 @@ def _shortlist_open_guidance(
             sections.extend((bucket_hint, ""))
         if scancode_retry_hint:
             sections.extend((scancode_retry_hint, ""))
+        if override_hint:
+            sections.extend((override_hint, ""))
         sections.extend(
             (
                 "Ask Codex/Claude:",
@@ -3139,6 +3357,8 @@ def _shortlist_open_guidance(
         sections.extend((bucket_hint, ""))
     if scancode_retry_hint:
         sections.extend((scancode_retry_hint, ""))
+    if override_hint:
+        sections.extend((override_hint, ""))
     sections.extend(_shortlist_review_notes_guidance(work_root, None))
     sections.extend(
         (
@@ -3169,6 +3389,45 @@ def _shortlist_open_guidance(
         )
     )
     return "\n".join(sections)
+
+
+def _shortlist_overrides_guidance(work_root: Path) -> str:
+    unknown_count = _shortlist_open_unknown_count(work_root)
+    if unknown_count <= 0:
+        return ""
+    work_root_arg = shlex.quote(str(work_root))
+    overrides_name = "shortlist.overrides.json"
+    return "\n".join(
+        (
+            f"Human override option: {unknown_count} open UNKNOWN item(s).",
+            f"  Edit local overrides: {work_root / overrides_name}",
+            "  Validate:",
+            "    repolens shortlist overrides validate "
+            f"{overrides_name} --work-root {work_root_arg}",
+            "  Apply without approval:",
+            f"    repolens shortlist --work-root {work_root_arg} --overrides {overrides_name}",
+        )
+    )
+
+
+def _shortlist_open_unknown_count(work_root: Path) -> int:
+    from repolens.data import store
+
+    try:
+        document = store.read_shortlist(work_root)
+    except (ArtifactError, OSError):
+        return 0
+    raw_items = document.get("items")
+    if not isinstance(raw_items, list):
+        return 0
+    count = 0
+    for item in raw_items:
+        if not isinstance(item, dict) or item.get("status") != "open":
+            continue
+        component_ref = str(item.get("component_ref") or "")
+        if item.get("reason") == "UNKNOWN" or component_ref.endswith("|UNKNOWN"):
+            count += 1
+    return count
 
 
 def _shortlist_review_notes_guidance(
@@ -3249,10 +3508,17 @@ def _shortlist_research_stage(args: argparse.Namespace) -> CommandResult:
     from repolens.shortlist.research import run_research
 
     work_root = Path(args.work_root)
-    contexts = args.contexts or work_root / "shortlist.contexts.json"
-    proposals = args.proposals or work_root / "shortlist.proposals.json"
-    evidence = args.evidence or work_root / "shortlist.evidence.json"
-    review = args.review or work_root / "shortlist.review.md"
+    contexts = (
+        _work_root_artifact_path(work_root, args.contexts) or work_root / "shortlist.contexts.json"
+    )
+    proposals = (
+        _work_root_artifact_path(work_root, args.proposals)
+        or work_root / "shortlist.proposals.json"
+    )
+    evidence = (
+        _work_root_artifact_path(work_root, args.evidence) or work_root / "shortlist.evidence.json"
+    )
+    review = _work_root_artifact_path(work_root, args.review) or work_root / "shortlist.review.md"
     result = run_research(
         contexts_path=contexts,
         proposals_path=proposals,
@@ -3265,7 +3531,9 @@ def _shortlist_research_stage(args: argparse.Namespace) -> CommandResult:
         (
             f"researched {result.row_count} shortlist context row(s); wrote "
             f"{result.proposals_path.name}, {result.evidence_path.name}, "
-            f"{result.review_path.name}; proposals: {result.proposal_count}"
+            f"{result.review_path.name}; proposals: {result.proposal_count}\n"
+            "Next CLI stage: "
+            f"{_shortlist_ingest_command(work_root, result.proposals_path, result.evidence_path)}"
         ),
     )
 
@@ -3405,6 +3673,8 @@ def _report_done_message(summary: RunSummary) -> str:
             "Report written.",
             f"Main report rows: {summary.report_rows}",
             f"Appendix rows: {_format_counts(summary.appendix_rows_by_label)}",
+            f"Presence counts: {_presence_counts_label(summary.presence_counts)}",
+            f"Not-scanned findings: {summary.not_scanned_count}",
             f"Reports directory: {_resolved_path(reports)}",
             *_review_guidance(summary),
         )

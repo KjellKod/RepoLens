@@ -210,6 +210,142 @@ class CliTests(unittest.TestCase):
             Path("work/shortlist.proposals.json"),
         )
 
+    def test_shortlist_overrides_resolve_relative_to_work_root(self) -> None:
+        config = cli.load_config(".", None)
+        with (
+            mock.patch("repolens.cli.load_config", return_value=config),
+            mock.patch("repolens.shortlist.run_shortlist") as run_shortlist,
+        ):
+            run_shortlist.return_value = mock.Mock(
+                open_count=1,
+                item_count=1,
+                shortlist_json_path=Path("work/shortlist.json"),
+                shortlist_md_path=Path("work/shortlist.md"),
+            )
+            code = cli.main(
+                [
+                    "shortlist",
+                    "--work-root",
+                    "work",
+                    "--overrides",
+                    "shortlist.overrides.json",
+                ]
+            )
+
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            run_shortlist.call_args.kwargs["overrides_path"],
+            Path("work/shortlist.overrides.json").resolve(),
+        )
+
+    def test_shortlist_overrides_schema_command(self) -> None:
+        stdout = io.StringIO()
+        with redirect_stdout(stdout):
+            code = cli.main(["shortlist", "overrides", "schema"])
+
+        self.assertEqual(code, 0)
+        schema = json.loads(stdout.getvalue())
+        self.assertEqual(schema["title"], "RepoLens shortlist human license overrides")
+        self.assertIn("spdx_id", schema["items"]["required"])
+
+    def test_shortlist_overrides_validate_command(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            work_root = Path(temp_dir)
+            store.write_shortlist(
+                work_root,
+                {
+                    "schema_version": "1.0",
+                    "generated_at": "2026-01-01T00:00:00Z",
+                    "open_count": 1,
+                    "items": [
+                        {
+                            "component_ref": "zope.site|UNKNOWN",
+                            "reason": "UNKNOWN",
+                            "evidence": {"source_layer": "api"},
+                            "candidate_spdx": None,
+                            "status": "open",
+                            "decided_by": None,
+                            "decided_at": None,
+                        }
+                    ],
+                },
+            )
+            overrides_path = work_root / "shortlist.overrides.json"
+            overrides_path.write_text(
+                json.dumps(
+                    [
+                        {
+                            "component_ref": "zope.site|UNKNOWN",
+                            "spdx_id": "ZPL-2.1",
+                            "reason": "manual review",
+                            "decided_by": "kjell",
+                            "expires_at": "2099-12-31",
+                        }
+                    ]
+                ),
+                encoding="utf-8",
+            )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main(
+                    [
+                        "shortlist",
+                        "overrides",
+                        "validate",
+                        "shortlist.overrides.json",
+                        "--work-root",
+                        str(work_root),
+                    ]
+                )
+
+        self.assertEqual(code, 0)
+        output = stdout.getvalue()
+        self.assertIn("Shortlist overrides OK", output)
+        self.assertIn("entries: 1", output)
+
+    def test_shortlist_open_unknown_output_mentions_override_next_step(self) -> None:
+        config = cli.load_config(".", None)
+        with TemporaryDirectory() as temp_dir:
+            work_root = Path(temp_dir)
+            store.write_shortlist(
+                work_root,
+                {
+                    "schema_version": "1.0",
+                    "generated_at": "2026-01-01T00:00:00Z",
+                    "open_count": 1,
+                    "items": [
+                        {
+                            "component_ref": "zope.site|UNKNOWN",
+                            "reason": "UNKNOWN",
+                            "evidence": {"source_layer": "api"},
+                            "candidate_spdx": None,
+                            "status": "open",
+                            "decided_by": None,
+                            "decided_at": None,
+                        }
+                    ],
+                },
+            )
+            with (
+                mock.patch("repolens.cli.load_config", return_value=config),
+                mock.patch("repolens.shortlist.run_shortlist") as run_shortlist,
+            ):
+                run_shortlist.return_value = mock.Mock(
+                    open_count=1,
+                    item_count=1,
+                    shortlist_json_path=work_root / "shortlist.json",
+                    shortlist_md_path=work_root / "shortlist.md",
+                )
+                stdout = io.StringIO()
+                with redirect_stdout(stdout):
+                    code = cli.main(["shortlist", "--work-root", str(work_root)])
+
+        self.assertEqual(code, 1)
+        output = stdout.getvalue()
+        self.assertIn("Human override option: 1 open UNKNOWN item(s).", output)
+        self.assertIn("repolens shortlist overrides validate", output)
+        self.assertIn("--overrides shortlist.overrides.json", output)
+
     def test_discover_requires_owner(self) -> None:
         self.assertEqual(cli.main(["discover"]), 2)
 
@@ -699,6 +835,55 @@ class CliTests(unittest.TestCase):
             self.assertIn("> Prepared for final legal review.", presentation_md)
             self.assertIn("<h1>Acme Third-Party Notices</h1>", presentation_html)
             self.assertIn("Prepared for final legal review.", presentation_html)
+
+    def test_flag_cli_prints_presence_counts_and_not_scanned_count(self) -> None:
+        with TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [
+                    {
+                        "schema_version": "1.0",
+                        "name": "copyleft-lib",
+                        "version": "1.2.3",
+                        "repo": "acme-alpha",
+                        "purl": "pkg:npm/copyleft-lib@1.2.3",
+                        "declared_license_raw": "GPL-3.0-only",
+                        "spdx_id": "GPL-3.0-only",
+                        "evidence": {
+                            "source_layer": "syft",
+                            "url": "https://example.invalid/licenses/gpl",
+                        },
+                        "tags": {
+                            "origin": "third-party-oss",
+                            "scope": "runtime",
+                            "distribution": "server",
+                        },
+                        "presence": {
+                            "install_state": "installed",
+                            "delivery_state": "not_scanned",
+                            "relation": "direct",
+                            "path": [],
+                            "platform_match": "unknown",
+                            "source": "syft",
+                            "target": "unknown",
+                            "reopen_on_delivery_change": True,
+                        },
+                        "modified": "unknown",
+                    }
+                ],
+            )
+
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main(["flag", "--work-root", str(work_root)])
+
+            output = stdout.getvalue()
+            self.assertEqual(code, 1)
+            self.assertIn("presence counts:", output)
+            self.assertIn("INSTALLED BUT DELIVERY NOT CONFIRMED - REVIEW=1", output)
+            self.assertIn("not-scanned=1", output)
 
 
 def _fake_clone(options):

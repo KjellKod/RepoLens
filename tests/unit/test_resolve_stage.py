@@ -139,6 +139,8 @@ def test_declared_spdx_license_writes_syft_resolved_record(tmp_path: Path, repo_
     assert record["spdx_id"] == "MIT"
     assert record["declared_license_raw"] == "MIT"
     assert record["evidence"]["source_layer"] == "syft"
+    assert record["presence"]["install_state"] == "installed"
+    assert record["presence"]["delivery_state"] == "not_scanned"
 
 
 def test_declared_spdx_license_writes_brief_description_from_sbom(
@@ -178,6 +180,44 @@ def test_declared_spdx_license_enriches_brief_description_from_registry(
     record = read_single_resolved(tmp_path, repo_ref)
     assert record["description"] == "Brief registry summary."
     assert seen == ["https://pypi.org/pypi/acme-lib/1.2.3/json"]
+
+
+def test_declared_spdx_license_rejects_badge_description_and_uses_registry(
+    tmp_path: Path, repo_ref: str
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "@smithy/middleware-retry",
+            "version": "4.4.29",
+            "type": "npm",
+            "purl": "pkg:npm/%40smithy/middleware-retry@4.4.29",
+            "licenses": ["Apache-2.0"],
+            "locations": ["package-lock.json"],
+            "description": (
+                "[![NPM version](https://img.shields.io/npm/v/@smithy/middleware-retry/"
+                "latest.svg)](https://www.npmjs.com/package/@smithy/middleware-retry)"
+            ),
+        },
+    )
+    seen: list[str] = []
+
+    def fetcher(url: str, options: HttpFetchOptions) -> FetchResult:
+        del options
+        seen.append(url)
+        return FetchResult(
+            url=url,
+            status=200,
+            headers=(),
+            body=b'{"description":"Shared retry utilities to be used in middleware packages."}',
+        )
+
+    run_resolve(tmp_path, repo_ref, fetcher=fetcher)
+
+    record = read_single_resolved(tmp_path, repo_ref)
+    assert record["description"] == "Shared retry utilities to be used in middleware packages."
+    assert seen == ["https://registry.npmjs.org/@smithy%2Fmiddleware-retry/4.4.29"]
 
 
 def test_first_party_name_gets_origin_first_party(tmp_path: Path, repo_ref: str) -> None:

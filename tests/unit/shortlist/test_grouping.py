@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from repolens.presence.sections import NOT_SCANNED_UNKNOWN_SECTION, section_for_presence
 from repolens.shortlist.contexts import ShortlistMetadata, TriageMetadata
 from repolens.shortlist.grouping import (
     ACCEPT_RECOMMENDED,
     LOW_CONFIDENCE,
     NEEDS_JUDGMENT,
     build_groups,
+    decode_group_key,
     spdx_family,
 )
 
@@ -122,3 +124,49 @@ def test_spdx_family_keeps_legally_distinct_families_apart() -> None:
     assert spdx_family("LGPL-3.0-only") == "LGPL-3.0"
     assert spdx_family("AGPL-3.0-only") == "AGPL-3.0"
     assert spdx_family("Apache-2.0") == "Apache"
+
+
+def test_group_key_splits_same_license_by_presence_section() -> None:
+    metadata = ShortlistMetadata(triage_by_ref={})
+
+    groups = build_groups(
+        [
+            _item(
+                "acme-lib|GPL-3.0-only",
+                candidate_spdx="GPL-3.0-only",
+                presence_section="DELIVERED / SHIPPED - ACTION REQUIRED",
+                presence={"delivery_state": "delivered"},
+            ),
+            _item(
+                "acme-lib|GPL-3.0-only",
+                candidate_spdx="GPL-3.0-only",
+                presence_section="LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR",
+                presence={
+                    "install_state": "lockfile_only",
+                    "delivery_state": "not_scanned",
+                    "relation": "optional",
+                },
+            ),
+        ],
+        metadata,
+    )
+
+    assert len(groups) == 2
+    assert {group.key.presence_section for group in groups} == {
+        "DELIVERED / SHIPPED - ACTION REQUIRED",
+        "LOCKFILE-ONLY / OPTIONAL FUTURE RISK - MONITOR",
+    }
+
+
+def test_decode_group_key_defaults_missing_presence_section_to_unknown_section() -> None:
+    # A legacy group marker (encoded before presence existed) lacks
+    # presence_section; it must decode to the same section group_key_for_item()
+    # assigns to a presence-less item, so pre-upgrade group decisions still match
+    # on the first rerun instead of being silently dropped.
+    decoded = decode_group_key(
+        "eyJkaXN0cmlidXRpb24iOiJzZXJ2ZXIiLCJzY29wZSI6InJ1bnRpbWUiLCJzcGR4X2ZhbWlseSI6Ik1JVCJ9"
+    )
+
+    assert decoded is not None
+    assert decoded.presence_section == NOT_SCANNED_UNKNOWN_SECTION
+    assert decoded.presence_section == section_for_presence(None)

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import sys
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, date, datetime
 from html import escape as html_escape
 from pathlib import Path
 from typing import Any, TextIO
@@ -13,9 +14,18 @@ from urllib.parse import quote, urlparse
 
 from repolens.config import Config
 from repolens.data import store
+from repolens.data.errors import SchemaValidationError
 from repolens.data.limits import max_bytes_for
 from repolens.discovery.taxonomy import DEFAULT_CATEGORY
 from repolens.exit_codes import InputError
+from repolens.policy import PolicyTier, classify_license_input, load_default_policy
+from repolens.policy.spdx import normalize_license
+from repolens.presence.defaults import build_presence
+from repolens.presence.sections import (
+    DELIVERED_SECTION,
+    MONITOR_APPENDIX_LABEL,
+    section_for_presence,
+)
 from repolens.report.categories import RoutedRecord, build_category_index, route_occurrences
 from repolens.report.dependency_boundaries import (
     build_dependency_boundary_summary,
@@ -29,6 +39,7 @@ from repolens.report.selection import (
     report_header_if_configured,
     report_selection_from_config,
 )
+from repolens.resolve.descriptions import brief_description
 from repolens.scan.inputs import load_discover_approved_repo_refs
 from repolens.security.redaction import redact_tokens
 from repolens.security.sanitize import (
@@ -37,12 +48,22 @@ from repolens.security.sanitize import (
     sanitize_markdown,
     serialize_csv_rows,
 )
+from repolens.shortlist.contexts import load_shortlist_metadata
+from repolens.shortlist.evidence import _validate_direct_link, identity_for_item
+from repolens.shortlist.identity import build_decision_ref, decision_ref_for_item
+from repolens.shortlist.overrides import (
+    HUMAN_OVERRIDE_MACHINE_VERIFICATION,
+    HUMAN_OVERRIDE_OUTCOME,
+    HUMAN_OVERRIDE_SOURCE_TYPE,
+)
 
 COLUMNS = (
     "name",
     "spdx_id",
     "version",
     "source_url",
+    "delivery",
+    "install",
     "modified?",
     "origin",
     "scope",
@@ -51,7 +72,7 @@ COLUMNS = (
     "evidence_source_layer",
     "coverage_gaps",
 )
-_HTML_COLUMN_WIDTHS = (10, 7, 7, 25, 6, 9, 6, 7, 8, 7, 8)
+_HTML_COLUMN_WIDTHS = (9, 6, 6, 21, 8, 8, 5, 8, 5, 6, 7, 6, 5)
 
 _NONE = "none"
 _UNKNOWN = "UNKNOWN"
@@ -80,6 +101,8 @@ class DisclosureRow:
     evidence_source_layers: tuple[str, ...]
     coverage_gaps: tuple[str, ...]
     descriptions: tuple[str, ...] = ()
+    deliveries: tuple[str, ...] = ("unknown",)
+    installs: tuple[str, ...] = ("unknown",)
 
 
 @dataclass(frozen=True)
@@ -125,6 +148,8 @@ class _DisclosureAccumulator:
     spdx_id: str
     versions: set[str] = field(default_factory=set)
     source_urls: set[str] = field(default_factory=set)
+    deliveries: set[str] = field(default_factory=set)
+    installs: set[str] = field(default_factory=set)
     descriptions: set[str] = field(default_factory=set)
     modified: set[str] = field(default_factory=set)
     origins: set[str] = field(default_factory=set)
@@ -149,6 +174,8 @@ class _DisclosureAccumulator:
             spdx_id=self.spdx_id,
             versions=_sorted_values(self.versions),
             source_urls=_sorted_values(self.source_urls),
+            deliveries=_sorted_values(self.deliveries),
+            installs=_sorted_values(self.installs),
             descriptions=_sorted_values(self.descriptions),
             modified=_sorted_values(self.modified),
             origins=_sorted_values(self.origins),
@@ -230,6 +257,7 @@ def render_main_report(
                 appendix_rows,
                 (),
                 title=f"RepoLens Appendix: {label}",
+                preamble=_appendix_preamble(label),
             )
         )
         store.atomic_write_bytes(appendix_csv_path, appendix_csv.encode("utf-8"))
@@ -402,31 +430,84 @@ def _exclude_rejected_shortlist_records(
     work_root: Path,
     records: Sequence[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    rejected_refs = _rejected_shortlist_component_refs(work_root)
-    if not rejected_refs:
+    rejected_decision_refs, legacy_component_refs = _rejected_shortlist_refs(work_root)
+    if not rejected_decision_refs and not legacy_component_refs:
         return list(records)
-    return [record for record in records if _resolved_component_ref(record) not in rejected_refs]
+    kept: list[dict[str, Any]] = []
+    for record in records:
+        if _decision_ref_for_resolved(record) in rejected_decision_refs:
+            continue
+        # The legacy bare-component_ref fallback must NOT suppress a now-delivered
+        # finding: a delivered row is only excluded by a section-aware delivered
+        # rejection (handled above). Applying the bare fallback to delivered
+        # records would let a pre-upgrade rejection hide a delivered copyleft row
+        # when `report` runs before `flag` rewrites the shortlist.
+        if (
+            section_for_presence(_presence_for_resolved(record)) != DELIVERED_SECTION
+            and _resolved_component_ref(record) in legacy_component_refs
+        ):
+            continue
+        kept.append(record)
+    return kept
 
 
-def _rejected_shortlist_component_refs(work_root: Path) -> frozenset[str]:
+def _rejected_shortlist_refs(work_root: Path) -> tuple[frozenset[str], frozenset[str]]:
     shortlist_path = Path(work_root) / "shortlist.json"
     if not shortlist_path.exists():
-        return frozenset()
+        return frozenset(), frozenset()
     document = store.read_shortlist(work_root)
     raw_items = document.get("items", [])
     if not isinstance(raw_items, list):
-        return frozenset()
-    return frozenset(
-        str(item["component_ref"])
-        for item in raw_items
-        if isinstance(item, dict)
-        and item.get("status") == "rejected"
-        and isinstance(item.get("component_ref"), str)
+        return frozenset(), frozenset()
+    rejected_decision_refs: set[str] = set()
+    legacy_component_refs: set[str] = set()
+    for item in raw_items:
+        if not isinstance(item, dict) or item.get("status") != "rejected":
+            continue
+        if _has_section_decision_identity(item):
+            decision_ref = _non_empty(decision_ref_for_item(item))
+            if decision_ref is not None:
+                rejected_decision_refs.add(decision_ref)
+            continue
+        component_ref = _non_empty(item.get("component_ref"))
+        if component_ref is not None:
+            legacy_component_refs.add(component_ref)
+    return frozenset(rejected_decision_refs), frozenset(legacy_component_refs)
+
+
+def _has_section_decision_identity(item: Mapping[str, object]) -> bool:
+    return (
+        _non_empty(item.get("decision_ref")) is not None
+        or _non_empty(item.get("presence_section")) is not None
+        or isinstance(item.get("presence"), Mapping)
     )
+
+
+def _decision_ref_for_resolved(record: dict[str, Any]) -> str:
+    presence_section = section_for_presence(_presence_for_resolved(record))
+    return build_decision_ref(_resolved_component_ref(record), presence_section)
+
+
+def _presence_for_resolved(record: Mapping[str, Any]) -> Mapping[str, object]:
+    presence = record.get("presence")
+    if isinstance(presence, Mapping):
+        return presence
+    tags = record.get("tags")
+    return build_presence(
+        tags=tags if isinstance(tags, Mapping) else None,
+        source="syft",
+    ).to_dict()
 
 
 def _resolved_component_ref(record: dict[str, Any]) -> str:
     return f"{record['name']}|{_normalized_spdx(record.get('spdx_id'))}"
+
+
+def _non_empty(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _active_report_repo_refs(work_root: Path) -> tuple[str, ...] | None:
@@ -454,8 +535,202 @@ def _split_report_records(work_root: Path, config: Config | None):
     default_category = _default_category(config)
     records, file_gaps = collect_resolved_records(work_root, _active_report_repo_refs(work_root))
     records = _exclude_rejected_shortlist_records(work_root, records)
+    records = _apply_approved_shortlist_overrides(work_root, records)
     split = route_occurrences(records, category_index, selection.include, default_category)
     return split, file_gaps
+
+
+def _apply_approved_shortlist_overrides(
+    work_root: Path,
+    records: Sequence[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    overrides = _approved_human_override_items(work_root)
+    if not overrides:
+        return list(records)
+    projected: list[dict[str, Any]] = []
+    for record in records:
+        override = overrides.get(_resolved_component_ref(record))
+        if override is None:
+            projected.append(record)
+            continue
+        updated = dict(record)
+        override_spdx = str(override["candidate_spdx"])
+        updated["spdx_id"] = override_spdx
+        evidence = dict(updated.get("evidence") or {})
+        evidence["source_layer"] = HUMAN_OVERRIDE_MACHINE_VERIFICATION
+        evidence_url = _human_override_evidence_url(override)
+        if evidence_url is not None:
+            evidence["url"] = evidence_url
+        else:
+            evidence.pop("url", None)
+        evidence["anchor"] = override_spdx
+        updated["evidence"] = evidence
+        projected.append(updated)
+    return projected
+
+
+def _approved_human_override_items(work_root: Path) -> dict[str, dict[str, Any]]:
+    shortlist_path = Path(work_root) / "shortlist.json"
+    if not shortlist_path.exists():
+        return {}
+    document = store.read_shortlist(work_root)
+    raw_items = document.get("items", [])
+    if not isinstance(raw_items, list):
+        return {}
+    overrides: dict[str, dict[str, Any]] = {}
+    metadata = None
+    today = datetime.now(UTC).date()
+    for item in raw_items:
+        if not isinstance(item, dict) or item.get("status") != "approved":
+            continue
+        candidate = _optional_text(item.get("candidate_spdx"))
+        component_ref = _optional_text(item.get("component_ref"))
+        research = item.get("research_evidence")
+        if (
+            candidate is None
+            or component_ref is None
+            or not isinstance(research, dict)
+            or research.get("outcome") != HUMAN_OVERRIDE_OUTCOME
+            or research.get("machine_verification") != HUMAN_OVERRIDE_MACHINE_VERIFICATION
+        ):
+            continue
+        _raise_if_human_override_provenance_incomplete(component_ref, research)
+        candidate = _validated_human_override_spdx(component_ref, candidate, research)
+        _raise_if_human_override_expired(component_ref, research, today=today)
+        if metadata is None:
+            metadata = load_shortlist_metadata(work_root)
+        _raise_if_human_override_context_stale(component_ref, item, research, metadata)
+        overrides[component_ref] = item
+    return overrides
+
+
+def _raise_if_human_override_provenance_incomplete(
+    component_ref: str,
+    research: Mapping[str, Any],
+) -> None:
+    for field_name in ("override_reason", "override_decided_by"):
+        if _optional_text(research.get(field_name)) is None:
+            raise InputError(
+                f"shortlist human override for {component_ref} is missing {field_name}; "
+                "rerun shortlist with current overrides before reporting"
+            )
+    if research.get("override_evidence_verified") is not False:
+        raise InputError(
+            f"shortlist human override for {component_ref} is missing "
+            "override_evidence_verified=false; rerun shortlist with current overrides "
+            "before reporting"
+        )
+
+
+def _validated_human_override_spdx(
+    component_ref: str,
+    candidate: str,
+    research: Mapping[str, Any],
+) -> str:
+    normalized_candidate = _normalize_human_override_spdx(
+        component_ref, candidate, field="candidate_spdx"
+    )
+    for spdx_field in ("human_candidate_spdx", "likely_spdx"):
+        value = _optional_text(research.get(spdx_field))
+        if value is None:
+            raise InputError(
+                f"shortlist human override for {component_ref} is missing {spdx_field}; "
+                "rerun shortlist with current overrides before reporting"
+            )
+        normalized_value = _normalize_human_override_spdx(component_ref, value, field=spdx_field)
+        if normalized_value != normalized_candidate:
+            raise InputError(
+                f"shortlist human override for {component_ref} has mismatched {spdx_field}; "
+                "rerun shortlist with current overrides before reporting"
+            )
+    return normalized_candidate
+
+
+def _normalize_human_override_spdx(component_ref: str, value: str, *, field: str) -> str:
+    policy = load_default_policy()
+    normalized = normalize_license(value, policy)
+    if normalized.spdx_id is None:
+        raise InputError(
+            f"shortlist human override for {component_ref} has unsupported {field} {value!r}"
+        )
+    decision = classify_license_input(normalized.spdx_id, policy)
+    if decision.tier == PolicyTier.UNKNOWN:
+        raise InputError(
+            f"shortlist human override for {component_ref} has unsupported {field} {value!r}"
+        )
+    return normalized.spdx_id
+
+
+def _raise_if_human_override_expired(
+    component_ref: str,
+    research: Mapping[str, Any],
+    *,
+    today: date,
+) -> None:
+    expires_at = _optional_text(research.get("override_expires_at"))
+    if expires_at is None:
+        return
+    try:
+        expires = date.fromisoformat(expires_at)
+    except ValueError as exc:
+        raise InputError(
+            f"shortlist human override for {component_ref} has invalid expiry {expires_at!r}"
+        ) from exc
+    if expires < today:
+        raise InputError(
+            f"shortlist human override for {component_ref} expired on {expires_at}; "
+            "rerun shortlist with a current override before reporting"
+        )
+
+
+def _raise_if_human_override_context_stale(
+    component_ref: str,
+    item: Mapping[str, Any],
+    research: Mapping[str, Any],
+    metadata,
+) -> None:
+    fingerprint = _optional_text(research.get("context_fingerprint"))
+    if fingerprint is None:
+        raise InputError(
+            f"shortlist human override for {component_ref} is missing context_fingerprint; "
+            "rerun shortlist with current overrides before reporting"
+        )
+    current = identity_for_item(item, metadata).context_fingerprint
+    if fingerprint != current:
+        raise InputError(
+            f"shortlist human override for {component_ref} is stale; "
+            "rerun shortlist with current overrides before reporting"
+        )
+
+
+def _human_override_evidence_url(item: Mapping[str, Any]) -> str | None:
+    component_ref = _optional_text(item.get("component_ref")) or "unknown component"
+    research = item.get("research_evidence")
+    if not isinstance(research, dict):
+        return None
+    browser_evidence = research.get("browser_evidence")
+    if not isinstance(browser_evidence, list):
+        return None
+    for entry in browser_evidence:
+        if isinstance(entry, dict):
+            url = _optional_text(entry.get("url"))
+            if url is not None:
+                if entry.get("source_type") != HUMAN_OVERRIDE_SOURCE_TYPE:
+                    raise InputError(
+                        f"shortlist human override for {component_ref} has non-human "
+                        "override browser evidence; rerun shortlist with current overrides "
+                        "before reporting"
+                    )
+                label = _optional_text(entry.get("label")) or "Human override evidence"
+                try:
+                    _validate_direct_link(label, url, f"shortlist human override {component_ref}")
+                except SchemaValidationError as exc:
+                    raise InputError(
+                        f"shortlist human override for {component_ref} has invalid evidence URL; "
+                        "rerun shortlist with current overrides before reporting"
+                    ) from exc
+                return url
+    return None
 
 
 def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[DisclosureRow]:
@@ -477,7 +752,7 @@ def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[Dis
             group.coverage_gaps.add("missing_version")
         group.found_in.add(str(record["repo"]))
         group.modified.add(_modified_value(record["modified"]))
-        description = _optional_text(record.get("description"))
+        description = brief_description(record.get("description"))
         if description is not None:
             group.descriptions.add(description)
 
@@ -496,6 +771,13 @@ def aggregate_rows(records: Iterable[dict[str, Any] | RoutedRecord]) -> list[Dis
         group.origins.add(str(tags["origin"]))
         group.scopes.add(str(tags["scope"]))
         group.distributions.add(str(tags["distribution"]))
+        presence = record.get("presence")
+        if isinstance(presence, dict):
+            group.deliveries.add(_delivery_display(presence.get("delivery_state")))
+            group.installs.add(_install_display(presence.get("install_state")))
+        else:
+            group.deliveries.add("unknown")
+            group.installs.add("unknown")
         group.coverage_gaps.update(extra_gaps)
 
     return sorted(
@@ -514,6 +796,8 @@ def render_csv(rows: Sequence[DisclosureRow]) -> str:
             row.spdx_id,
             _join(row.versions),
             _join(row.source_urls),
+            _join(row.deliveries),
+            _join(row.installs),
             _join(row.modified),
             _join(row.origins),
             _join(row.scopes),
@@ -532,15 +816,22 @@ def render_markdown(
     file_gaps: Sequence[str],
     *,
     title: str = "RepoLens Main Report",
+    preamble: str | None = None,
 ) -> str:
     """Render report rows as sanitized Markdown."""
 
     lines = [
         f"# {title.replace(chr(10), ' ')}",
         "",
-        "| " + " | ".join(_markdown_table_cell(column) for column in COLUMNS) + " |",
-        "| " + " | ".join("---" for _ in COLUMNS) + " |",
     ]
+    if preamble:
+        lines.extend([preamble.replace("\n", " "), ""])
+    lines.extend(
+        [
+            "| " + " | ".join(_markdown_table_cell(column) for column in COLUMNS) + " |",
+            "| " + " | ".join("---" for _ in COLUMNS) + " |",
+        ]
+    )
 
     for row in rows:
         lines.append(
@@ -551,6 +842,8 @@ def render_markdown(
                     _markdown_table_cell(row.spdx_id),
                     _markdown_table_cell(_join(row.versions)),
                     _markdown_table_cell(_markdown_source_urls(row.source_urls)),
+                    _markdown_table_cell(_join(row.deliveries)),
+                    _markdown_table_cell(_join(row.installs)),
                     _markdown_table_cell(_join(row.modified)),
                     _markdown_table_cell(_join(row.origins)),
                     _markdown_table_cell(_join(row.scopes)),
@@ -589,6 +882,8 @@ def render_html(
                 f"<td>{_html_text(row.spdx_id)}</td>",
                 f"<td>{_html_text(_join(row.versions))}</td>",
                 f'<td class="col-source">{_html_source_urls(row.source_urls)}</td>',
+                f"<td>{_html_text(_join(row.deliveries))}</td>",
+                f"<td>{_html_text(_join(row.installs))}</td>",
                 f"<td>{_html_text(_join(row.modified))}</td>",
                 f"<td>{_html_text(_join(row.origins))}</td>",
                 f"<td>{_html_text(_join(row.scopes))}</td>",
@@ -681,6 +976,30 @@ def _modified_value(value: object) -> str:
     if value is False:
         return "false"
     return str(value)
+
+
+def _delivery_display(value: object) -> str:
+    text = str(value or "unknown")
+    if text == "not_scanned":
+        return "delivery artifact not scanned"
+    if text == "not_delivered":
+        return "not delivered"
+    return text.replace("_", " ")
+
+
+def _install_display(value: object) -> str:
+    return str(value or "unknown").replace("_", " ")
+
+
+def _appendix_preamble(label: str) -> str | None:
+    if label != MONITOR_APPENDIX_LABEL:
+        return None
+    return (
+        "Not currently delivered. Monitor because a platform, feature, dependency, or "
+        "deployment change could install or include this package later. Current evidence "
+        "indicates the package is not delivered, or delivery has not been confirmed by an "
+        "artifact scan."
+    )
 
 
 def _version_display(record: dict[str, Any]) -> str:

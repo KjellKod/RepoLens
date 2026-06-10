@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from repolens.presence.models import Presence
+
 Origin = Literal["third-party-oss", "first-party"]
 Scope = Literal["runtime", "dev", "build", "test", "unknown"]
 Distribution = Literal["server", "client-or-mobile", "not-distributed", "unknown"]
@@ -28,9 +30,13 @@ class ResolvedItem:
     declared_license_raw: str | None = None
     modified: Modified = "unknown"
     declared_version_status: DeclaredVersionStatus | None = None
+    presence: Presence | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {key: value for key, value in self.__dict__.items() if value is not None}
+        data = {key: value for key, value in self.__dict__.items() if value is not None}
+        if self.presence is not None:
+            data["presence"] = self.presence.to_dict()
+        return data
 
 
 @dataclass(frozen=True)
@@ -46,6 +52,10 @@ class InventoryComponent:
     found_in: list[str]
     policy_tier: PolicyTier | None = None
     evidence_refs: list[str] = field(default_factory=list)
+    presence: Presence | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        return {key: value for key, value in self.__dict__.items() if value is not None}
+        data = {key: value for key, value in self.__dict__.items() if value is not None}
+        if self.presence is not None:
+            data["presence"] = self.presence.to_dict()
+        return data

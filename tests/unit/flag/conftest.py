@@ -21,6 +21,10 @@ def _resolved_record(
     url: str | None = "https://example.invalid/licenses/mit",
     anchor: str = "MIT",
     purl: str | None = None,
+    presence: dict[str, Any] | None = None,
+    install_state: str = "installed",
+    delivery_state: str = "not_scanned",
+    relation: str = "direct",
 ) -> dict[str, Any]:
     evidence: dict[str, Any] = {
         "source_layer": "syft",
@@ -42,6 +46,16 @@ def _resolved_record(
     }
     if purl is not None:
         record["purl"] = purl
+    record["presence"] = presence or {
+        "install_state": install_state,
+        "delivery_state": delivery_state,
+        "relation": relation,
+        "path": [],
+        "platform_match": "unknown",
+        "source": "syft",
+        "target": "unknown",
+        "reopen_on_delivery_change": True,
+    }
     return record
 
 

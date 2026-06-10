@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from repolens.exit_codes import InputError
-from repolens.report.categories import build_category_index, route_occurrences
+from repolens.report.categories import (
+    NOT_CURRENTLY_DELIVERED_APPENDIX,
+    build_category_index,
+    route_occurrences,
+)
 
 
 def test_category_join_hits_name_key() -> None:
@@ -105,6 +109,43 @@ def test_build_not_distributed_routes_to_build_ci_appendix_not_main() -> None:
     assert split.appendix_records_by_label["build-ci"][0].record["repo"] == "acme-alpha"
 
 
+def test_presence_monitor_routes_to_appendix_after_existing_precedence() -> None:
+    index = build_category_index(_discovered_repo(name="acme-alpha", category="runtime"))
+
+    split = route_occurrences(
+        [
+            _record(
+                repo="acme-alpha",
+                presence={
+                    "install_state": "lockfile_only",
+                    "delivery_state": "not_scanned",
+                    "relation": "optional",
+                },
+            ),
+            _record(
+                repo="acme-alpha",
+                scope="build",
+                distribution="not-distributed",
+                presence={
+                    "install_state": "lockfile_only",
+                    "delivery_state": "not_scanned",
+                    "relation": "optional",
+                },
+            ),
+        ],
+        category_index=index,
+        selection=("runtime",),
+        default_category="uncategorized",
+    )
+
+    assert split.main_records == ()
+    assert (
+        split.appendix_records_by_label[NOT_CURRENTLY_DELIVERED_APPENDIX][0].record["tags"]["scope"]
+        == "runtime"
+    )
+    assert split.appendix_records_by_label["build-ci"][0].record["tags"]["scope"] == "build"
+
+
 def _category(index: dict[str, str], repo: str) -> tuple[str, bool]:
     from repolens.report.categories import category_for_repo
 
@@ -139,8 +180,9 @@ def _record(
     origin: str = "third-party-oss",
     scope: str = "runtime",
     distribution: str = "server",
+    presence: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    return {
+    record: dict[str, object] = {
         "schema_version": "1.0",
         "name": "acme-lib",
         "version": "1.0.0",
@@ -149,3 +191,6 @@ def _record(
         "tags": {"origin": origin, "scope": scope, "distribution": distribution},
         "modified": "unknown",
     }
+    if presence is not None:
+        record["presence"] = presence
+    return record
