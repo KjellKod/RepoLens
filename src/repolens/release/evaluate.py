@@ -69,6 +69,7 @@ def evaluate_release(
     approved_decision_refs: frozenset[str] = frozenset(),
     target: str | None = None,
     artifact: DeliveryArtifact | None = None,
+    file_gaps: Sequence[str] = (),
 ) -> ReleaseEvaluation:
     active_disclosure = disclosure_policy or load_default_disclosure_policy()
     active_tier = tier_policy or load_default_policy()
@@ -77,6 +78,14 @@ def evaluate_release(
     warnings: list[str] = []
     monitored: list[Mapping[str, Any]] = []
     not_scanned: list[Mapping[str, Any]] = []
+
+    for gap in file_gaps:
+        blockers.append(
+            ReleaseBlocker(
+                code="resolved_input_gap",
+                message=f"resolved input gap: {gap}",
+            )
+        )
 
     if target:
         target_context = context_for(target, "delivered", active_disclosure)

@@ -142,6 +142,12 @@ class ReportResult:
     presentation_docx_skipped: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class DisclosureRecordSelection:
+    records: list[dict[str, Any]]
+    file_gaps: tuple[str, ...]
+
+
 @dataclass
 class _DisclosureAccumulator:
     name: str
@@ -532,9 +538,16 @@ def select_main_report_rows(
 def select_disclosure_records(work_root: Path) -> list[dict[str, Any]]:
     """Return report-prepared records for release disclosure evaluation."""
 
-    records, _file_gaps = collect_resolved_records(work_root, _active_report_repo_refs(work_root))
+    return select_disclosure_record_selection(work_root).records
+
+
+def select_disclosure_record_selection(work_root: Path) -> DisclosureRecordSelection:
+    """Return report-prepared records and source-file coverage gaps for release."""
+
+    records, file_gaps = collect_resolved_records(work_root, _active_report_repo_refs(work_root))
     records = _exclude_rejected_shortlist_records(work_root, records)
-    return _apply_approved_shortlist_overrides(work_root, records)
+    records = _apply_approved_shortlist_overrides(work_root, records)
+    return DisclosureRecordSelection(records=records, file_gaps=tuple(file_gaps))
 
 
 def _split_report_records(work_root: Path, config: Config | None):

@@ -1862,6 +1862,37 @@ class ScanCliTests(unittest.TestCase):
             self.assertTrue((work_root / "release" / "release.review.md").exists())
             self.assertFalse((work_root / "release" / "release.licenses.json").exists())
 
+    def test_release_empty_resolved_input_blocks_without_disclosure_outputs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            repo_dir = work_root / "work" / "acme-alpha"
+            repo_dir.mkdir(parents=True)
+            (repo_dir / "resolved.ndjson").write_text("", encoding="utf-8")
+            release_dir = work_root / "release"
+            release_dir.mkdir()
+            for filename in (
+                "release.licenses.json",
+                "release.notices.md",
+                "release.notices.txt",
+            ):
+                (release_dir / filename).write_text("stale\n", encoding="utf-8")
+
+            code = cli.main(["release", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 1)
+            policy = json.loads((release_dir / "release.policy.json").read_text())
+            self.assertEqual(policy["result"], "blocked")
+            self.assertEqual(policy["reasons"][0]["code"], "resolved_input_gap")
+            self.assertIn(
+                "empty_resolved_file: work/acme-alpha/resolved.ndjson",
+                policy["reasons"][0]["message"],
+            )
+            review = (release_dir / "release.review.md").read_text(encoding="utf-8")
+            self.assertIn("empty_resolved_file: work/acme-alpha/resolved.ndjson", review)
+            self.assertFalse((release_dir / "release.licenses.json").exists())
+            self.assertFalse((release_dir / "release.notices.md").exists())
+            self.assertFalse((release_dir / "release.notices.txt").exists())
+
     def test_release_requires_artifact_and_target_together(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             code = cli.main(["release", "--work-root", tmp, "--target", "js-bundle"])
