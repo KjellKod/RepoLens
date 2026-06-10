@@ -1,0 +1,35 @@
+tests/e2e/test_cli.py
+  s_5f4c1cebda592f::t_b5731af5678e82 1886-1889
+  s_b578c56ad57808::t_c85d7cadce9b38 1865-1885,1890-1895
+src/repolens/release/evaluate.py
+  s_b578c56ad57808::t_ec58170f6df195 72,82-88
+src/repolens/report/main.py
+  s_b578c56ad57808::t_03114e93f88463 145-150
+  s_b578c56ad57808::t_e152542d28c692 541-547,549-550
+src/repolens/release/stage.py
+  s_b578c56ad57808::t_8d4276f175355c 25,50-51,61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "6a083ab320e223ceb3f935629994b3fca67736d4",
+  "prompts": {},
+  "sessions": {
+    "s_5f4c1cebda592f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82ccb387-d9a3-4f69-b847-ccb603492127",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_b578c56ad57808": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb200-86f9-7590-a8c1-ed5549781754",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
