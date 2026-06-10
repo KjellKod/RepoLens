@@ -59,3 +59,25 @@ expiry** (so overrides cannot silently rot).
   verification over the declared field.
 - **Non-SPDX strings** — normalize to SPDX before tier lookup or REVIEW/BLOCK leaks
   through as UNKNOWN.
+
+## Disclosure-action policy (RPL-NEXT-2)
+
+Release output is governed by `disclosure-policy.default.json`, a separate versioned data
+file from the risk-tier policy. It models actions per license or exact expression and per
+delivery context:
+
+- public/user-facing notice
+- bundled notice
+- internal review
+- release gate
+- rationale
+
+The first contexts are `delivered_distribution` and `saas_not_distributed`. Pilot targets
+`js-bundle` and `cloudflare-worker` map to `delivered_distribution`; an unmapped target is
+a release blocker, not a CLI usage error. MIT is not globally omitted: delivered MIT keeps
+`bundled_notice: required` while `public_notice` is `not_required_by_default`.
+
+The release evaluator is fail-closed. Unknown license actions, unknown action values,
+unknown contexts, and SPDX expressions that cannot be reduced through exact entries,
+chosen OR branches, or AND combination block generated release disclosure files. This is
+engineering policy output, not legal advice.

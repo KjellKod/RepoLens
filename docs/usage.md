@@ -442,8 +442,8 @@ non-zero overall so automation can surface the partial failure.
 
 `repolens --help` is the primary health check for the shipped CLI entry point. `run` is the
 recommended route. The stage subcommands remain available for stepping through, debugging,
-or re-running one stage; `discover`, `scan`, `resolve`, `flag`, `shortlist`, and `report`
-all run real orchestration.
+or re-running one stage; `discover`, `scan`, `resolve`, `flag`, `shortlist`, `report`,
+and standalone `release` all run real orchestration.
 
 Exit codes are:
 
@@ -504,6 +504,9 @@ repolens shortlist --work-root work \
                                       # ingest verified proposals and browser evidence
 repolens report --work-root <WORK>
                                       # assemble gated main, presentation, docx, and appendix reports
+repolens release --work-root <WORK> \
+  --artifact dist/worker.js --target js-bundle
+                                      # evaluate release policy and write release artifacts
 ```
 
 Discovery (you approve the repo list), the `shortlist` approval gate, and the final report
@@ -1122,6 +1125,41 @@ used only for routing, appendix filenames, and appendix headings. If a resolved 
 `discover.taxonomy.default_category` or `uncategorized` and the row records a
 `missing_category` coverage gap.
 
+## `release` — release disclosure gate and generated notices
+
+`release` is a standalone stage after a clear shortlist/report gate. It reads the same
+resolved records prepared for report output, optionally scans one JS bundle or Cloudflare
+Worker artifact for positive npm delivery evidence, evaluates the versioned disclosure
+policy, and writes release artifacts to `<WORK>/release` unless `--out-dir` is provided:
+
+```bash
+repolens release --work-root <WORK>
+repolens release --work-root <WORK> \
+  --artifact .open-next/worker.js --target cloudflare-worker
+```
+
+`--artifact` and `--target` are required together. `--target` is an arbitrary string:
+unknown targets fail closed through `release.policy.json` and `release.review.md` instead
+of being rejected by argparse, so policy data remains the source of truth.
+
+On pass, release writes five files:
+
+- `release.policy.json`
+- `release.review.md`
+- `release.licenses.json`
+- `release.notices.md`
+- `release.notices.txt`
+
+On block, release writes only `release.policy.json` and `release.review.md`, and removes
+any stale `release.licenses.json` or `release.notices.*` files from the output directory.
+Unknown disclosure actions, unknown contexts, delivered GPL/non-commercial/source-available
+blockers, and irreducible SPDX expressions exit 1. Missing artifact evidence does not
+claim `not_delivered`; unscanned targets stay `not_scanned` and appear as scan-coverage
+warnings unless policy data is tightened later.
+
+For the runnable Sketch2md-style rehearsal, see
+[`docs/pilots/sketch2md-release-pilot.md`](pilots/sketch2md-release-pilot.md).
+
 ## Offline fixture acceptance harness
 
 The X1 synthetic fixtures can exercise the shipped M1 stage contracts without live
@@ -1157,6 +1195,13 @@ dogfood still uses the normal `repolens run --work-root /tmp/repolens-dogfood --
 - `report.main.docx` and `report.presentation.docx` — optional shareable Word outputs
   when report header text is configured or entered interactively.
 - `report.appendix.<category>.{md,csv}` — excluded-category and first-party appendices.
+- `release/release.policy.json` — release gate result and policy provenance.
+- `release/release.review.md` — operator release review with blockers, monitored future
+  risks, and scan coverage.
+- `release/release.licenses.json` — delivered-only machine release manifest, written only
+  when the release gate passes.
+- `release/release.notices.{md,txt}` — generated bundled notices, written only when the
+  release gate passes.
 
 ## Safety
 

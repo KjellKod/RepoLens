@@ -84,6 +84,7 @@ class CliTests(unittest.TestCase):
             "flag": "Stage 4/6",
             "shortlist": "Stage 5/6",
             "report": "Stage 6/6",
+            "release": "Release gate",
         }
 
         for stage, marker in expected_stages.items():
@@ -1820,6 +1821,193 @@ class ScanCliTests(unittest.TestCase):
                 ]
             )
             self.assertEqual(code, 2)
+
+    def test_release_command_pass_writes_all_artifacts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [_release_record("acme-mit-lib", "MIT", delivery_state="delivered")],
+            )
+            stdout = io.StringIO()
+            with redirect_stdout(stdout):
+                code = cli.main(["release", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 0)
+            self.assertIn("Release gate result: pass", stdout.getvalue())
+            for filename in (
+                "release.policy.json",
+                "release.review.md",
+                "release.licenses.json",
+                "release.notices.md",
+                "release.notices.txt",
+            ):
+                self.assertTrue((work_root / "release" / filename).exists(), filename)
+
+    def test_release_command_blocked_unknown_disclosure_exits_one(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [_release_record("acme-weird-lib", "WEIRD-1.0", delivery_state="delivered")],
+            )
+            code = cli.main(["release", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 1)
+            policy = json.loads((work_root / "release" / "release.policy.json").read_text())
+            self.assertEqual(policy["result"], "blocked")
+            self.assertEqual(policy["reasons"][0]["code"], "unknown_license_action")
+            self.assertTrue((work_root / "release" / "release.review.md").exists())
+            self.assertFalse((work_root / "release" / "release.licenses.json").exists())
+
+    def test_release_requires_artifact_and_target_together(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            code = cli.main(["release", "--work-root", tmp, "--target", "js-bundle"])
+
+            self.assertEqual(code, 2)
+
+    def test_release_unmapped_target_blocks_via_policy_not_argparse(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            artifact = work_root / "dist" / "worker.js"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_text("node_modules/acme-mit-lib/index.js", encoding="utf-8")
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [_release_record("acme-mit-lib", "MIT", delivery_state="delivered")],
+            )
+
+            code = cli.main(
+                [
+                    "release",
+                    "--work-root",
+                    str(work_root),
+                    "--artifact",
+                    str(artifact),
+                    "--target",
+                    "desktop-app",
+                ]
+            )
+
+            self.assertEqual(code, 1)
+            policy = json.loads((work_root / "release" / "release.policy.json").read_text())
+            self.assertEqual(policy["reasons"][0]["code"], "unknown_context")
+
+    def test_release_blocked_when_shortlist_open(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [_release_record("acme-mit-lib", "MIT", delivery_state="delivered")],
+            )
+            store.write_shortlist(
+                work_root,
+                {
+                    "schema_version": "1.0",
+                    "generated_at": "2026-01-01T00:00:00Z",
+                    "open_count": 1,
+                    "items": [
+                        {
+                            "component_ref": "acme-mit-lib|MIT",
+                            "reason": "REVIEW",
+                            "evidence": {"source_layer": "syft"},
+                            "status": "open",
+                        }
+                    ],
+                },
+            )
+
+            code = cli.main(["release", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 1)
+
+    def test_release_artifact_scan_generates_attribution_notice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            artifact = work_root / "dist" / "worker.js"
+            artifact.parent.mkdir(parents=True)
+            artifact.write_text(
+                "node_modules/acme-attrib-lib/index.js\nnode_modules/acme-mit-lib/index.js\n",
+                encoding="utf-8",
+            )
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [
+                    _release_record("acme-attrib-lib", "CC-BY-4.0"),
+                    _release_record("acme-mit-lib", "MIT"),
+                    _release_record(
+                        "acme-native-optional",
+                        "LGPL-3.0-only",
+                        install_state="lockfile_only",
+                        relation="optional",
+                    ),
+                ],
+            )
+
+            code = cli.main(
+                [
+                    "release",
+                    "--work-root",
+                    str(work_root),
+                    "--artifact",
+                    str(artifact),
+                    "--target",
+                    "js-bundle",
+                ]
+            )
+
+            self.assertEqual(code, 0)
+            notices = (work_root / "release" / "release.notices.md").read_text(encoding="utf-8")
+            review = (work_root / "release" / "release.review.md").read_text(encoding="utf-8")
+            self.assertIn("Attribution:", notices)
+            self.assertIn("acme-mit-lib", notices)
+            self.assertNotIn("acme-native-optional", notices)
+            self.assertIn("acme-native-optional", review)
+
+
+def _release_record(
+    name: str,
+    spdx_id: str,
+    *,
+    delivery_state: str = "not_scanned",
+    install_state: str = "installed",
+    relation: str = "direct",
+) -> dict[str, object]:
+    return {
+        "schema_version": "1.0",
+        "name": name,
+        "version": "1.0.0",
+        "repo": "acme-alpha",
+        "purl": f"pkg:npm/{name}@1.0.0",
+        "declared_license_raw": spdx_id,
+        "spdx_id": spdx_id,
+        "evidence": {
+            "source_layer": "syft",
+            "url": f"https://repolens.example/{name}",
+            "anchor": spdx_id,
+        },
+        "tags": {
+            "origin": "third-party-oss",
+            "scope": "runtime",
+            "distribution": "server",
+        },
+        "presence": {
+            "install_state": install_state,
+            "delivery_state": delivery_state,
+            "relation": relation,
+            "path": [],
+            "platform_match": "unknown",
+            "source": "syft",
+            "target": "unknown",
+            "reopen_on_delivery_change": True,
+        },
+        "modified": "unknown",
+    }
 
 
 if __name__ == "__main__":

@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repolens.example/schemas/release-licenses-1.0.json",
+  "title": "RepoLens release license manifest",
+  "type": "object",
+  "required": ["schema_version", "policy_version", "disclosure_policy_version", "entries"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "policy_version": {"type": "string", "minLength": 1},
+    "disclosure_policy_version": {"type": "string", "minLength": 1},
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "versions",
+          "spdx_expression",
+          "chosen_branch",
+          "tier",
+          "actions",
+          "rationale",
+          "source_urls",
+          "found_in",
+          "delivery"
+        ],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "versions": {"type": "array", "items": {"type": "string"}},
+          "spdx_expression": {"type": "string", "minLength": 1},
+          "chosen_branch": {"type": ["string", "null"]},
+          "tier": {"type": "string", "minLength": 1},
+          "actions": {
+            "type": "object",
+            "required": ["public_notice", "bundled_notice", "internal_review", "release_gate"],
+            "properties": {
+              "public_notice": {"type": "string"},
+              "bundled_notice": {"type": "string"},
+              "internal_review": {"type": "string"},
+              "release_gate": {"type": "string"}
+            },
+            "additionalProperties": false
+          },
+          "rationale": {"type": "string", "minLength": 1},
+          "source_urls": {"type": "array", "items": {"type": "string"}},
+          "found_in": {"type": "array", "items": {"type": "string"}},
+          "delivery": {
+            "type": "object",
+            "required": ["state"],
+            "properties": {
+              "state": {"type": "string", "minLength": 1},
+              "artifact": {
+                "type": "object",
+                "properties": {
+                  "kind": {"type": "string"},
+                  "path": {"type": "string"},
+                  "hash": {"type": "string"}
+                },
+                "additionalProperties": false
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

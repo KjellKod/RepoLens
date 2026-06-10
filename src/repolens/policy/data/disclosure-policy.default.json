@@ -1,0 +1,213 @@
+{
+  "action_profiles": {
+    "attribution_required": {
+      "delivered_distribution": {
+        "bundled_notice": "required",
+        "internal_review": "record",
+        "public_notice": "required",
+        "rationale": "Attribution is required where the licensed content is used; generated notices carry the attribution line without blocking release.",
+        "release_gate": "pass"
+      },
+      "saas_not_distributed": {
+        "bundled_notice": "not_applicable",
+        "internal_review": "record",
+        "public_notice": "required",
+        "rationale": "Attribution is required where the licensed content is used; the public surface should include the attribution when applicable.",
+        "release_gate": "pass"
+      }
+    },
+    "blocked_distribution": {
+      "delivered_distribution": {
+        "bundled_notice": "required",
+        "internal_review": "escalate",
+        "public_notice": "blocked",
+        "rationale": "Delivered restrictive, copyleft, non-commercial, or source-available terms require explicit legal handling before release.",
+        "release_gate": "block"
+      },
+      "saas_not_distributed": {
+        "bundled_notice": "not_applicable",
+        "internal_review": "escalate",
+        "public_notice": "blocked",
+        "rationale": "Restrictive, copyleft, non-commercial, or source-available terms require explicit legal handling before release.",
+        "release_gate": "block"
+      }
+    },
+    "permissive_exception": {
+      "delivered_distribution": {
+        "bundled_notice": "required",
+        "internal_review": "record",
+        "public_notice": "not_required_by_default",
+        "rationale": "The modeled exception is allowed in the default policy; bundled notices preserve attribution and license information.",
+        "release_gate": "pass"
+      },
+      "saas_not_distributed": {
+        "bundled_notice": "not_applicable",
+        "internal_review": "record",
+        "public_notice": "not_required_by_default",
+        "rationale": "The modeled exception is allowed in the default policy and is recorded internally.",
+        "release_gate": "pass"
+      }
+    },
+    "permissive_notice": {
+      "delivered_distribution": {
+        "bundled_notice": "required",
+        "internal_review": "record",
+        "public_notice": "not_required_by_default",
+        "rationale": "Permissive licenses generally require preserving copyright and license notices when distributed; bundled notices preserve that information while public notice is a product choice.",
+        "release_gate": "pass"
+      },
+      "saas_not_distributed": {
+        "bundled_notice": "not_applicable",
+        "internal_review": "record",
+        "public_notice": "not_required_by_default",
+        "rationale": "No distribution context is modeled for this release target; record the dependency internally without publishing a shipped notice by default.",
+        "release_gate": "pass"
+      }
+    },
+    "public_domain_style": {
+      "delivered_distribution": {
+        "bundled_notice": "not_required",
+        "internal_review": "record",
+        "public_notice": "not_required_by_default",
+        "rationale": "This permissive public-domain-style license does not require a bundled notice in the default policy, but RepoLens still records it internally.",
+        "release_gate": "pass"
+      },
+      "saas_not_distributed": {
+        "bundled_notice": "not_applicable",
+        "internal_review": "record",
+        "public_notice": "not_required_by_default",
+        "rationale": "No distribution context is modeled for this release target; record the dependency internally without a shipped notice by default.",
+        "release_gate": "pass"
+      }
+    },
+    "review_distribution": {
+      "delivered_distribution": {
+        "bundled_notice": "required",
+        "internal_review": "review",
+        "public_notice": "not_required_by_default",
+        "rationale": "Review-tier terms can depend on linking, modification, or distribution details; require an approved delivered-section review before release.",
+        "release_gate": "review"
+      },
+      "saas_not_distributed": {
+        "bundled_notice": "not_applicable",
+        "internal_review": "review",
+        "public_notice": "not_required_by_default",
+        "rationale": "Review-tier terms can depend on deployment details; require an approved review before treating this as cleared.",
+        "release_gate": "review"
+      }
+    },
+    "review_exception": {
+      "delivered_distribution": {
+        "bundled_notice": "required",
+        "internal_review": "review",
+        "public_notice": "not_required_by_default",
+        "rationale": "The modeled exception lowers the tier but still requires delivered-section review before release.",
+        "release_gate": "review"
+      },
+      "saas_not_distributed": {
+        "bundled_notice": "not_applicable",
+        "internal_review": "review",
+        "public_notice": "not_required_by_default",
+        "rationale": "The modeled exception lowers the tier but still requires review for this context.",
+        "release_gate": "review"
+      }
+    },
+    "share_alike_review": {
+      "delivered_distribution": {
+        "bundled_notice": "required",
+        "internal_review": "review",
+        "public_notice": "required",
+        "rationale": "Share-alike attribution terms require product-specific review before release.",
+        "release_gate": "review"
+      },
+      "saas_not_distributed": {
+        "bundled_notice": "not_applicable",
+        "internal_review": "review",
+        "public_notice": "required",
+        "rationale": "Share-alike attribution terms require product-specific review before release.",
+        "release_gate": "review"
+      }
+    }
+  },
+  "contexts": [
+    "delivered_distribution",
+    "saas_not_distributed"
+  ],
+  "delivery_state_contexts": {
+    "delivered": "delivered_distribution"
+  },
+  "disclosure_policy_version": "2026.06.09-disclosure-pilot",
+  "entries": {
+    "0BSD": {"profile": "public_domain_style"},
+    "AGPL-3.0-only": {"profile": "blocked_distribution"},
+    "AGPL-3.0-or-later": {"profile": "blocked_distribution"},
+    "APSL-2.0": {"profile": "review_distribution"},
+    "Apache-2.0": {"profile": "permissive_notice"},
+    "Apache-2.0 WITH LLVM-exception": {"profile": "permissive_exception"},
+    "Artistic-2.0": {"profile": "permissive_notice"},
+    "BSD-2-Clause": {"profile": "permissive_notice"},
+    "BSD-3-Clause": {"profile": "permissive_notice"},
+    "BSL-1.0": {"profile": "permissive_notice"},
+    "BUSL-1.1": {"profile": "blocked_distribution"},
+    "BlueOak-1.0.0": {"profile": "permissive_notice"},
+    "CC-BY-4.0": {"profile": "attribution_required"},
+    "CC-BY-NC-4.0": {"profile": "blocked_distribution"},
+    "CC-BY-NC-SA-4.0": {"profile": "blocked_distribution"},
+    "CC-BY-SA-4.0": {"profile": "share_alike_review"},
+    "CC0-1.0": {"profile": "public_domain_style"},
+    "CDDL-1.0": {"profile": "review_distribution"},
+    "CECILL-2.1": {"profile": "review_distribution"},
+    "CPL-1.0": {"profile": "review_distribution"},
+    "EPL-1.0": {"profile": "review_distribution"},
+    "EPL-2.0": {"profile": "review_distribution"},
+    "EUPL-1.1": {"profile": "blocked_distribution"},
+    "EUPL-1.2": {"profile": "review_distribution"},
+    "Elastic-2.0": {"profile": "blocked_distribution"},
+    "GPL-2.0-only": {"profile": "blocked_distribution"},
+    "GPL-2.0-only WITH Classpath-exception-2.0": {"profile": "review_exception"},
+    "GPL-2.0-or-later": {"profile": "blocked_distribution"},
+    "GPL-3.0-only": {"profile": "blocked_distribution"},
+    "GPL-3.0-only WITH Autoconf-exception-3.0": {"profile": "permissive_exception"},
+    "GPL-3.0-or-later": {"profile": "blocked_distribution"},
+    "HPND": {"profile": "permissive_notice"},
+    "IPL-1.0": {"profile": "review_distribution"},
+    "ISC": {"profile": "permissive_notice"},
+    "LGPL-2.0-only": {"profile": "review_distribution"},
+    "LGPL-2.0-or-later": {"profile": "review_distribution"},
+    "LGPL-2.1-only": {"profile": "review_distribution"},
+    "LGPL-2.1-or-later": {"profile": "review_distribution"},
+    "LGPL-3.0-only": {"profile": "review_distribution"},
+    "LGPL-3.0-or-later": {"profile": "review_distribution"},
+    "Libpng": {"profile": "permissive_notice"},
+    "MIT": {"profile": "permissive_notice"},
+    "MIT-0": {"profile": "permissive_notice"},
+    "MPL-1.1": {"profile": "review_distribution"},
+    "MPL-2.0": {"profile": "review_distribution"},
+    "MS-PL": {"profile": "review_distribution"},
+    "MS-RL": {"profile": "review_distribution"},
+    "OSL-3.0": {"profile": "blocked_distribution"},
+    "PSF-2.0": {"profile": "permissive_notice"},
+    "PolyForm-Noncommercial-1.0.0": {"profile": "blocked_distribution"},
+    "PolyForm-Small-Business-1.0.0": {"profile": "blocked_distribution"},
+    "Prosperity-3.0.0": {"profile": "blocked_distribution"},
+    "Python-2.0": {"profile": "permissive_notice"},
+    "RPL-1.5": {"profile": "blocked_distribution"},
+    "SSPL-1.0": {"profile": "blocked_distribution"},
+    "Unicode-3.0": {"profile": "review_distribution"},
+    "Unlicense": {"profile": "public_domain_style"},
+    "W3C": {"profile": "permissive_notice"},
+    "X11": {"profile": "permissive_notice"},
+    "ZPL-2.1": {"profile": "permissive_notice"},
+    "Zlib": {"profile": "permissive_notice"},
+    "curl": {"profile": "permissive_notice"}
+  },
+  "expression_rules": {
+    "AND": "combine_most_restrictive",
+    "OR": "chosen_or_min_risk_branch"
+  },
+  "target_contexts": {
+    "cloudflare-worker": "delivered_distribution",
+    "js-bundle": "delivered_distribution"
+  },
+  "unscanned_delivery_gate": "warn"
+}

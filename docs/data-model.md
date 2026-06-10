@@ -13,6 +13,11 @@ shortlist.json
 shortlist.proposals.json  # optional external input, validated before ingestion
 shortlist.evidence.json    # optional researched evidence, validated before ingestion
 report.review.json         # optional disclosure-license review decisions
+release/release.policy.json
+release/release.review.md
+release/release.licenses.json
+release/release.notices.md
+release/release.notices.txt
 ```
 
 `<repo>` is an opaque runtime input. Tests and fixtures use invented `acme-*` names
@@ -39,6 +44,14 @@ Packaged schemas live in `src/repolens/data/schemas/`:
 - `report_review.schema.json` validates the optional disclosure-license review artifact
   behind `report.review.md`. It stores human checkbox decisions for complex final-report
   license expressions without mutating the raw resolved SPDX evidence.
+- `disclosure_policy.schema.json` validates the versioned disclosure-action policy data.
+  It models public notice, bundled notice, internal review, release gate action, and
+  rationale by license/expression and delivery context.
+- `release_policy.schema.json` validates the deterministic release gate result written
+  by `repolens release`.
+- `release_licenses.schema.json` validates the delivered-only machine disclosure
+  manifest. Monitored future risks stay in `release.review.md`, not in public-facing
+  release manifests.
 
 `shortlist.json` is still canonical. The grouped Markdown view is derived from item data
 plus `inventory.json`; group checkboxes write back to the same item records. Optional
@@ -88,6 +101,34 @@ disclosure licenses and review notes flow into `report.presentation.*` while the
 SPDX expression remains visible. `report.main.*` continues to show the raw detected SPDX
 value.
 
+## Disclosure-action policy
+
+The release stage uses a second policy file,
+`src/repolens/policy/data/disclosure-policy.default.json`, alongside the risk-tier
+policy. The tier policy answers "should this be flagged for human review"; the disclosure
+policy answers "what must the release stage emit or block for this delivery context".
+When both apply, release output follows the disclosure policy data and still records the
+tier-policy version for traceability.
+
+Unknown license actions, unknown contexts, unknown action values, and irreducible SPDX
+expressions fail closed. A delivered dependency with no modeled disclosure action blocks
+`release.licenses.json` and `release.notices.*`; only `release.policy.json` and
+`release.review.md` are written so stale notices cannot outlive a blocked run.
+
+## Release artifacts
+
+`repolens release` writes to `<WORK>/release` by default:
+
+- `release.policy.json` — deterministic gate result, blockers, warnings, counts, policy
+  versions, target, and artifact provenance.
+- `release.review.md` — operator review surface with blockers, monitored future risks,
+  and scan coverage. It repeats the not-legal-advice standing text.
+- `release.licenses.json` — delivered-only machine manifest with policy actions. It is
+  written only when the gate passes.
+- `release.notices.md` and `release.notices.txt` — bundled notice surfaces for delivered
+  entries whose policy says `bundled_notice: required`. They are written only when the
+  gate passes.
+
 Schemas are self-contained and do not perform network `$ref` retrieval. Validation uses
 package-data schemas loaded by `importlib.resources`.
 
@@ -121,6 +162,10 @@ Default artifact caps are:
 | `shortlist` | 4 MiB |
 | `shortlist_evidence` | 4 MiB |
 | `report_review` | 4 MiB |
+| `disclosure_policy` | 4 MiB |
+| `release_policy` | 1 MiB |
+| `release_licenses` | 4 MiB |
+| `release_artifact` | 32 MiB |
 
 JSON depth defaults to 64. `resolved.ndjson` additionally caps lines at 1 MiB and
 records at 1,000,000. These constants are in `repolens.data.limits` and can be

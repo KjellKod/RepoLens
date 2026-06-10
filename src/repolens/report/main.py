@@ -529,6 +529,14 @@ def select_main_report_rows(
     return aggregate_rows(split.main_records), file_gaps
 
 
+def select_disclosure_records(work_root: Path) -> list[dict[str, Any]]:
+    """Return report-prepared records for release disclosure evaluation."""
+
+    records, _file_gaps = collect_resolved_records(work_root, _active_report_repo_refs(work_root))
+    records = _exclude_rejected_shortlist_records(work_root, records)
+    return _apply_approved_shortlist_overrides(work_root, records)
+
+
 def _split_report_records(work_root: Path, config: Config | None):
     selection = report_selection_from_config(config)
     category_index = build_category_index(_read_discovered_or_empty(work_root))
