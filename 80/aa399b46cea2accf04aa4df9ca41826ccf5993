@@ -1,0 +1,22 @@
+tests/integration/test_resolve_cli.py
+  s_a8a28288db33fe::t_d7e7fe91f22d10 246-252,419-423
+  s_a8a28288db33fe::t_90efcf277f8900 475-478,489
+docs/roadmap/rpl_current_roadmap.md
+  s_a8a28288db33fe::t_31441ac6fc6530 62
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "80aa399b46cea2accf04aa4df9ca41826ccf5993",
+  "prompts": {},
+  "sessions": {
+    "s_a8a28288db33fe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7cc0ef53-6235-436f-b040-c33485b3f048",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
