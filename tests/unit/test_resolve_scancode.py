@@ -8,9 +8,13 @@ import pytest
 
 from repolens.bootstrap.record import VERSIONS_SCHEMA
 from repolens.bootstrap.scancode import (
+    DEFAULT_REQUIREMENTS_PATH,
     SCANCODE_REQUIREMENTS_SOURCE_PREFIX,
+    build_scancode_hash_pinned_venv_wrapper,
     build_scancode_venv_wrapper,
     build_scancode_wrapper,
+    requirements_sha256,
+    scancode_hash_pinned_venv_source,
     scancode_venv_digest,
     scancode_venv_source,
 )
@@ -115,7 +119,37 @@ def test_resolve_scancode_path_requires_bootstrap_wrapper_and_record(tmp_path: P
     assert resolve_scancode_path(tmp_path) == tools / "scancode"
 
 
-def test_resolve_scancode_path_accepts_work_root_venv_bootstrap(tmp_path: Path) -> None:
+def test_resolve_scancode_path_accepts_hash_pinned_work_root_venv_bootstrap(
+    tmp_path: Path,
+) -> None:
+    tools = tmp_path / "tools"
+    venv_bin = tools / "scancode-venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "python").write_text("", encoding="utf-8")
+    digest = requirements_sha256(DEFAULT_REQUIREMENTS_PATH)
+    source = scancode_hash_pinned_venv_source(DEFAULT_REQUIREMENTS_PATH)
+    wrapper = tools / "scancode"
+    wrapper.write_text(
+        build_scancode_hash_pinned_venv_wrapper(
+            "32.4.1",
+            digest,
+            requirements_source=source,
+        ),
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    write_scancode_record(
+        tmp_path,
+        digest=digest,
+        source=source,
+    )
+
+    assert resolve_scancode_path(tmp_path) == tools / "scancode"
+
+
+def test_resolve_scancode_path_rejects_legacy_exact_version_venv_proof(
+    tmp_path: Path,
+) -> None:
     tools = tmp_path / "tools"
     venv_bin = tools / "scancode-venv" / "bin"
     venv_bin.mkdir(parents=True)
@@ -130,7 +164,8 @@ def test_resolve_scancode_path_accepts_work_root_venv_bootstrap(tmp_path: Path) 
         source=scancode_venv_source("32.4.1"),
     )
 
-    assert resolve_scancode_path(tmp_path) == tools / "scancode"
+    with pytest.raises(InputError, match="legacy unverified ScanCode venv source"):
+        resolve_scancode_path(tmp_path)
 
 
 def test_resolve_scancode_path_rejects_arbitrary_local_executable(tmp_path: Path) -> None:

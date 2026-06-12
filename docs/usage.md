@@ -14,8 +14,9 @@
   `repolens` command and the importable package the `python -m repolens.*` commands use.
 - `syft` — acquired by `scan` on first use into RepoLens's shared verified cache, or
   pre-seeded with `repolens bootstrap` for offline runs.
-- `scancode-toolkit` — prepared with `repolens bootstrap --work-root <WORK>` when
-  scoped fallback retries are needed.
+- `scancode-toolkit` — normally prepared automatically by `resolve` on first use for a
+  ScanCode-capable work root. Use `repolens bootstrap --work-root <WORK>` to pre-seed
+  offline or explicit opt-out workflows.
 - For mobile license enrichment (optional, auto-detected): a build toolchain
   (JDK + Gradle for Android, Xcode/SPM or a `GITHUB_TOKEN` for iOS).
 
@@ -116,12 +117,20 @@ repolens scan --work-root work --offline
 
 `repolens bootstrap` by itself prepares the shared Syft cache. ScanCode fallback
 is work-root-local because `resolve` validates `<WORK>/tools/scancode` against
-`<WORK>/tool_versions.json` before it can retry package-local scans:
+`<WORK>/tool_versions.json` before it can run package-local scans. Online `resolve`
+now runs the same readiness preflight as `scan`: if selected repos have a source
+snapshot or `--source-root` and at least one package can reach ScanCode fallback, missing
+ScanCode is announced, provisioned once through the pinned+verified path, and used in the
+first resolve pass. Manual bootstrap remains useful for pre-seeding:
 
 ```bash
 repolens bootstrap --work-root <WORK>
-repolens resolve --work-root <WORK> --retry-scancode
+repolens resolve --work-root <WORK> --offline
 ```
+
+Use `repolens resolve --work-root <WORK> --no-auto-bootstrap` when you deliberately want
+the older explicit-bootstrap behavior; unresolved rows can then be retried with
+`--retry-scancode` after the work root is prepared.
 
 Validate the manifest offline, no downloads:
 
@@ -132,11 +141,12 @@ python3 -m repolens.bootstrap --dry-run
 `repolens bootstrap` and `scan` verify Syft **fail-closed**: they check the
 release artifact's sha256, verify the cosign-signed checksums file, then cross-check that
 the pinned digest matches the signed entry — all **before** the Syft executable is exposed
-from the cache. `repolens bootstrap --work-root <WORK>` prepares an isolated
-`<WORK>/tools/scancode-venv`, installs the exact pinned ScanCode version with binary-only
-pip resolution, writes `<WORK>/tools/scancode`, and records the proof in
-`<WORK>/tool_versions.json`. If Python, pip, network access, or wheel compatibility fails,
-the command exits with the pip error and a fix hint instead of writing a trusted proof.
+from the cache. `repolens bootstrap --work-root <WORK>` and resolve auto-bootstrap prepare
+an isolated `<WORK>/tools/scancode-venv`, install ScanCode from the shipped
+`--require-hashes --no-deps --only-binary=:all:` requirements file, write
+`<WORK>/tools/scancode`, and record the proof in `<WORK>/tool_versions.json` last. If
+Python, pip, network access, or wheel compatibility fails, the command exits with the pip
+error and a fix hint instead of writing a trusted proof.
 
 How the verification works (pins, the fail-closed gate order, ScanCode `--require-hashes`,
 `tool_versions.json`) is described in
@@ -484,9 +494,8 @@ shipped-license gaps in `report.main.{md,csv,html}` or optional `.docx`.
 
 ```
 repolens discover  --owner <OWNER>   # enumerate + categorize repos -> approval checklist
-repolens bootstrap --work-root work  # prepare work-root-local ScanCode fallback tools
 repolens scan      --work-root work  # first use verifies Syft cache, then writes SBOMs
-repolens resolve --work-root work    # license resolution for scanned repo SBOMs
+repolens resolve   --work-root work  # prepares ScanCode when needed, then resolves SBOMs
 repolens flag      --work-root work  # apply policy, flag risk/unknowns -> shortlist queue
 repolens shortlist --work-root work   # settle checked decisions; decided_by defaults
                                       # to the logged-in OS user; --identity overrides it
@@ -713,6 +722,20 @@ For the resolution stage, scan must already have written SBOMs under
 repolens resolve --work-root <WORK>
 ```
 
+When a selected repo has a stored `source.snapshot/` or explicit `--source-root` and at
+least one non-cataloging-only package lacks a declared license, `resolve` checks the
+canonical work-root ScanCode tool before doing package work. If `<WORK>/tools/scancode` is
+missing or corrupt and downloads are allowed, it prints:
+
+```text
+ScanCode not found in this work root - preparing it now (one-time setup, pinned + verified)...
+ScanCode ready for <WORK>: <WORK>/tools/scancode
+```
+
+Then the first `resolved.ndjson` pass uses ScanCode normally. `resolve` discovers the tool
+through the same `<WORK>/tools/scancode` + `<WORK>/tool_versions.json` trust path used by
+manual `bootstrap`; no alternate executable path is threaded through resolve.
+
 By default, when `discovered.json` and `repos.candidate.md` exist, `resolve`
 uses the checked repo list and resolves the checked repos that already have scan
 SBOMs. Checked repos without SBOMs are skipped with a warning so stale approval
@@ -749,18 +772,29 @@ than one scanned repo exists, because one source checkout can only describe one
 repository. It lets `resolve` detect mobile markers and derive package-local
 ScanCode targets from SBOM `locations`. ScanCode is invoked only for dependencies
 still unresolved by earlier layers, and target selection rejects broad repository-root
-scans and paths outside the source root. If the bootstrap-produced ScanCode executable is
-unavailable during normal resolve, affected packages stay unresolved instead of failing
-the run.
+scans and paths outside the source root.
 
-Before retrying ScanCode, prepare the work-root-local fallback tool:
+Use `--offline` to require already-verified work-root tools and never download:
+
+```bash
+repolens resolve --work-root <WORK> --offline
+```
+
+If ScanCode is required but absent, corrupt, or unverified, offline resolve exits with a
+clear missing-tool message before writing degraded output. Pre-seed the work root with:
 
 ```bash
 repolens bootstrap --work-root <WORK>
 ```
 
-Then retry only the checked repos whose existing
-`resolved.ndjson` contains `unresolved:scancode_tool_unavailable`:
+Use `--no-auto-bootstrap` when CI or an air-gapped workflow intentionally wants to avoid
+automatic provisioning. In that mode, resolve may record
+`unresolved:scancode_tool_unavailable` and print the explicit bootstrap + retry advisory.
+If `--offline` is combined with `--no-auto-bootstrap`, offline fail-closed behavior wins.
+
+`--retry-scancode` remains available for opt-out, interrupted, or legacy work roots. It
+reruns only the checked repos whose existing `resolved.ndjson` contains
+`unresolved:scancode_tool_unavailable`:
 
 ```bash
 repolens resolve --work-root <WORK> --retry-scancode
@@ -971,8 +1005,9 @@ not-scanned findings remain, the final run summary points to report review and c
 release policy review before publishing final artifacts; it does not prescribe disclosure
 actions.
 
-If any open rows came from `unresolved:scancode_tool_unavailable`, the console also prints
-the deterministic retry path first:
+If an opt-out, offline-missing, failed, or interrupted provisioning run leaves open rows
+from `unresolved:scancode_tool_unavailable`, the console also prints the deterministic
+retry path first:
 
 ```bash
 repolens bootstrap --work-root <WORK>

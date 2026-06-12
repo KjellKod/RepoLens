@@ -1,6 +1,6 @@
 {
     "version": 1,
-    "expected_active_count": 61,
+    "expected_active_count": 65,
     "markers": [
         "offline",
         "security",
@@ -156,6 +156,30 @@
             "status": "active",
             "nodeid": "tests/canaries/security/test_supply_chain_canary.py::test_x2_supply_chain_tamper_fails_closed",
             "guardrail": "supply_chain_checksum_gate"
+        },
+        {
+            "id": "x2_scancode_auto_provision_pip_argv_is_closed_hash_pinned",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_supply_chain_canary.py::test_x2_scancode_auto_provision_pip_argv_is_closed_hash_pinned",
+            "guardrail": "scancode_hash_pinned_requirements"
+        },
+        {
+            "id": "x2_scancode_auto_provision_refuses_unverified_existing_binary",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_supply_chain_canary.py::test_x2_scancode_auto_provision_refuses_unverified_existing_binary",
+            "guardrail": "scancode_unverified_binary_refused"
+        },
+        {
+            "id": "x2_scancode_real_provision_path_uses_closed_hash_pinned_pip_argv",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_supply_chain_canary.py::test_x2_scancode_real_provision_path_uses_closed_hash_pinned_pip_argv",
+            "guardrail": "scancode_real_provision_hash_pinned_argv"
+        },
+        {
+            "id": "x2_scancode_auto_provision_uses_verified_bootstrap_path",
+            "status": "active",
+            "nodeid": "tests/canaries/security/test_supply_chain_canary.py::test_x2_scancode_auto_provision_uses_verified_bootstrap_path",
+            "guardrail": "scancode_verified_bootstrap_path"
         },
         {
             "id": "x2_scan_token_absent_from_artifacts",
