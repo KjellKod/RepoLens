@@ -8,7 +8,7 @@ from repolens.exit_codes import InputError
 from repolens.resolve.adapters import API_ALLOWED_HOSTS
 from repolens.resolve.mobile import MobileEnrichmentOutcome
 from repolens.resolve.models import ApiCandidate, PackageFact, ResolveAdapter
-from repolens.resolve.stage import ResolveCacheStats, run_resolve
+from repolens.resolve.stage import ResolveCacheStats, repo_needs_scancode_preflight, run_resolve
 from repolens.security.errors import FetchSecurityError
 from repolens.security.http_client import FetchResult, HttpFetchOptions
 
@@ -1511,6 +1511,113 @@ def test_default_path_uses_stored_source_snapshot_for_scancode(
     record = read_single_resolved(tmp_path, repo_ref)
     assert record["spdx_id"] == "Apache-2.0"
     assert record["evidence"]["source_layer"] == "scancode"
+
+
+def test_repo_needs_scancode_preflight_when_snapshot_and_unlicensed_package(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "fixture-lib",
+            "version": None,
+            "type": "unknown",
+            "licenses": [],
+            "locations": ["vendor/fixture-lib/package.json"],
+        },
+    )
+    staged = tmp_path / "staged-source"
+    (staged / "vendor" / "fixture-lib").mkdir(parents=True)
+    (staged / "vendor" / "fixture-lib" / "package.json").write_text("{}", encoding="utf-8")
+    replace_source_snapshot(tmp_path, repo_ref, staged)
+
+    assert repo_needs_scancode_preflight(tmp_path, repo_ref) is True
+
+
+def test_repo_needs_scancode_preflight_is_false_without_source_boundary(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "fixture-lib",
+            "version": None,
+            "type": "unknown",
+            "licenses": [],
+            "locations": ["vendor/fixture-lib/package.json"],
+        },
+    )
+
+    assert repo_needs_scancode_preflight(tmp_path, repo_ref) is False
+
+
+def test_repo_needs_scancode_preflight_skips_cataloging_only_package(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "sentinel-ios-lib",
+            "version": "1.0.0",
+            "type": "swift",
+            "licenses": [],
+            "locations": ["Package.resolved"],
+        },
+    )
+    staged = tmp_path / "staged-source"
+    staged.mkdir()
+    (staged / "Package.resolved").write_text("{}", encoding="utf-8")
+    replace_source_snapshot(tmp_path, repo_ref, staged)
+
+    assert repo_needs_scancode_preflight(tmp_path, repo_ref) is False
+
+
+def test_repo_needs_scancode_preflight_skips_declared_license(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "fixture-lib",
+            "version": "1.0.0",
+            "type": "python",
+            "licenses": ["MIT"],
+            "locations": ["vendor/fixture-lib/package.py"],
+        },
+    )
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+
+    assert repo_needs_scancode_preflight(tmp_path, repo_ref, source_root=source_root) is False
+
+
+def test_repo_needs_scancode_preflight_when_declared_license_has_no_spdx_id(
+    tmp_path: Path,
+    repo_ref: str,
+) -> None:
+    write_single_artifact_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            "name": "fixture-lib",
+            "version": "1.0.0",
+            "type": "python",
+            "licenses": ["NOASSERTION"],
+            "locations": ["vendor/fixture-lib/package.py"],
+        },
+    )
+    source_root = tmp_path / "source"
+    source_root.mkdir()
+
+    assert repo_needs_scancode_preflight(tmp_path, repo_ref, source_root=source_root) is True
 
 
 def test_android_mobile_repo_unresolved_dependency_falls_back_to_scancode(

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from repolens import cli
+from repolens.bootstrap.readiness import ToolReadiness, ToolStatus
 from repolens.data import store
 from repolens.exit_codes import InputError
 from repolens.scan.runner import RepoScanOutcome, ScanReport
@@ -363,6 +364,7 @@ def test_run_resolve_stage_writes_scancode_record_from_stored_snapshot(
         lambda work_root: Path(work_root) / "tools" / "scancode",
     )
     monkeypatch.setattr("repolens.resolve.scancode._default_command_runner", runner)
+    monkeypatch.setattr(cli, "_ensure_scancode_ready_for_resolve", lambda *_args, **_kwargs: None)
     summary = cli.RunSummary()
 
     resolved = cli._run_resolve_stage(SimpleNamespace(work_root=tmp_path, quiet=True), summary)
@@ -371,6 +373,140 @@ def test_run_resolve_stage_writes_scancode_record_from_stored_snapshot(
     assert resolved == {repo_ref}
     assert records[0]["spdx_id"] == "Apache-2.0"
     assert records[0]["evidence"]["source_layer"] == "scancode"
+
+
+def test_run_resolve_stage_auto_provisions_scancode_once_before_pending_repos(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    sbom: dict[str, object],
+) -> None:
+    for repo_ref in ("sentinel-alpha", "sentinel-beta"):
+        store.write_sbom(
+            tmp_path,
+            repo_ref,
+            {
+                **sbom,
+                "repo": repo_ref,
+                "artifacts": [
+                    {
+                        "name": "fixture-lib",
+                        "version": None,
+                        "type": "unknown",
+                        "licenses": [],
+                        "locations": ["vendor/fixture-lib/package.json"],
+                    }
+                ],
+            },
+        )
+        staged = tmp_path / f"staged-{repo_ref}"
+        package_dir = staged / "vendor" / "fixture-lib"
+        package_dir.mkdir(parents=True)
+        (package_dir / "package.json").write_text("{}\n", encoding="utf-8")
+        store.replace_source_snapshot(tmp_path, repo_ref, staged)
+    events: list[str] = []
+    monkeypatch.setattr(
+        cli,
+        "check_required_tools",
+        lambda *_args, **_kwargs: (
+            ToolReadiness("scancode", ToolStatus.PROVISIONABLE, None, "missing"),
+        ),
+    )
+
+    def ensure(*_args: object, **_kwargs: object) -> dict[str, Path]:
+        events.append("preflight")
+        return {"scancode": tmp_path / "tools" / "scancode"}
+
+    def fake_resolve(work_root: Path, repo_ref: str, **_kwargs: object) -> Path:
+        assert events[0] == "preflight"
+        assert events.count("preflight") == 1
+        events.append(repo_ref)
+        store.write_resolved(
+            work_root,
+            repo_ref,
+            [
+                {
+                    "schema_version": "1.0",
+                    "name": f"{repo_ref}-lib",
+                    "version": "1.0.0",
+                    "repo": repo_ref,
+                    "purl": f"pkg:pypi/{repo_ref}-lib@1.0.0",
+                    "declared_license_raw": "MIT",
+                    "spdx_id": "MIT",
+                    "evidence": {"source_layer": "syft", "anchor": "MIT"},
+                    "tags": {
+                        "origin": "third-party-oss",
+                        "scope": "runtime",
+                        "distribution": "server",
+                    },
+                    "modified": "unknown",
+                }
+            ],
+        )
+        return store.repo_dir(work_root, repo_ref) / "resolved.ndjson"
+
+    monkeypatch.setattr(cli, "ensure_required_tools", ensure)
+    monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
+
+    resolved = cli._run_resolve_stage(
+        SimpleNamespace(work_root=tmp_path, quiet=True, no_auto_bootstrap=False),
+        cli.RunSummary(),
+    )
+
+    assert resolved == {"sentinel-alpha", "sentinel-beta"}
+    assert events == ["preflight", "sentinel-alpha", "sentinel-beta"]
+
+
+def test_run_resolve_stage_preflight_error_propagates_before_repo_loop(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    sbom: dict[str, object],
+) -> None:
+    repo_ref = "sentinel-alpha"
+    store.write_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            **sbom,
+            "repo": repo_ref,
+            "artifacts": [
+                {
+                    "name": "fixture-lib",
+                    "version": None,
+                    "type": "unknown",
+                    "licenses": [],
+                    "locations": ["vendor/fixture-lib/package.json"],
+                }
+            ],
+        },
+    )
+    staged = tmp_path / "staged-source"
+    package_dir = staged / "vendor" / "fixture-lib"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text("{}\n", encoding="utf-8")
+    store.replace_source_snapshot(tmp_path, repo_ref, staged)
+    monkeypatch.setattr(
+        cli,
+        "check_required_tools",
+        lambda *_args, **_kwargs: (
+            ToolReadiness(
+                "scancode",
+                ToolStatus.MISSING_UNPROVISIONABLE,
+                None,
+                "offline mode requires a verified pre-seeded tool",
+            ),
+        ),
+    )
+
+    def fail_resolve(*_args: object, **_kwargs: object) -> Path:
+        raise AssertionError("run_resolve must not run after preflight failure")
+
+    monkeypatch.setattr("repolens.resolve.run_resolve", fail_resolve)
+
+    with pytest.raises(InputError, match="offline mode"):
+        cli._run_resolve_stage(
+            SimpleNamespace(work_root=tmp_path, quiet=True, no_auto_bootstrap=False),
+            cli.RunSummary(),
+        )
 
 
 def test_run_resolve_stage_prints_scancode_retry_notice(
@@ -452,6 +588,8 @@ def test_resolve_stage_prints_scancode_retry_guidance_when_needed(
             enable_mobile_native=False,
             detect_conflicts=False,
             retry_scancode=False,
+            offline=False,
+            no_auto_bootstrap=True,
         )
     )
 
@@ -492,7 +630,7 @@ def test_resolve_retry_scancode_only_reruns_matching_repos(
         return store.repo_dir(work_root, repo_ref) / "resolved.ndjson"
 
     monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
-    monkeypatch.setattr(cli, "_ensure_scancode_ready_for_retry", lambda _work_root: None)
+    monkeypatch.setattr(cli, "_ensure_scancode_ready_for_resolve", lambda *_args, **_kwargs: None)
 
     result = cli._resolve_stage(
         SimpleNamespace(
@@ -502,6 +640,8 @@ def test_resolve_retry_scancode_only_reruns_matching_repos(
             enable_mobile_native=False,
             detect_conflicts=False,
             retry_scancode=True,
+            offline=False,
+            no_auto_bootstrap=False,
         )
     )
 
@@ -542,7 +682,7 @@ def test_resolve_retry_scancode_can_target_several_repo_refs(
         return store.repo_dir(work_root, repo_ref) / "resolved.ndjson"
 
     monkeypatch.setattr("repolens.resolve.run_resolve", fake_resolve)
-    monkeypatch.setattr(cli, "_ensure_scancode_ready_for_retry", lambda _work_root: None)
+    monkeypatch.setattr(cli, "_ensure_scancode_ready_for_resolve", lambda *_args, **_kwargs: None)
 
     result = cli._resolve_stage(
         SimpleNamespace(
@@ -552,6 +692,8 @@ def test_resolve_retry_scancode_can_target_several_repo_refs(
             enable_mobile_native=False,
             detect_conflicts=False,
             retry_scancode=True,
+            offline=False,
+            no_auto_bootstrap=False,
         )
     )
 
@@ -566,7 +708,28 @@ def test_resolve_retry_scancode_fails_fast_when_scancode_not_bootstrapped(
     resolved_record: dict[str, object],
 ) -> None:
     repo_ref = "sentinel-alpha"
-    store.write_sbom(tmp_path, repo_ref, {**sbom, "repo": repo_ref})
+    store.write_sbom(
+        tmp_path,
+        repo_ref,
+        {
+            **sbom,
+            "repo": repo_ref,
+            "artifacts": [
+                {
+                    "name": "retry-lib",
+                    "version": None,
+                    "type": "unknown",
+                    "licenses": [],
+                    "locations": ["vendor/retry-lib/package.json"],
+                }
+            ],
+        },
+    )
+    staged = tmp_path / "staged-source"
+    package_dir = staged / "vendor" / "retry-lib"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text("{}\n", encoding="utf-8")
+    store.replace_source_snapshot(tmp_path, repo_ref, staged)
     store.write_resolved(
         tmp_path,
         repo_ref,
@@ -591,6 +754,8 @@ def test_resolve_retry_scancode_fails_fast_when_scancode_not_bootstrapped(
                 enable_mobile_native=False,
                 detect_conflicts=False,
                 retry_scancode=True,
+                offline=False,
+                no_auto_bootstrap=True,
             )
         )
 
@@ -639,6 +804,8 @@ def test_resolve_retry_scancode_noops_when_no_prior_tool_failure(
             enable_mobile_native=False,
             detect_conflicts=False,
             retry_scancode=True,
+            offline=False,
+            no_auto_bootstrap=False,
         )
     )
 

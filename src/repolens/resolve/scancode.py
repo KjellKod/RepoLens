@@ -13,9 +13,8 @@ from pathlib import Path
 from repolens.bootstrap.record import VERSIONS_SCHEMA
 from repolens.bootstrap.scancode import (
     SCANCODE_REQUIREMENTS_SOURCE_PREFIX,
-    build_scancode_venv_wrapper,
+    build_scancode_hash_pinned_venv_wrapper,
     build_scancode_wrapper,
-    scancode_venv_digest,
     scancode_venv_source,
 )
 from repolens.exit_codes import InputError
@@ -96,17 +95,20 @@ def resolve_scancode_path(work_root: str | Path) -> Path:
     expected_wrapper: str
     if source.startswith(SCANCODE_REQUIREMENTS_SOURCE_PREFIX):
         expected_wrapper = build_scancode_wrapper(version, digest)
+        hash_pinned_venv_wrapper = build_scancode_hash_pinned_venv_wrapper(
+            version,
+            digest,
+            requirements_source=source,
+        )
+        if wrapper == hash_pinned_venv_wrapper:
+            venv_python = root / "tools" / "scancode-venv" / "bin" / "python"
+            if not venv_python.is_file():
+                raise InputError(f"ScanCode virtualenv is missing at {venv_python}; {repair_hint}")
+            expected_wrapper = hash_pinned_venv_wrapper
     elif source == scancode_venv_source(version):
-        expected_digest = scancode_venv_digest(version)
-        if digest != expected_digest:
-            raise InputError(
-                "tool_versions.json ScanCode digest does not match the exact install spec; "
-                f"{repair_hint}"
-            )
-        expected_wrapper = build_scancode_venv_wrapper(version, digest)
-        venv_python = root / "tools" / "scancode-venv" / "bin" / "python"
-        if not venv_python.is_file():
-            raise InputError(f"ScanCode virtualenv is missing at {venv_python}; {repair_hint}")
+        raise InputError(
+            f"tool_versions.json records the legacy unverified ScanCode venv source; {repair_hint}"
+        )
     else:
         raise InputError(f"tool_versions.json records unsupported ScanCode source; {repair_hint}")
     if wrapper != expected_wrapper:

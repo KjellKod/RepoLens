@@ -128,6 +128,191 @@ class CliTests(unittest.TestCase):
             self.assertTrue((work_root / "work" / "sentinel-alpha" / "resolved.ndjson").exists())
             self.assertTrue((work_root / "work" / "sentinel-beta" / "resolved.ndjson").exists())
 
+    def test_resolve_auto_provisions_scancode_before_first_pass(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            work_root = Path(temp_dir)
+            repo_ref = "sentinel-alpha"
+            store.write_sbom(work_root, repo_ref, _scancode_needed_sbom(repo_ref))
+            _write_source_snapshot(work_root, repo_ref)
+            events: list[str] = []
+
+            def provision(root: Path) -> Path:
+                events.append("provision")
+                return _write_verified_fake_scancode(root)
+
+            def runner(argv: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+                del timeout
+                self.assertEqual(events, ["provision", "package"])
+                self.assertEqual(Path(argv[0]), work_root / "tools" / "scancode")
+                return subprocess.CompletedProcess(
+                    argv,
+                    0,
+                    stdout='{"files":[{"license_expression_spdx":"Apache-2.0"}]}',
+                    stderr="",
+                )
+
+            from repolens.resolve import stage as resolve_stage
+
+            original_resolve_package = resolve_stage._resolve_package
+
+            def resolve_package(*args, **kwargs):
+                self.assertEqual(events, ["provision"])
+                self.assertEqual(
+                    resolve_stage.resolve_scancode_path(work_root), work_root / "tools" / "scancode"
+                )
+                events.append("package")
+                return original_resolve_package(*args, **kwargs)
+
+            stdout = io.StringIO()
+            stderr = io.StringIO()
+            with (
+                mock.patch(
+                    "repolens.bootstrap.readiness.provision_scancode_work_root",
+                    side_effect=provision,
+                ),
+                mock.patch("repolens.resolve.stage._resolve_package", side_effect=resolve_package),
+                mock.patch("repolens.resolve.scancode._default_command_runner", runner),
+                redirect_stdout(stdout),
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(["resolve", "--work-root", str(work_root), "--repo-ref", repo_ref])
+
+            self.assertEqual(code, 0)
+            err = stderr.getvalue()
+            self.assertIn("ScanCode not found in this work root - preparing it now", err)
+            self.assertIn(
+                f"ScanCode ready for {work_root}: {work_root / 'tools' / 'scancode'}", err
+            )
+            records = list(store.iter_resolved(work_root / "work" / repo_ref / "resolved.ndjson"))
+            self.assertEqual(records[0]["spdx_id"], "Apache-2.0")
+            self.assertEqual(records[0]["evidence"]["source_layer"], "scancode")
+            self.assertNotIn(
+                "unresolved:scancode_tool_unavailable",
+                json.dumps(records, sort_keys=True),
+            )
+            self.assertEqual(events, ["provision", "package"])
+
+    def test_resolve_auto_provisions_scancode_for_noassertion_declared_license(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            work_root = Path(temp_dir)
+            repo_ref = "sentinel-alpha"
+            store.write_sbom(
+                work_root,
+                repo_ref,
+                _scancode_needed_sbom(repo_ref, licenses=["NOASSERTION"]),
+            )
+            _write_source_snapshot(work_root, repo_ref)
+            events: list[str] = []
+
+            def provision(root: Path) -> Path:
+                events.append("provision")
+                return _write_verified_fake_scancode(root)
+
+            def runner(argv: list[str], *, timeout: float) -> subprocess.CompletedProcess[str]:
+                del timeout
+                self.assertEqual(events, ["provision"])
+                self.assertEqual(Path(argv[0]), work_root / "tools" / "scancode")
+                return subprocess.CompletedProcess(
+                    argv,
+                    0,
+                    stdout='{"files":[{"license_expression_spdx":"Apache-2.0"}]}',
+                    stderr="",
+                )
+
+            stderr = io.StringIO()
+            with (
+                mock.patch(
+                    "repolens.bootstrap.readiness.provision_scancode_work_root",
+                    side_effect=provision,
+                ),
+                mock.patch("repolens.resolve.scancode._default_command_runner", runner),
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(["resolve", "--work-root", str(work_root), "--repo-ref", repo_ref])
+
+            self.assertEqual(code, 0)
+            self.assertIn(
+                "ScanCode not found in this work root - preparing it now", stderr.getvalue()
+            )
+            records = list(store.iter_resolved(work_root / "work" / repo_ref / "resolved.ndjson"))
+            self.assertEqual(records[0]["spdx_id"], "Apache-2.0")
+            self.assertEqual(records[0]["declared_license_raw"], "NOASSERTION")
+            self.assertNotIn(
+                "unresolved:scancode_tool_unavailable",
+                json.dumps(records, sort_keys=True),
+            )
+            self.assertEqual(events, ["provision"])
+
+    def test_resolve_offline_missing_scancode_fails_closed_without_download(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            work_root = Path(temp_dir)
+            repo_ref = "sentinel-alpha"
+            store.write_sbom(work_root, repo_ref, _scancode_needed_sbom(repo_ref))
+            _write_source_snapshot(work_root, repo_ref)
+
+            def provision(_root: Path) -> Path:
+                raise AssertionError("offline resolve must not provision ScanCode")
+
+            stderr = io.StringIO()
+            with (
+                mock.patch(
+                    "repolens.bootstrap.readiness.provision_scancode_work_root",
+                    side_effect=provision,
+                ),
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(
+                    [
+                        "resolve",
+                        "--work-root",
+                        str(work_root),
+                        "--repo-ref",
+                        repo_ref,
+                        "--offline",
+                    ]
+                )
+
+            self.assertEqual(code, 2)
+            self.assertIn("ScanCode is required but not ready", stderr.getvalue())
+            self.assertIn("offline mode requires a verified pre-seeded tool", stderr.getvalue())
+            self.assertFalse((work_root / "work" / repo_ref / "resolved.ndjson").exists())
+
+    def test_resolve_offline_no_auto_bootstrap_fails_closed_without_download(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            work_root = Path(temp_dir)
+            repo_ref = "sentinel-alpha"
+            store.write_sbom(work_root, repo_ref, _scancode_needed_sbom(repo_ref))
+            _write_source_snapshot(work_root, repo_ref)
+
+            def provision(_root: Path) -> Path:
+                raise AssertionError("offline resolve must not provision ScanCode")
+
+            stderr = io.StringIO()
+            with (
+                mock.patch(
+                    "repolens.bootstrap.readiness.provision_scancode_work_root",
+                    side_effect=provision,
+                ),
+                redirect_stderr(stderr),
+            ):
+                code = cli.main(
+                    [
+                        "resolve",
+                        "--work-root",
+                        str(work_root),
+                        "--repo-ref",
+                        repo_ref,
+                        "--offline",
+                        "--no-auto-bootstrap",
+                    ]
+                )
+
+            self.assertEqual(code, 2)
+            self.assertIn("ScanCode is required but not ready", stderr.getvalue())
+            self.assertIn("offline mode requires a verified pre-seeded tool", stderr.getvalue())
+            self.assertNotIn("auto-bootstrap disabled", stderr.getvalue())
+            self.assertFalse((work_root / "work" / repo_ref / "resolved.ndjson").exists())
+
     def test_console_help_returns_success(self) -> None:
         result = subprocess.run(
             ["repolens", "--help"],
@@ -947,6 +1132,80 @@ def _repo_sbom(repo_ref: str) -> dict:
     }
 
 
+def _scancode_needed_sbom(repo_ref: str, *, licenses: list[str] | None = None) -> dict:
+    return {
+        "schema_version": "1.0",
+        "repo": repo_ref,
+        "generated_at": "2026-01-01T00:00:00Z",
+        "tool": {"name": "syft", "version": "1.18.1"},
+        "source": f"https://example.invalid/{repo_ref}",
+        "artifacts": [
+            {
+                "name": "fixture-lib",
+                "version": None,
+                "type": "unknown",
+                "licenses": [] if licenses is None else licenses,
+                "locations": ["vendor/fixture-lib/package.json"],
+            }
+        ],
+    }
+
+
+def _write_source_snapshot(work_root: Path, repo_ref: str) -> None:
+    staged = work_root / "staged-source"
+    package_dir = staged / "vendor" / "fixture-lib"
+    package_dir.mkdir(parents=True)
+    (package_dir / "package.json").write_text('{"name":"fixture-lib"}\n', encoding="utf-8")
+    store.replace_source_snapshot(work_root, repo_ref, staged)
+
+
+def _write_verified_fake_scancode(work_root: Path) -> Path:
+    from repolens.bootstrap.record import VERSIONS_SCHEMA
+    from repolens.bootstrap.scancode import (
+        DEFAULT_REQUIREMENTS_PATH,
+        build_scancode_hash_pinned_venv_wrapper,
+        requirements_sha256,
+        scancode_hash_pinned_venv_source,
+    )
+    from repolens.resolve.scancode import resolve_scancode_path
+
+    tools = work_root / "tools"
+    venv_bin = tools / "scancode-venv" / "bin"
+    venv_bin.mkdir(parents=True, exist_ok=True)
+    (venv_bin / "python").write_text("#!/bin/sh\n", encoding="utf-8")
+    digest = requirements_sha256(DEFAULT_REQUIREMENTS_PATH)
+    source = scancode_hash_pinned_venv_source(DEFAULT_REQUIREMENTS_PATH)
+    wrapper = tools / "scancode"
+    wrapper.write_text(
+        build_scancode_hash_pinned_venv_wrapper(
+            "32.4.1",
+            digest,
+            requirements_source=source,
+        ),
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o755)
+    (work_root / "tool_versions.json").write_text(
+        json.dumps(
+            {
+                "schema": VERSIONS_SCHEMA,
+                "generated_at": "2026-01-01T00:00:00Z",
+                "base_image": "python@sha256:" + "d" * 64,
+                "tools": {
+                    "scancode": {
+                        "version": "32.4.1",
+                        "digest": digest,
+                        "source": source,
+                    }
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return resolve_scancode_path(work_root)
+
+
 def _assert_scan_next_step(testcase: unittest.TestCase, output: str, work_root: Path) -> None:
     testcase.assertEqual(
         output,
@@ -1495,9 +1754,9 @@ class ScanCliTests(unittest.TestCase):
 
             stderr = io.StringIO()
             with (
-                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch("repolens.bootstrap.readiness.cached_syft_path", return_value=None),
                 mock.patch(
-                    "repolens.cli.ensure_syft_cached",
+                    "repolens.bootstrap.readiness.ensure_syft_cached",
                     return_value=SimpleNamespace(path=syft_path, pin=pin, acquired=True),
                 ) as ensure,
                 mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
@@ -1530,9 +1789,9 @@ class ScanCliTests(unittest.TestCase):
 
             stderr = _TtyStringIO()
             with (
-                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch("repolens.bootstrap.readiness.cached_syft_path", return_value=None),
                 mock.patch(
-                    "repolens.cli.ensure_syft_cached",
+                    "repolens.bootstrap.readiness.ensure_syft_cached",
                     return_value=SimpleNamespace(path=syft_path, pin=pin, acquired=True),
                 ) as ensure,
                 mock.patch("sys.stdin", _TtyStringIO("")),
@@ -1568,9 +1827,9 @@ class ScanCliTests(unittest.TestCase):
 
             stderr = io.StringIO()
             with (
-                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch("repolens.bootstrap.readiness.cached_syft_path", return_value=None),
                 mock.patch(
-                    "repolens.cli.ensure_syft_cached",
+                    "repolens.bootstrap.readiness.ensure_syft_cached",
                     return_value=SimpleNamespace(path=syft_path, pin=pin, acquired=True),
                 ) as ensure,
                 mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
@@ -1601,7 +1860,8 @@ class ScanCliTests(unittest.TestCase):
                     list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
                 )
 
-            def fake_ensure(*, progress):
+            def fake_ensure(*, progress, offline=False):
+                self.assertFalse(offline)
                 for phase in (
                     "download_syft",
                     "download_cosign",
@@ -1614,8 +1874,10 @@ class ScanCliTests(unittest.TestCase):
 
             stderr = io.StringIO()
             with (
-                mock.patch("repolens.cli.cached_syft_path", return_value=None),
-                mock.patch("repolens.cli.ensure_syft_cached", side_effect=fake_ensure),
+                mock.patch("repolens.bootstrap.readiness.cached_syft_path", return_value=None),
+                mock.patch(
+                    "repolens.bootstrap.readiness.ensure_syft_cached", side_effect=fake_ensure
+                ),
                 mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
                 mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
                 redirect_stderr(stderr),
@@ -1652,7 +1914,8 @@ class ScanCliTests(unittest.TestCase):
                     list(argv), 0, stdout=json.dumps(_syft_document()), stderr=""
                 )
 
-            def fake_ensure(*, progress):
+            def fake_ensure(*, progress, offline=False):
+                self.assertFalse(offline)
                 for phase in (
                     "download_syft",
                     "download_cosign",
@@ -1665,8 +1928,10 @@ class ScanCliTests(unittest.TestCase):
 
             stderr = io.StringIO()
             with (
-                mock.patch("repolens.cli.cached_syft_path", return_value=None),
-                mock.patch("repolens.cli.ensure_syft_cached", side_effect=fake_ensure),
+                mock.patch("repolens.bootstrap.readiness.cached_syft_path", return_value=None),
+                mock.patch(
+                    "repolens.bootstrap.readiness.ensure_syft_cached", side_effect=fake_ensure
+                ),
                 mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),
                 mock.patch("repolens.scan.runner._default_command_runner", fake_runner),
                 redirect_stderr(stderr),
@@ -1695,9 +1960,9 @@ class ScanCliTests(unittest.TestCase):
             )
             stderr = io.StringIO()
             with (
-                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch("repolens.bootstrap.readiness.cached_syft_path", return_value=None),
                 mock.patch(
-                    "repolens.cli.ensure_syft_cached",
+                    "repolens.bootstrap.readiness.ensure_syft_cached",
                     side_effect=cli.IntegrityError(
                         "verifying Syft signature timed out — check network and retry"
                     ),
@@ -1722,9 +1987,9 @@ class ScanCliTests(unittest.TestCase):
             )
             stderr = io.StringIO()
             with (
-                mock.patch("repolens.cli.cached_syft_path", return_value=None),
+                mock.patch("repolens.bootstrap.readiness.cached_syft_path", return_value=None),
                 mock.patch(
-                    "repolens.cli.ensure_syft_cached",
+                    "repolens.bootstrap.readiness.ensure_syft_cached",
                     side_effect=cli.UsageError("cache required /tools/syft"),
                 ) as ensure,
                 redirect_stderr(stderr),
@@ -1734,8 +1999,9 @@ class ScanCliTests(unittest.TestCase):
                 )
 
             self.assertEqual(code, 2)
-            ensure.assert_called_once()
-            self.assertIn("/tools/syft", stderr.getvalue())
+            ensure.assert_not_called()
+            self.assertIn("verified shared Syft cache is missing", stderr.getvalue())
+            self.assertIn("offline mode requires a verified pre-seeded tool", stderr.getvalue())
 
     def test_scan_cache_hit_does_not_prompt_or_fetch(self) -> None:
         self._use_real_syft_ensure()
@@ -1754,8 +2020,8 @@ class ScanCliTests(unittest.TestCase):
 
             stderr = _TtyStringIO()
             with (
-                mock.patch("repolens.cli.cached_syft_path", return_value=syft_path),
-                mock.patch("repolens.cli.ensure_syft_cached") as ensure,
+                mock.patch("repolens.bootstrap.readiness.cached_syft_path", return_value=syft_path),
+                mock.patch("repolens.bootstrap.readiness.ensure_syft_cached") as ensure,
                 mock.patch("sys.stdin", _TtyStringIO("")),
                 mock.patch("sys.stderr", stderr),
                 mock.patch("repolens.scan.runner.hardened_clone", _fake_clone),

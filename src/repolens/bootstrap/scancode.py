@@ -12,15 +12,23 @@ from __future__ import annotations
 
 import hashlib
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
 from .errors import UnhashedRequirement
+from .pins import DEFAULT_PINS_PATH, load_pins
+from .record import write_tool_versions
+from .syft import ResolvedTool
 
 #: Runs the pip argv, returning its exit code. Injected so tests stay offline.
 PipRunner = Callable[[list[str]], int]
+CommandRunner = Callable[[list[str]], subprocess.CompletedProcess[str]]
+MakeExecutable = Callable[[Path], None]
+PathMover = Callable[[Path, Path], None]
 
 #: Path of the hash-pinned requirements file shipped with the package.
 DEFAULT_REQUIREMENTS_PATH = Path(__file__).with_name("scancode.requirements.txt")
@@ -125,6 +133,15 @@ def scancode_venv_source(version: str) -> str:
     return f"{SCANCODE_VENV_SOURCE_PREFIX}scancode-toolkit=={_clean_version(version)}"
 
 
+def scancode_hash_pinned_venv_source(requirements_path: Path | str) -> str:
+    """Return the recorded source string for a hash-pinned work-root venv."""
+
+    requirements_name = Path(requirements_path).name
+    if not requirements_name or "\n" in requirements_name or "\r" in requirements_name:
+        raise ValueError("ScanCode requirements source must be a single filename")
+    return f"{SCANCODE_REQUIREMENTS_SOURCE_PREFIX}{requirements_name}"
+
+
 def scancode_venv_digest(version: str) -> str:
     """Return a stable digest for the exact ScanCode venv install spec."""
 
@@ -148,6 +165,32 @@ def build_scancode_venv_wrapper(version: str, install_digest: str) -> str:
     )
 
 
+def build_scancode_hash_pinned_venv_wrapper(
+    version: str,
+    requirements_digest: str,
+    *,
+    requirements_source: str,
+) -> str:
+    """Build the canonical hash-pinned work-root ScanCode venv wrapper."""
+
+    clean_version = _clean_version(version)
+    if not _HASH_RE.fullmatch(f"--hash=sha256:{requirements_digest}"):
+        raise ValueError("ScanCode requirements digest must be a lowercase sha256")
+    if not requirements_source.startswith(SCANCODE_REQUIREMENTS_SOURCE_PREFIX):
+        raise ValueError("ScanCode requirements source must be hash-pinned")
+    if "\n" in requirements_source or "\r" in requirements_source:
+        raise ValueError("ScanCode requirements source must be a single line")
+    return (
+        "#!/bin/sh\n"
+        f"# {SCANCODE_WRAPPER_MARKER}\n"
+        f"# scancode-version: {clean_version}\n"
+        f"# requirements-source: {requirements_source}\n"
+        f"# requirements-sha256: {requirements_digest}\n"
+        'SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\n'
+        'exec "$SCRIPT_DIR/scancode-venv/bin/python" -m scancode.cli "$@"\n'
+    )
+
+
 def write_scancode_venv_wrapper(
     dest: Path | str,
     *,
@@ -160,6 +203,30 @@ def write_scancode_venv_wrapper(
     wrapper = Path(dest)
     wrapper.parent.mkdir(parents=True, exist_ok=True)
     wrapper.write_text(build_scancode_venv_wrapper(version, install_digest), encoding="utf-8")
+    make_executable(wrapper)
+    return wrapper
+
+
+def write_scancode_hash_pinned_venv_wrapper(
+    dest: Path | str,
+    *,
+    version: str,
+    requirements_digest: str,
+    requirements_source: str,
+    make_executable: Callable[[Path], None],
+) -> Path:
+    """Write the canonical hash-pinned venv-backed wrapper and mark it executable."""
+
+    wrapper = Path(dest)
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    wrapper.write_text(
+        build_scancode_hash_pinned_venv_wrapper(
+            version,
+            requirements_digest,
+            requirements_source=requirements_source,
+        ),
+        encoding="utf-8",
+    )
     make_executable(wrapper)
     return wrapper
 
@@ -205,6 +272,113 @@ def install_scancode_venv(
         ],
         "install ScanCode",
     )
+
+
+def install_scancode_hash_pinned_venv(
+    venv_dir: Path | str,
+    *,
+    requirements_path: Path | str = DEFAULT_REQUIREMENTS_PATH,
+    python: str = sys.executable,
+    runner: CommandRunner | None = None,
+) -> None:
+    """Create a work-root venv and install ScanCode from closed hash-pinned requirements."""
+
+    req = Path(requirements_path)
+    load_requirements(req)
+    venv = Path(venv_dir)
+    run = runner or _run_command
+    _run_checked(run, [python, "-m", "venv", str(venv)], "create ScanCode virtualenv")
+    venv_python = venv / "bin" / "python"
+    _run_checked(
+        run,
+        build_pip_argv(req, python=str(venv_python)),
+        "install ScanCode",
+    )
+
+
+def provision_scancode_work_root(
+    work_root: Path | str,
+    *,
+    python: str = sys.executable,
+    runner: CommandRunner | None = None,
+    make_executable: MakeExecutable | None = None,
+    requirements_path: Path | str = DEFAULT_REQUIREMENTS_PATH,
+    pins_path: Path | str = DEFAULT_PINS_PATH,
+    mover: PathMover | None = None,
+) -> Path:
+    """Provision canonical ``<WORK>/tools/scancode`` through hash-pinned requirements.
+
+    ``<WORK>/tool_versions.json`` is the trust marker used by ``resolve_scancode_path``.
+    It is exposed last so partial installs are treated as missing/corrupt on the next run.
+    """
+
+    from repolens.exit_codes import InputError
+    from repolens.resolve.scancode import resolve_scancode_path
+
+    from .orchestrate import default_make_executable
+
+    root = Path(work_root)
+    try:
+        return resolve_scancode_path(root)
+    except InputError:
+        pass
+
+    chmod = make_executable or default_make_executable
+    move = mover or _replace_path
+    pins = load_pins(pins_path)
+    version = pins.tool("scancode").version
+    requirements = Path(requirements_path)
+    digest = requirements_sha256(requirements)
+    source = scancode_hash_pinned_venv_source(requirements)
+    tools_dir = root / "tools"
+    tools_dir.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix=".scancode-bootstrap-", dir=tools_dir) as tmp:
+        staging_root = Path(tmp) / "root"
+        staging_tools = staging_root / "tools"
+        staging_venv = staging_tools / "scancode-venv"
+        install_scancode_hash_pinned_venv(
+            staging_venv,
+            requirements_path=requirements,
+            python=python,
+            runner=runner,
+        )
+        wrapper = write_scancode_hash_pinned_venv_wrapper(
+            staging_tools / "scancode",
+            version=version,
+            requirements_digest=digest,
+            requirements_source=source,
+            make_executable=chmod,
+        )
+        write_tool_versions(
+            pins,
+            [
+                ResolvedTool(
+                    name="scancode",
+                    version=version,
+                    digest=digest,
+                    path=wrapper,
+                    source=source,
+                )
+            ],
+            staging_root / "tool_versions.json",
+        )
+        resolve_scancode_path(staging_root)
+
+        move(staging_venv, tools_dir / "scancode-venv")
+        move(staging_tools / "scancode", tools_dir / "scancode")
+        move(staging_root / "tool_versions.json", root / "tool_versions.json")
+
+    return resolve_scancode_path(root)
+
+
+def _replace_path(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if dst.is_dir() and not dst.is_symlink():
+        shutil.rmtree(dst)
+    elif dst.exists() or dst.is_symlink():
+        dst.unlink()
+    shutil.move(str(src), str(dst))
 
 
 def _run_command(argv: list[str]) -> subprocess.CompletedProcess[str]:

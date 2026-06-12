@@ -203,6 +203,43 @@ def run_resolve(
     return write(work_root, repo_ref, records)
 
 
+def repo_needs_scancode_preflight(
+    work_root: str | Path,
+    repo_ref: str,
+    *,
+    source_root: str | Path | None = None,
+    sbom_reader: SbomReader | None = None,
+    source_snapshot_reader: SourceSnapshotReader | None = None,
+) -> bool:
+    """Return whether resolve could reach ScanCode fallback for this repo."""
+
+    resolved_source_root = _effective_source_root(
+        work_root,
+        repo_ref,
+        source_root=source_root,
+        source_snapshot_reader=source_snapshot_reader,
+    )
+    if resolved_source_root is None:
+        return False
+
+    read, _write = _storage_functions(sbom_reader, None)
+    sbom = read(work_root, repo_ref)
+    policy = load_default_policy()
+    return any(
+        _package_needs_scancode_preflight(package, policy)
+        for package in _package_facts(sbom, repo_ref)
+    )
+
+
+def _package_needs_scancode_preflight(package: PackageFact, policy: Policy) -> bool:
+    if is_cataloging_only_package(package):
+        return False
+    raw_license = package.declared_license_raw
+    if raw_license is None:
+        return True
+    return normalize_license(raw_license, policy).spdx_id is None
+
+
 def _storage_functions(
     sbom_reader: SbomReader | None,
     resolved_writer: ResolvedWriter | None,

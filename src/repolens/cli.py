@@ -22,11 +22,16 @@ from urllib.parse import unquote
 from repolens.bootstrap.cache import (
     SyftCacheResult,
     SyftPinSummary,
-    cached_syft_path,
     ensure_syft_cached,
     load_syft_pin,
 )
 from repolens.bootstrap.errors import IntegrityError, UsageError
+from repolens.bootstrap.readiness import (
+    ToolPreflightOptions,
+    ToolStatus,
+    check_required_tools,
+    ensure_required_tools,
+)
 from repolens.presence.sections import PRESENCE_SECTIONS
 from repolens.report import ReportGateOpen, ReportResult, render_main_report
 from repolens.security.redaction import redact_tokens
@@ -145,6 +150,12 @@ Example:
   Resolve selected repos:
     repolens resolve --work-root <WORK> --repo-ref <REPO_NAME_A> --repo-ref <REPO_NAME_B>
 
+  Require pre-seeded work-root tools; never download:
+    repolens resolve --work-root <WORK> --offline
+
+  Keep the explicit bootstrap + retry workflow:
+    repolens resolve --work-root <WORK> --no-auto-bootstrap
+
   Retry ScanCode only where prior resolve recorded tool unavailable:
     repolens resolve --work-root <WORK> --retry-scancode
 
@@ -164,6 +175,8 @@ Notes:
   --source-root is read-only source input for mobile markers
   and scoped ScanCode fallback.
   --source-root supports exactly one repo, so pass one --repo-ref with it.
+  Online resolve prepares missing work-root ScanCode on demand through the
+  pinned + verified bootstrap path before package resolution starts.
   After retrying ScanCode, rerun flag.
   flag preserves matching approved/rejected shortlist decisions.
   `repolens run --work-root <WORK> --owner <OWNER>` drives the pipeline end-to-end.
@@ -670,6 +683,14 @@ def _configure_run_parser(subparser: argparse.ArgumentParser) -> None:
         metavar="SECONDS",
         help="Per-repo wall-clock budget for hardened git clone (default: 300).",
     )
+    subparser.add_argument(
+        "--no-auto-bootstrap",
+        action="store_true",
+        help=(
+            "Do not auto-provision missing work-root tools during resolve; keep the "
+            "explicit bootstrap + retry workflow."
+        ),
+    )
     subparser.set_defaults(handler=_run_command)
 
 
@@ -706,6 +727,19 @@ def _configure_resolve_parser(subparser: argparse.ArgumentParser) -> None:
         "--retry-scancode",
         action="store_true",
         help=("Retry only repos with prior unresolved:scancode_tool_unavailable."),
+    )
+    subparser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Require verified work-root ScanCode when needed; never download or provision.",
+    )
+    subparser.add_argument(
+        "--no-auto-bootstrap",
+        action="store_true",
+        help=(
+            "Do not auto-provision missing work-root tools; keep the explicit "
+            "bootstrap + retry workflow."
+        ),
     )
     subparser.set_defaults(handler=_resolve_stage)
 
@@ -978,48 +1012,16 @@ def _bootstrap_command(args: argparse.Namespace) -> CommandResult:
 
 def _bootstrap_scancode_for_work_root(work_root: Path) -> Path:
     from repolens.bootstrap.errors import BootstrapError
-    from repolens.bootstrap.orchestrate import default_make_executable
-    from repolens.bootstrap.pins import load_pins
-    from repolens.bootstrap.record import write_tool_versions
-    from repolens.bootstrap.scancode import (
-        install_scancode_venv,
-        scancode_venv_digest,
-        scancode_venv_source,
-        write_scancode_venv_wrapper,
-    )
-    from repolens.bootstrap.syft import ResolvedTool
+    from repolens.bootstrap.scancode import provision_scancode_work_root
 
     root = Path(work_root)
-    tools_dir = root / "tools"
     try:
-        pins = load_pins()
-        version = pins.tool("scancode").version
-        install_scancode_venv(tools_dir / "scancode-venv", version=version)
-        digest = scancode_venv_digest(version)
-        wrapper = write_scancode_venv_wrapper(
-            tools_dir / "scancode",
-            version=version,
-            install_digest=digest,
-            make_executable=default_make_executable,
-        )
-        write_tool_versions(
-            pins,
-            [
-                ResolvedTool(
-                    name="scancode",
-                    version=version,
-                    digest=digest,
-                    path=wrapper,
-                    source=scancode_venv_source(version),
-                )
-            ],
-            root / "tool_versions.json",
-        )
+        wrapper = provision_scancode_work_root(root)
     except (BootstrapError, OSError, RuntimeError, ValueError) as exc:
         raise InputError(
             f"ScanCode bootstrap failed for {root}: {exc}\n"
             "Hint: make sure Python venv/pip can run, network access is available, "
-            "and the pinned ScanCode version has a binary wheel for this Python/platform; "
+            "and the pinned hash-locked ScanCode requirements support this Python/platform; "
             "then rerun `repolens bootstrap --work-root <WORK>`."
         ) from exc
     return wrapper
@@ -1635,12 +1637,89 @@ def _run_scan_stage(args: argparse.Namespace) -> ScanReport | None:
     return report
 
 
+def _ensure_scancode_ready_for_resolve(
+    args: argparse.Namespace,
+    repo_refs: tuple[str, ...],
+    *,
+    retry_scancode: bool,
+) -> None:
+    if not repo_refs:
+        return
+    from repolens.resolve.stage import repo_needs_scancode_preflight
+
+    work_root = Path(args.work_root)
+    source_root = getattr(args, "source_root", None)
+    needs_scancode = any(
+        repo_needs_scancode_preflight(work_root, repo_ref, source_root=source_root)
+        for repo_ref in repo_refs
+    )
+    if not needs_scancode:
+        return
+
+    options = ToolPreflightOptions(
+        work_root=work_root,
+        offline=bool(getattr(args, "offline", False)),
+        auto_bootstrap=not bool(getattr(args, "no_auto_bootstrap", False)),
+        quiet=bool(getattr(args, "quiet", False)),
+    )
+    readiness = check_required_tools(("scancode",), options)[0]
+    if readiness.status is ToolStatus.PRESENT:
+        return
+
+    if readiness.status is ToolStatus.MISSING_UNPROVISIONABLE and getattr(args, "offline", False):
+        raise InputError(
+            "ScanCode is required but not ready for this work root: "
+            f"{readiness.reason}\n"
+            f"Fix: repolens bootstrap --work-root {shlex.quote(str(work_root))}"
+        )
+
+    if getattr(args, "no_auto_bootstrap", False):
+        if retry_scancode:
+            raise InputError(
+                f"ScanCode is not ready for retry: {readiness.reason}\n"
+                f"Fix: repolens bootstrap --work-root {shlex.quote(str(work_root))}"
+            )
+        if not getattr(args, "quiet", False):
+            print(
+                "ScanCode auto-bootstrap disabled; resolve may record "
+                "unresolved:scancode_tool_unavailable. "
+                f"Run `repolens bootstrap --work-root {shlex.quote(str(work_root))}` "
+                f"then `repolens resolve --work-root {shlex.quote(str(work_root))} "
+                "--retry-scancode`.",
+                file=sys.stderr,
+            )
+        return
+
+    if readiness.status is ToolStatus.MISSING_UNPROVISIONABLE:
+        raise InputError(
+            "ScanCode is required but not ready for this work root: "
+            f"{readiness.reason}\n"
+            f"Fix: repolens bootstrap --work-root {shlex.quote(str(work_root))}"
+        )
+
+    if readiness.status is ToolStatus.PROVISIONABLE and not getattr(args, "quiet", False):
+        print(
+            "ScanCode not found in this work root - preparing it now "
+            "(one-time setup, pinned + verified)...",
+            file=sys.stderr,
+        )
+    paths = ensure_required_tools(("scancode",), options)
+    if readiness.status is ToolStatus.PROVISIONABLE and not getattr(args, "quiet", False):
+        print(f"ScanCode ready for {work_root}: {paths['scancode']}", file=sys.stderr)
+
+
 def _run_resolve_stage(args: argparse.Namespace, summary: RunSummary) -> set[str]:
     from repolens.resolve import run_resolve
     from repolens.resolve.stage import ResolveCacheStats
 
     work_root = Path(args.work_root)
     resolved_refs = set(_resolved_repo_refs(work_root))
+    pending_refs = tuple(
+        repo_ref
+        for repo_ref in sorted(_sbom_repo_refs(work_root), key=str.casefold)
+        if repo_ref not in resolved_refs
+    )
+    _ensure_scancode_ready_for_resolve(args, pending_refs, retry_scancode=False)
     for repo_ref in sorted(_sbom_repo_refs(work_root), key=str.casefold):
         if repo_ref in resolved_refs:
             summary.skipped += 1
@@ -1685,6 +1764,7 @@ def _stage_args(
         clone_timeout=getattr(source, "clone_timeout", None),
         repos=None,
         offline=False,
+        no_auto_bootstrap=getattr(source, "no_auto_bootstrap", False),
         repo_ref=None,
         source_root=None,
         enable_mobile_native=False,
@@ -2631,28 +2711,28 @@ def _scan_next_step_message(report: ScanReport, work_root: Path) -> str:
 
 
 def _ensure_syft_for_scan(args: argparse.Namespace) -> Path:
-    pin = load_syft_pin()
-    cached = cached_syft_path(pin)
-    if cached is not None:
-        return cached
-
-    if args.offline:
-        try:
-            result = ensure_syft_cached(offline=True)
-        except UsageError as exc:
-            raise InputError(str(exc)) from exc
-        return result.path
+    options = ToolPreflightOptions(
+        work_root=Path(args.work_root),
+        offline=bool(args.offline),
+        auto_bootstrap=True,
+        quiet=bool(args.quiet),
+    )
+    readiness = check_required_tools(("syft",), options)[0]
+    if readiness.status is ToolStatus.PRESENT:
+        if readiness.path is None:
+            raise InputError("Syft readiness reported present without a path")
+        return readiness.path
 
     progress = _SyftAcquireProgressPrinter(quiet=args.quiet, stream=sys.stderr)
-    progress.notice(pin)
+    if readiness.status is ToolStatus.PROVISIONABLE:
+        progress.notice(load_syft_pin())
     try:
-        result = ensure_syft_cached(progress=progress)
-    except UsageError as exc:
-        raise InputError(str(exc)) from exc
+        paths = ensure_required_tools(("syft",), options, syft_progress=progress)
     except IntegrityError as exc:
         raise InternalError(f"Syft bootstrap integrity failure: {exc}") from exc
+    result = SyftCacheResult(path=paths["syft"], pin=load_syft_pin(), acquired=True)
     progress.finish(result)
-    return result.path
+    return paths["syft"]
 
 
 class _SyftAcquireProgressPrinter:
@@ -2737,7 +2817,9 @@ def _resolve_stage(args: argparse.Namespace) -> CommandResult:
                     f"Next CLI stage: {flag_command}"
                 ),
             )
-        _ensure_scancode_ready_for_retry(Path(args.work_root))
+        _ensure_scancode_ready_for_resolve(args, repo_refs, retry_scancode=True)
+    else:
+        _ensure_scancode_ready_for_resolve(args, repo_refs, retry_scancode=False)
     paths = []
     total = len(repo_refs)
     progress = _ResolveProgressPrinter(stream=sys.stderr)
@@ -2818,18 +2900,6 @@ def _resolve_cache_summary(cache_hits: int) -> str:
     if cache_hits <= 0:
         return ""
     return f"; reused {cache_hits} cached resolution(s)"
-
-
-def _ensure_scancode_ready_for_retry(work_root: Path) -> None:
-    from repolens.resolve.scancode import resolve_scancode_path
-
-    try:
-        resolve_scancode_path(work_root)
-    except InputError as exc:
-        raise InputError(
-            f"ScanCode is not ready for retry: {exc}\n"
-            f"Fix: repolens bootstrap --work-root {shlex.quote(str(work_root))}"
-        ) from exc
 
 
 class _ResolveProgressPrinter:
