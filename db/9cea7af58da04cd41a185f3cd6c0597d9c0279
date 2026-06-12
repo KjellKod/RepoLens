@@ -1,0 +1,87 @@
+tests/bootstrap/test_scancode.py
+  s_df382dd6219fa7::t_344736de726aa0 14,18,21-23,27,118-248,261-281
+src/repolens/bootstrap/readiness.py
+  s_df382dd6219fa7::t_d8c7e56be3cf00 1-14,16-136
+tests/canaries/security/test_supply_chain_canary.py
+  s_748d3052d19f43::t_cc2e3549feed09 20,37,151,158-183,185-192,194,232-240
+  s_df382dd6219fa7::t_27eee9beb3bb98 19,27,30-36,38-42,130-150,152-157,184,193,195-231,241-282
+src/repolens/bootstrap/scancode.py
+  s_df382dd6219fa7::t_64147b5c992dd2 15,18,23-25,29-31
+  s_df382dd6219fa7::t_b4dad2771879f8 277-314,316-322,324-383
+  s_df382dd6219fa7::t_9cca2111fe553a 168-193,210-229
+  s_df382dd6219fa7::t_e252573fa0613a 315,323
+  s_df382dd6219fa7::t_ef91f4eaaaf431 136-144
+tests/e2e/test_cli.py
+  s_df382dd6219fa7::t_4d51ddff70310e 2003-2004
+  s_df382dd6219fa7::t_c9e6ea12310c26 131-194,246,281-305,307-312,314-315
+  s_748d3052d19f43::t_cc2e3549feed09 195-245,247-280,306,313,1135,1147
+  s_df382dd6219fa7::t_0e624e2a2738dd 2002
+  s_df382dd6219fa7::t_f5abc6bce14abb 1136-1146,1148-1208
+  s_df382dd6219fa7::t_0c359b7da83c89 1757,1759,1792,1794,1830,1832,1863-1864,1877-1880,1917-1918,1931-1934,1963,1965,1990,1992,2023-2024
+tests/unit/test_resolve_scancode.py
+  s_df382dd6219fa7::t_8bb2f26db2f2f7 11,13,16-17,122-152,167-168
+docs/roadmap/rpl_current_roadmap.md
+  s_df382dd6219fa7::t_d0a489af09b77e 62
+tests/unit/test_resolve_stage.py
+  s_748d3052d19f43::t_cc2e3549feed09 1602-1622
+  s_df382dd6219fa7::t_2ac65ac31ab30b 11
+  s_df382dd6219fa7::t_f4b1b7fefac17c 1516-1601
+src/repolens/cli.py
+  s_df382dd6219fa7::t_8709e9a54b5e6c 1690,1692-1698
+  s_df382dd6219fa7::t_ad461a8f8430d0 1717-1722,1767
+  s_df382dd6219fa7::t_2124435b2c8f5a 153-158,178-179
+  s_df382dd6219fa7::t_3a4ae522f96dcd 1015,1019,1024
+  s_df382dd6219fa7::t_325ba7f55c9cc1 2820-2822
+  s_df382dd6219fa7::t_15349829b90abd 686-693,731-742
+  s_df382dd6219fa7::t_a72e97fe4ab7ce 29-34,2714-2724,2727-2728,2730,2733,2735
+  s_df382dd6219fa7::t_de4e803827d141 1687-1688
+  s_748d3052d19f43::t_cc2e3549feed09 1669-1675
+  s_df382dd6219fa7::t_0aad4f14f1e911 1640-1668,1676-1686,1689,1691,1699-1710
+tests/canaries/security/canary_matrix.json
+  s_df382dd6219fa7::t_0418f65bdc974f 160-170,177-182
+  s_748d3052d19f43::t_cc2e3549feed09 3,171-176
+src/repolens/resolve/stage.py
+  s_df382dd6219fa7::t_a2234a00f66b1e 206-226,228,230-231,241-242
+  s_748d3052d19f43::t_cc2e3549feed09 227,229,232-240
+tests/bootstrap/test_readiness.py
+  s_df382dd6219fa7::t_7447c530fcf002 1-161
+tests/unit/test_cli_run.py
+  s_df382dd6219fa7::t_b59e654ebe4c34 420-421
+  s_df382dd6219fa7::t_3691b9ed0c1905 384-405,464-480,482-486
+  s_df382dd6219fa7::t_23b85a9c1878e8 12,378-383,406-419,422-427,429-431,434-435,441-463,481,487-509
+  s_df382dd6219fa7::t_f3f4ac345975b9 428,432-433,436-440
+  s_df382dd6219fa7::t_c9ac21a478e5c8 591-592,643-644,695-696,807-808
+  s_df382dd6219fa7::t_71611ce62511a7 367,633,685
+  s_df382dd6219fa7::t_d5a9bd0d109472 711-732,757-758
+docs/usage.md
+  s_df382dd6219fa7::t_2eaebf0f6c6e35 1008-1010
+  s_df382dd6219fa7::t_e00010b764277b 498,725-738,775,777-784,790-792,795-797
+  s_748d3052d19f43::t_ec8e72e1d3e3fa 793
+  s_df382dd6219fa7::t_04569a9501228c 17-19,120-124,128,131-134,144-149
+src/repolens/resolve/scancode.py
+  s_df382dd6219fa7::t_31f2a4726dbe5a 16,98-107,109,111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "db9cea7af58da04cd41a185f3cd6c0597d9c0279",
+  "prompts": {},
+  "sessions": {
+    "s_748d3052d19f43": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eba65-43bc-7400-9950-7d96325c3fa0",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_df382dd6219fa7": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eba40-c410-7c03-98b5-813725e9b756",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
