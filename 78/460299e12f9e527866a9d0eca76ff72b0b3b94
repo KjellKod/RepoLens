@@ -1,0 +1,38 @@
+src/repolens/presence/lockfile_scope.py
+  s_5f4c1cebda592f::t_af87dc81ae00ba 50
+  s_5f4c1cebda592f::t_0b54e4b1ae518d 1,6-10,13-18,24,34-39,41-49,51-55,73,83-85,87-88,91-93
+  s_5f4c1cebda592f::t_cb158ff2586a16 2-5,11-12,19-23,25-33,40,56-72,74-82,86,94-128
+  s_5f4c1cebda592f::t_258847bc5fb553 89-90
+tests/unit/release/test_evaluate.py
+  s_5f4c1cebda592f::t_0c7090ca5c9458 136-145
+tests/unit/presence/test_lockfile_scope.py
+  s_5f4c1cebda592f::t_a376cfdde87451 1-93
+src/repolens/release/stage.py
+  s_5f4c1cebda592f::t_991be8e7f693ef 5
+  s_5f4c1cebda592f::t_e0c2059ba1c83d 57
+  s_5f4c1cebda592f::t_cf49f9a6ddd6b8 115-118,120-121,128-139,143-144,146-147,152-154,170-171,173,176,188-189,192-195,197-198
+  s_5f4c1cebda592f::t_f47b5f1cfde3aa 119,122-127,140-142,145,148-151,155-169,172,174-175,177-187,190-191,196,199-204
+  s_5f4c1cebda592f::t_46aa33dfaf66ca 11-15
+tests/e2e/test_cli.py
+  s_5f4c1cebda592f::t_af87dc81ae00ba 1937,1946
+  s_5f4c1cebda592f::t_4f1a22e31895b5 1896-1936,1938-1945,1947
+src/repolens/release/evaluate.py
+  s_5f4c1cebda592f::t_a2dbd6e877edb9 31-32
+  s_5f4c1cebda592f::t_cf59a6b60d61cc 167-176
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "78460299e12f9e527866a9d0eca76ff72b0b3b94",
+  "prompts": {},
+  "sessions": {
+    "s_5f4c1cebda592f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82ccb387-d9a3-4f69-b847-ccb603492127",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
