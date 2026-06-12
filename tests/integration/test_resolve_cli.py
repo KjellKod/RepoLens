@@ -243,6 +243,13 @@ def test_resolve_cli_default_uses_stored_source_snapshot_for_scancode(
         "repolens.resolve.stage.resolve_scancode_path",
         lambda work_root: Path(work_root) / "tools" / "scancode",
     )
+    # The resolve preflight (cli -> bootstrap.readiness) discovers ScanCode through
+    # its own import of resolve_scancode_path, so simulate presence there too;
+    # otherwise the preflight would try to auto-provision a real ScanCode.
+    monkeypatch.setattr(
+        "repolens.bootstrap.readiness.resolve_scancode_path",
+        lambda work_root: Path(work_root) / "tools" / "scancode",
+    )
     monkeypatch.setattr("repolens.resolve.scancode._default_command_runner", runner)
 
     code = cli.main(["resolve", "--work-root", str(tmp_path), "--repo-ref", repo_ref])
@@ -409,6 +416,13 @@ def test_resolve_cli_explicit_source_root_overrides_stored_snapshot(
         "repolens.resolve.stage.resolve_scancode_path",
         lambda work_root: Path(work_root) / "tools" / "scancode",
     )
+    # The resolve preflight (cli -> bootstrap.readiness) discovers ScanCode through
+    # its own import of resolve_scancode_path, so simulate presence there too;
+    # otherwise the preflight would try to auto-provision a real ScanCode.
+    monkeypatch.setattr(
+        "repolens.bootstrap.readiness.resolve_scancode_path",
+        lambda work_root: Path(work_root) / "tools" / "scancode",
+    )
     monkeypatch.setattr("repolens.resolve.scancode._default_command_runner", runner)
 
     code = cli.main(
@@ -458,6 +472,10 @@ def test_resolve_cli_mobile_native_missing_sandbox_is_non_fatal(
         },
     )
 
+    # This case exercises the mobile-native degraded path, not ScanCode. The
+    # sentinel package is undeclared so the resolve preflight would otherwise
+    # auto-provision ScanCode; --no-auto-bootstrap keeps the prior graceful
+    # degradation that this test asserts.
     code = cli.main(
         [
             "resolve",
@@ -468,6 +486,7 @@ def test_resolve_cli_mobile_native_missing_sandbox_is_non_fatal(
             "--source-root",
             str(source_root),
             "--enable-mobile-native",
+            "--no-auto-bootstrap",
         ]
     )
 
