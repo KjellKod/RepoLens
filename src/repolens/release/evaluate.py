@@ -28,6 +28,8 @@ from repolens.presence.sections import (
 )
 from repolens.shortlist.identity import build_decision_ref, decision_ref_for_item
 
+_UNRESOLVED_EXPRESSIONS = frozenset({"", "unknown", "noassertion", "none"})
+
 
 @dataclass(frozen=True, slots=True)
 class ReleaseBlocker:
@@ -162,6 +164,16 @@ def _evaluate_delivered_record(
     approved_decision_refs: frozenset[str],
 ) -> ReleaseEntry | ReleaseBlocker:
     expression = _expression_for_record(record)
+    if expression.strip().casefold() in _UNRESOLVED_EXPRESSIONS:
+        return ReleaseBlocker(
+            code="unknown_license_delivered",
+            message=(
+                f"{_record_name(record)} is delivered but its license could not be "
+                "identified; resolve it before release"
+            ),
+            name=_record_name(record),
+            expression=expression,
+        )
     resolved_context = context_for(target, presence.delivery_state, disclosure_policy)
     if isinstance(resolved_context, DisclosureBlocked):
         return _blocker_from_disclosure(resolved_context, record=record)

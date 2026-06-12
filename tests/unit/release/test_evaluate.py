@@ -133,3 +133,13 @@ def _presence(
         relation=relation,  # type: ignore[arg-type]
         source="syft",
     ).to_dict()
+
+
+def test_delivered_with_unidentified_license_blocks() -> None:
+    # A package that ships but whose license could not be identified must fail
+    # closed: you cannot disclose obligations you cannot name.
+    result = evaluate_release([_record("acme-unknown", "", _presence("delivered"))])
+
+    assert result.result == "blocked"
+    assert result.blockers[0].code == "unknown_license_delivered"
+    assert result.blockers[0].name == "acme-unknown"

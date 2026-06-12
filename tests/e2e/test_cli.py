@@ -1893,6 +1893,58 @@ class ScanCliTests(unittest.TestCase):
             self.assertFalse((release_dir / "release.notices.md").exists())
             self.assertFalse((release_dir / "release.notices.txt").exists())
 
+    def test_release_marks_production_deps_delivered_from_lockfile(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            work_root = Path(tmp)
+            store.write_resolved(
+                work_root,
+                "acme-alpha",
+                [
+                    _release_record("prod-mit", "MIT", delivery_state="not_scanned"),
+                    _release_record(
+                        "@img/sharp-libvips-linux-x64",
+                        "LGPL-3.0-or-later",
+                        delivery_state="not_scanned",
+                    ),
+                    _release_record("json-schema", "", delivery_state="not_scanned"),
+                ],
+            )
+            snapshot = work_root / "work" / "acme-alpha" / "source.snapshot"
+            snapshot.mkdir(parents=True)
+            (snapshot / "package-lock.json").write_text(
+                json.dumps(
+                    {
+                        "lockfileVersion": 3,
+                        "packages": {
+                            "node_modules/prod-mit": {"version": "1.0.0"},
+                            "node_modules/@img/sharp-libvips-linux-x64": {
+                                "version": "1.2.0",
+                                "optional": True,
+                            },
+                            "node_modules/json-schema": {
+                                "version": "0.4.0",
+                                "license": "(AFL-2.1 OR BSD-3-Clause)",
+                            },
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            code = cli.main(["release", "--work-root", str(work_root)])
+
+            self.assertEqual(code, 0)
+            licenses = json.loads((work_root / "release" / "release.licenses.json").read_text())
+            entries = {entry["name"]: entry for entry in licenses["entries"]}
+            # Production MIT dependency ships -> delivered manifest entry.
+            self.assertIn("prod-mit", entries)
+            # Optional per-platform binary is NOT shipped -> excluded from delivered.
+            self.assertNotIn("@img/sharp-libvips-linux-x64", entries)
+            # A delivered dep that resolved UNKNOWN self-heals from the lockfile's
+            # own declared license instead of blocking.
+            self.assertIn("json-schema", entries)
+            self.assertEqual(entries["json-schema"]["spdx_expression"], "(AFL-2.1 OR BSD-3-Clause)")
+
     def test_release_requires_artifact_and_target_together(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             code = cli.main(["release", "--work-root", tmp, "--target", "js-bundle"])
