@@ -1,0 +1,48 @@
+tests/e2e/test_cli.py
+  s_cdf6215029f746::t_c3327898899227 87,2091-2129,2162-2230,2232-2307,2132-2133,2145-2148,2155,2161
+  s_5f4c1cebda592f::t_6c3f513ef37463 2231
+  s_b578c56ad57808::t_c85d7cadce9b38 2131,2134-2144,2149-2151,2156-2160
+  s_5f4c1cebda592f::t_b5731af5678e82 2152-2154
+src/repolens/release/evaluate.py
+  s_cdf6215029f746::t_0a9ad67e326fbc 1-30,32-71,73-81,90-243,87-89
+  s_b578c56ad57808::t_ec58170f6df195 72,82-86
+src/repolens/report/main.py
+  s_cdf6215029f746::t_0a9ad67e326fbc 538-540,548,551-552,149-150,542-543,546
+  s_b578c56ad57808::t_03114e93f88463 145-148
+  s_b578c56ad57808::t_e152542d28c692 541,544-545,547,549-550
+src/repolens/release/stage.py
+  s_cdf6215029f746::t_9c25d3e444ae62 1-24,26-49,52-60,62-108
+  s_b578c56ad57808::t_8d4276f175355c 25,50,61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "80552b25a647debe4a76222374c7db773aaf0657",
+  "prompts": {},
+  "sessions": {
+    "s_5f4c1cebda592f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "82ccb387-d9a3-4f69-b847-ccb603492127",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_b578c56ad57808": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb200-86f9-7590-a8c1-ed5549781754",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    },
+    "s_cdf6215029f746": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019eb1d2-164a-7e10-8e40-eafc29582e0d",
+        "model": "gpt-5.5"
+      },
+      "human_author": "KjellKod <kjell.hedstrom@gmail.com>"
+    }
+  }
+}
