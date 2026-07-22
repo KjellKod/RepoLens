@@ -15,6 +15,10 @@ MAX_ARTIFACT_BYTES = {
     "inventory": 16 * 1024 * 1024,
     "shortlist": 4 * 1024 * 1024,
     "report_review": 4 * 1024 * 1024,
+    "disclosure_policy": 4 * 1024 * 1024,
+    "release_policy": 1 * 1024 * 1024,
+    "release_licenses": 4 * 1024 * 1024,
+    "release_artifact": 32 * 1024 * 1024,
 }
 #: Single source for the JSON structural-depth cap: the security-primitive default.
 MAX_JSON_DEPTH = DEFAULT_LIMITS.max_structure_depth

@@ -146,6 +146,19 @@ def write_shortlist(work_root: str | Path, value: dict[str, Any]) -> Path:
     return _write_json_artifact(work_root, "shortlist", value)
 
 
+def write_release_policy(out_dir: str | Path, value: dict[str, Any]) -> Path:
+    return _write_release_json_artifact(out_dir, "release.policy.json", "release_policy", value)
+
+
+def write_release_licenses(out_dir: str | Path, value: dict[str, Any]) -> Path:
+    return _write_release_json_artifact(
+        out_dir,
+        "release.licenses.json",
+        "release_licenses",
+        value,
+    )
+
+
 def _write_json_artifact(
     work_root: str | Path,
     artifact_name: str,
@@ -156,6 +169,22 @@ def _write_json_artifact(
     redacted = redact_tokens_from_structure(value)
     _validate_artifact(redacted, artifact_name)
     path = _artifact_path(work_root, artifact_name, repo_ref)
+    data = _json_bytes(redacted)
+    _check_bytes(data, max_bytes_for(artifact_name), path)
+    scan_depth(data, MAX_JSON_DEPTH)
+    atomic_write_bytes(path, data)
+    return path
+
+
+def _write_release_json_artifact(
+    out_dir: str | Path,
+    filename: str,
+    artifact_name: str,
+    value: dict[str, Any],
+) -> Path:
+    redacted = redact_tokens_from_structure(value)
+    _validate_artifact(redacted, artifact_name)
+    path = Path(out_dir) / filename
     data = _json_bytes(redacted)
     _check_bytes(data, max_bytes_for(artifact_name), path)
     scan_depth(data, MAX_JSON_DEPTH)

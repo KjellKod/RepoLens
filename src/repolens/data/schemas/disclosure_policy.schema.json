@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repolens.example/schemas/disclosure-policy-1.0.json",
+  "title": "RepoLens disclosure action policy",
+  "type": "object",
+  "required": [
+    "disclosure_policy_version",
+    "contexts",
+    "target_contexts",
+    "delivery_state_contexts",
+    "unscanned_delivery_gate",
+    "expression_rules",
+    "action_profiles",
+    "entries"
+  ],
+  "properties": {
+    "disclosure_policy_version": {"type": "string", "minLength": 1},
+    "contexts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "target_contexts": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "delivery_state_contexts": {
+      "type": "object",
+      "additionalProperties": {"type": "string", "minLength": 1}
+    },
+    "unscanned_delivery_gate": {"type": "string", "enum": ["warn", "block"]},
+    "expression_rules": {
+      "type": "object",
+      "required": ["OR", "AND"],
+      "properties": {
+        "OR": {"const": "chosen_or_min_risk_branch"},
+        "AND": {"const": "combine_most_restrictive"}
+      },
+      "additionalProperties": false
+    },
+    "action_profiles": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/context_map"}
+    },
+    "entries": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "oneOf": [
+          {
+            "required": ["profile"],
+            "properties": {"profile": {"type": "string", "minLength": 1}},
+            "additionalProperties": false
+          },
+          {
+            "required": ["contexts"],
+            "properties": {"contexts": {"$ref": "#/$defs/context_map"}},
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "context_map": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {"$ref": "#/$defs/actions"}
+    },
+    "actions": {
+      "type": "object",
+      "required": [
+        "public_notice",
+        "bundled_notice",
+        "internal_review",
+        "release_gate",
+        "rationale"
+      ],
+      "properties": {
+        "public_notice": {
+          "type": "string",
+          "enum": ["required", "not_required_by_default", "blocked", "unknown"]
+        },
+        "bundled_notice": {
+          "type": "string",
+          "enum": ["required", "not_required", "not_applicable", "unknown"]
+        },
+        "internal_review": {
+          "type": "string",
+          "enum": ["record", "review", "escalate", "unknown"]
+        },
+        "release_gate": {"type": "string", "enum": ["pass", "warn", "review", "block"]},
+        "rationale": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  }
+}

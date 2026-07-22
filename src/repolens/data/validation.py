@@ -21,6 +21,9 @@ SCHEMA_NAMES = frozenset(
         "shortlist_proposals",
         "report_review",
         "local_config",
+        "disclosure_policy",
+        "release_policy",
+        "release_licenses",
     }
 )
 

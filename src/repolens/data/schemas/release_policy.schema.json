@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://repolens.example/schemas/release-policy-1.0.json",
+  "title": "RepoLens release policy gate result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "result",
+    "reasons",
+    "warnings",
+    "counts",
+    "policy_version",
+    "disclosure_policy_version",
+    "target",
+    "artifact"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "result": {"type": "string", "enum": ["pass", "blocked"]},
+    "reasons": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/reason"}
+    },
+    "warnings": {
+      "type": "array",
+      "items": {"type": "string"}
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "delivered",
+        "monitored",
+        "not_scanned",
+        "notices_bundled",
+        "notices_public"
+      ],
+      "properties": {
+        "delivered": {"type": "integer", "minimum": 0},
+        "monitored": {"type": "integer", "minimum": 0},
+        "not_scanned": {"type": "integer", "minimum": 0},
+        "notices_bundled": {"type": "integer", "minimum": 0},
+        "notices_public": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "policy_version": {"type": "string", "minLength": 1},
+    "disclosure_policy_version": {"type": "string", "minLength": 1},
+    "target": {"type": ["string", "null"]},
+    "artifact": {
+      "anyOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "required": ["kind", "path", "hash"],
+          "properties": {
+            "kind": {"type": "string", "minLength": 1},
+            "path": {"type": "string", "minLength": 1},
+            "hash": {"type": "string", "minLength": 1}
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "reason": {
+      "type": "object",
+      "required": ["code", "message", "name", "expression", "context"],
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string", "minLength": 1},
+        "name": {"type": "string"},
+        "expression": {"type": "string"},
+        "context": {"type": "string"}
+      },
+      "additionalProperties": false
+    }
+  }
+}
